@@ -1,7 +1,7 @@
 #pragma once
 
 #include <microkit.h>
-#include <sddf/serial/shared_ringbuffer.h>
+#include <serial/shared_ringbuffer.h>
 
 #if defined(CONFIG_PLAT_ODROIDC2)
 #define UART_REGS_OFFSET (0x4c0)

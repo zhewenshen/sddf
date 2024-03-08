@@ -2,10 +2,11 @@
 #include <stdbool.h>
 #include <stdint.h>
 #include <microkit.h>
-#include <sddf/serial/shared_ringbuffer.h>
-#include <sddf/serial/util.h>
-#include "uart.h"
-#include "uart_config.h"
+#include <sel4/sel4.h>
+#include <serial/shared_ringbuffer.h>
+#include <serial/util.h>
+#include <uart.h>
+#include <uart_config.h>
 
 #define CLI_CH 1
 #define DRV_CH 11

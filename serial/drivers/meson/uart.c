@@ -5,8 +5,8 @@
 #include <stdbool.h>
 #include <stdint.h>
 #include <microkit.h>
-#include "uart.h"
-#include "uart_config.h"
+#include <uart.h>
+#include <uart_config.h>
 
 // Defines to manage interrupts and notifications
 #define IRQ_CH 1
