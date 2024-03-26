@@ -19,5 +19,5 @@ all: libco.a clean
 libco.a: $(LIBCO_OBJECTS)
 	${AR} rvcs $@ $(LIBCO_OBJECTS)
 
-clean:
+clean::
 	rm -f $(LIBCO_OBJECTS)
