@@ -17,7 +17,7 @@ LIBCO_OBJECTS := $(C_FILES:.c=.o)
 all: libco.a clean
 
 libco.a: $(LIBCO_OBJECTS)
-	ar rv $@ $(LIBCO_OBJECTS)
+	${AR} rvcs $@ $(LIBCO_OBJECTS)
 
 clean:
 	rm -f $(LIBCO_OBJECTS)

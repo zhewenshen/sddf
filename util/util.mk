@@ -10,7 +10,7 @@
 OBJS := cache.o sddf_printf.o putchar_debug.o
 
 sddf_libutil.a: ${OBJS}
-	ar rv $@ ${OBJS}
+	${AR} rvcs $@ ${OBJS}
 
 VPATH += ${SDDF}/util
 
