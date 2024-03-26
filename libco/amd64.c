@@ -37,7 +37,7 @@ static void co_entrypoint(cothread_t handle) {
   long long* buffer = (long long*)handle;
   void (*entrypoint)(void) = (void (*)(void))buffer[1];
   entrypoint();
-  *(int *)0;  /* Panic if cothread_t entrypoint returns */
+  (void) *(int *)0;  /* Panic if cothread_t entrypoint returns */
 }
 
 cothread_t co_active() {
@@ -52,7 +52,7 @@ cothread_t co_derive(void* memory, unsigned int size, void (*entrypoint)(void)) 
   }
   if(!co_active_handle) co_active_handle = &co_active_buffer;
 
-  if(handle = (cothread_t)memory) {
+  if((handle = (cothread_t)memory)) {
     unsigned int offset = (size & ~15) - 32;
     long long *p = (long long*)((char*)handle + offset);  /* seek to top of stack */
     *--p = (long long)0;                                  /* crash if entrypoint returns */
