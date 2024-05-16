@@ -114,7 +114,7 @@ timer() {
 }
 
 serial() {
-    BOARDS=("odroidc4" "qemu_arm_virt" "maaxboard")
+    BOARDS=("odroidc4" "qemu_arm_virt" "maaxboard" "star64")
     CONFIGS=("debug" "release")
     for BOARD in "${BOARDS[@]}"
     do
