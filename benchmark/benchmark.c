@@ -16,6 +16,7 @@
 #include <sddf/util/util.h>
 #include <sddf/util/printf.h>
 
+#ifdef CONFIG_ARCH_ARM
 #define LOG_BUFFER_CAP 7
 
 __attribute__((__section__(".benchmark_config"))) benchmark_config_t benchmark_config;
@@ -300,3 +301,4 @@ seL4_Bool fault(microkit_child id, microkit_msginfo msginfo, microkit_msginfo *r
 
     return seL4_False;
 }
+#endif

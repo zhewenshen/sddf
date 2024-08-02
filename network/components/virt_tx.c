@@ -53,7 +53,9 @@ void tx_provide(void)
                 }
 
                 uintptr_t buffer_vaddr = buffer.io_or_offset + (uintptr_t)config.clients[client].data.region.vaddr;
+                #ifdef CONFIG_ARCH_ARM
                 cache_clean(buffer_vaddr, buffer_vaddr + buffer.len);
+                #endif
 
                 buffer.io_or_offset = buffer.io_or_offset + config.clients[client].data.io_addr;
                 err = net_enqueue_active(&state.tx_queue_drv, buffer);
