@@ -13,44 +13,33 @@ $(error SDDF must be specified)
 endif
 
 ifeq ($(strip $(TOOLCHAIN)),)
-	TOOLCHAIN := aarch64-none-elf
+	TOOLCHAIN := clang
 endif
 
-ifeq ($(strip $(TOOLCHAIN)), clang)
-	CC := clang -target aarch64-none-elf
-	LD := ld.lld
-	AR := llvm-ar
-	RANLIB := llvm-ranlib
-else
-	CC := $(TOOLCHAIN)-gcc
-	LD := $(TOOLCHAIN)-ld
-	AS := $(TOOLCHAIN)-as
-	AR := $(TOOLCHAIN)-ar
-	RANLIB := $(TOOLCHAIN)-ranlib
+SUPPORTED_BOARDS:= imx8mm_evk maaxboard
+ifeq ($(filter ${MICROKIT_BOARD},${SUPPORTED_BOARDS}),)
+$(error Unsupported MICROKIT_BOARD ${MICROKIT_BOARD})
 endif
+
+include ${SDDF}/tools/Make/board/${MICROKIT_BOARD}.mk
+include ${SDDF}/tools/Make/toolchain/${TOOLCHAIN}.mk
 
 BUILD_DIR ?= build
 MICROKIT_CONFIG ?= debug
 
-DRIVER_DIR := imx
-CPU := cortex-a53
 
 TOP := ${SDDF}/examples/mmc
 CONFIGS_INCLUDE := ${TOP}/include/configs
 
 MICROKIT_TOOL ?= $(MICROKIT_SDK)/bin/microkit
-
 BOARD_DIR := $(MICROKIT_SDK)/board/$(MICROKIT_BOARD)/$(MICROKIT_CONFIG)
 
 IMAGES := mmc_driver.elf timer_driver.elf client.elf blk_virt.elf
-CFLAGS := -mcpu=$(CPU) \
-		  -mstrict-align \
+CFLAGS +=	  -mstrict-align \
 		  -nostdlib \
-		  -ffreestanding \
 		  -g3 \
 		  -O3 \
 		  -Wall -Wno-unused-function -Werror -Wno-unused-command-line-argument \
-		  -I$(BOARD_DIR)/include \
 		  -I$(SDDF)/include \
 		  -I$(CONFIGS_INCLUDE)
 LDFLAGS := -L$(BOARD_DIR)/lib
@@ -60,8 +49,8 @@ IMAGE_FILE   := loader.img
 REPORT_FILE  := report.txt
 SYSTEM_FILE  := ${TOP}/board/$(MICROKIT_BOARD)/mmc.system
 
-MMC_DRIVER   := $(SDDF)/drivers/blk/mmc/${DRIVER_DIR}
-TIMER_DRIVER := $(SDDF)/drivers/clock/${DRIVER_DIR}
+MMC_DRIVER   := $(SDDF)/drivers/blk/mmc/${PLATFORM}
+TIMER_DRIVER := $(SDDF)/drivers/clock/${PLATFORM}
 
 BLK_COMPONENTS := $(SDDF)/blk/components
 

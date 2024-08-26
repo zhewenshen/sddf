@@ -9,10 +9,7 @@ $(error MICROKIT_SDK must be specified)
 endif
 override MICROKIT_SDK:=$(abspath ${MICROKIT_SDK})
 
-ifeq ($(strip $(TOOLCHAIN)),)
-	export TOOLCHAIN := aarch64-none-elf
-	export LIBC := $(dir $(realpath $(shell aarch64-none-elf-gcc --print-file-name libc.a)))
-endif
+export LIBC := $(dir $(realpath $(shell aarch64-none-elf-gcc --print-file-name libc.a)))
 
 export BUILD_DIR ?= build
 export MICROKIT_CONFIG ?= debug

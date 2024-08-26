@@ -16,44 +16,25 @@ $(error SDDF must be specified)
 endif
 
 ifeq ($(strip $(TOOLCHAIN)),)
-	TOOLCHAIN := aarch64-none-elf
+	TOOLCHAIN := gcc
 endif
 
 BUILD_DIR ?= build
 MICROKIT_CONFIG ?= debug
-
-TOOLCHAIN ?= aarch64-none-elf
-
-QEMU := qemu-system-aarch64
-
-CC := $(TOOLCHAIN)-gcc
-LD := $(TOOLCHAIN)-ld
-AS := $(TOOLCHAIN)-as
-AR := $(TOOLCHAIN)-ar
-RANLIB := ${TOOLCHAIN}-ranlib
-
 MICROKIT_TOOL := $(MICROKIT_SDK)/bin/microkit
 
-ifeq ($(strip $(MICROKIT_BOARD)), odroidc4)
-	DRIVER_DIR := meson
-	CPU := cortex-a55
-else ifeq ($(strip $(MICROKIT_BOARD)), qemu_virt_aarch64)
-	DRIVER_DIR := arm
-	CPU := cortex-a53
-else ifeq ($(strip $(MICROKIT_BOARD)), maaxboard)
-	DRIVER_DIR := imx
-	CPU := cortex-a53
-else ifeq ($(strip $(MICROKIT_BOARD)), imx8mm_evk)
-	DRIVER_DIR := imx
-	CPU := cortex-a53
-else
-$(error Unsupported MICROKIT_BOARD given)
+SUPPORTED_BOARDS:= imx8mm_evk maaxboard odroidc4 qemu_virt_aarch64
+ifeq ($(filter ${MICROKIT_BOARD},${SUPPORTED_BOARDS}),)
+$(error Unsupported MICROKIT_BOARD ${MICROKIT_BOARD})
 endif
+
+include ${SDDF}/tools/Make/board/${MICROKIT_BOARD}.mk
+include ${SDDF}/tools/Make/toolchain/${TOOLCHAIN}.mk
 
 TOP := ${SDDF}/examples/serial
 UTIL := $(SDDF)/util
 SERIAL_COMPONENTS := $(SDDF)/serial/components
-UART_DRIVER := $(SDDF)/drivers/serial/$(DRIVER_DIR)
+UART_DRIVER := $(SDDF)/drivers/serial/$(UART_DRIV_DIR)
 SERIAL_CONFIG_INCLUDE:=${TOP}/include/serial_config
 BOARD_DIR := $(MICROKIT_SDK)/board/$(MICROKIT_BOARD)/$(MICROKIT_CONFIG)
 SYSTEM_FILE := ${TOP}/board/$(MICROKIT_BOARD)/serial.system
@@ -61,10 +42,7 @@ SYSTEM_FILE := ${TOP}/board/$(MICROKIT_BOARD)/serial.system
 IMAGES := uart_driver.elf \
 	  serial_server.elf \
 	  serial_virt_tx.elf serial_virt_rx.elf
-CFLAGS := -mcpu=$(CPU)\
-	  -mstrict-align \
-	  -ffreestanding \
-	  -g3 -O3 -Wall \
+CFLAGS +=  -g3 -O3 -Wall \
 	  -Wno-unused-function -Werror \
 	  -MD
 LDFLAGS := -L$(BOARD_DIR)/lib -L$(SDDF)/lib
@@ -103,7 +81,6 @@ $(IMAGE_FILE) $(REPORT_FILE): $(IMAGES) $(SYSTEM_FILE)
 
 qemu: ${IMAGE_FILE}
 	$(QEMU) -machine virt,virtualization=on -cpu cortex-a53 -serial mon:stdio -device loader,file=$(IMAGE_FILE),addr=0x70000000,cpu-num=0 -m size=2G -nographic
-
 
 clean::
 	${RM} -f *.elf

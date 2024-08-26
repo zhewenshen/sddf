@@ -4,22 +4,30 @@
 # SPDX-License-Identifier: BSD-2-Clause
 #
 
-QEMU := qemu-system-aarch64
-
 MICROKIT_TOOL ?= $(MICROKIT_SDK)/bin/microkit
 ECHO_SERVER:=${SDDF}/examples/echo_server
+
+SUPPORTED_BOARDS := odroidc4 maaxboard imx8mm_evk qemu_virt_aarch64
+ifeq ($(filter ${MICROKIT_BOARD},${SUPPORTED_BOARDS}),)
+$(error Unsupported MICROKIT_BOARD ${MICROKIT_BOARD})
+endif
+
+
+TOOLCHAIN ?= gcc
+include ${SDDF}/tools/Make/board/${MICROKIT_BOARD}.mk
+include ${SDDF}/tools/Make/toolchain/${TOOLCHAIN}.mk
+
 LWIPDIR:=network/ipstacks/lwip/src
 BENCHMARK:=$(SDDF)/benchmark
 UTIL:=$(SDDF)/util
-ETHERNET_DRIVER:=$(SDDF)/drivers/network/$(DRIV_DIR)
+ETHERNET_DRIVER:=$(SDDF)/drivers/network/$(NET_DRIV_DIR)
 ETHERNET_CONFIG_INCLUDE:=${ECHO_SERVER}/include/ethernet_config
 SERIAL_COMPONENTS := $(SDDF)/serial/components
 UART_DRIVER := $(SDDF)/drivers/serial/$(UART_DRIV_DIR)
 SERIAL_CONFIG_INCLUDE:=${ECHO_SERVER}/include/serial_config
-TIMER_DRIVER:=$(SDDF)/drivers/clock/$(TIMER_DRV_DIR)
+TIMER_DRIVER:=$(SDDF)/drivers/clock/$(TIMER_DRIV_DIR)
 NETWORK_COMPONENTS:=$(SDDF)/network/components
 
-BOARD_DIR := $(MICROKIT_SDK)/board/$(MICROKIT_BOARD)/$(MICROKIT_CONFIG)
 SYSTEM_FILE := ${ECHO_SERVER}/board/$(MICROKIT_BOARD)/echo_server.system
 IMAGE_FILE := loader.img
 REPORT_FILE := report.txt
@@ -29,20 +37,16 @@ vpath %.c ${SDDF} ${ECHO_SERVER}
 IMAGES := eth_driver.elf lwip.elf benchmark.elf idle.elf network_virt_rx.elf\
 	  network_virt_tx.elf copy.elf timer_driver.elf uart_driver.elf serial_virt_tx.elf
 
-CFLAGS := -mcpu=$(CPU) \
-	  -mstrict-align \
-	  -ffreestanding \
+CFLAGS += \
 	  -g3 -O3 -Wall \
 	  -Wno-unused-function \
 	  -DMICROKIT_CONFIG_$(MICROKIT_CONFIG) \
-	  -I$(BOARD_DIR)/include \
 	  -I$(SDDF)/include \
 	  -I${ECHO_INCLUDE}/lwip \
 	  -I${ETHERNET_CONFIG_INCLUDE} \
 	  -I$(SERIAL_CONFIG_INCLUDE) \
 	  -I${SDDF}/$(LWIPDIR)/include \
 	  -I${SDDF}/$(LWIPDIR)/include/ipv4 \
-	  -MD \
 	  -MP
 
 LDFLAGS := -L$(BOARD_DIR)/lib -L${LIBC}

@@ -12,23 +12,17 @@ $(error MICROKIT_SDK must be specified)
 endif
 
 ifeq ($(strip $(TOOLCHAIN)),)
-	TOOLCHAIN := aarch64-none-elf
+	TOOLCHAIN := gcc
 endif
 
-ifeq (${MICROKIT_BOARD},odroidc4)
-	PLATFORM := meson
-	CPU := cortex-a55
-else
-$(error Unsupported MICROKIT_BOARD)
+SUPPORTED_BOARDS := odroidc4
+ifeq ($(filter ${MICROKIT_BOARD},${SUPPORTED_BOARDS}),)
+$(error Unsupported MICROKIT_BOARD ${MICROKIT_BOARD})
 endif
 
-BOARD_DIR := $(MICROKIT_SDK)/board/$(MICROKIT_BOARD)/$(MICROKIT_CONFIG)
+include ${SDDF}/tools/Make/board/${MICROKIT_BOARD}.mk
+include ${SDDF}/tools/Make/toolchain/${TOOLCHAIN}.mk
 
-CC := $(TOOLCHAIN)-gcc
-LD := $(TOOLCHAIN)-ld
-AS := $(TOOLCHAIN)-as
-AR := $(TOOLCHAIN)-ar
-RANLIB := $(TOOLCHAIN)-ranlib
 
 MICROKIT_TOOL ?= $(MICROKIT_SDK)/bin/microkit
 
@@ -40,7 +34,7 @@ I2C_DRIVER := $(SDDF)/drivers/i2c/${PLATFORM}
 TIMER_DRIVER := $(SDDF)/drivers/clock/${PLATFORM}
 
 IMAGES := i2c_virt.elf i2c_driver.elf client.elf timer_driver.elf
-CFLAGS := -mcpu=$(CPU) -mstrict-align -ffreestanding -g3 -O3 -Wall -Wno-unused-function -I${TOP}
+CFLAGS += -g3 -O3 -Wall -Wno-unused-function -I${TOP}
 LDFLAGS := -L$(BOARD_DIR)/lib -L$(SDDF)/lib -L${LIBC}
 LIBS := --start-group -lmicrokit -Tmicrokit.ld -lc libsddf_util_debug.a --end-group
 
