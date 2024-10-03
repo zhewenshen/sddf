@@ -77,18 +77,6 @@ impl<'a, T: SdmmcHardware> Handler for HandlerImpl<'a, T> {
     fn notified(&mut self, channel: Channel) -> Result<(), Self::Error> {
         match channel {
             BLK_VIRTUALIZER => {
-                // If the future is some, block itself
-                // Since we polling on 
-                if self.future.is_some() {
-                    debug_println!("SDMMC_DRIVER: The future should not exists here!!!");
-                    return Ok(())
-                }
-                unsafe {
-                    // If request queue is empty or resp queue is full, do not dequeue request
-                    if blk_queue_empty_req_helper() > 0 || blk_queue_full_resp_helper() > 0 {
-                        return Ok(())
-                    }
-                }
                 while unsafe { blk_queue_empty_req_helper() == 0 && blk_queue_full_resp_helper() == 0 } {
                     // Assume we magically get the value from sddf
                     let mut request_code: BlkOp = BlkOp::BlkReqRead;
@@ -119,58 +107,60 @@ impl<'a, T: SdmmcHardware> Handler for HandlerImpl<'a, T> {
                     debug_println!("count: {}", count);                  // Simple u16
                     debug_println!("id: {}", id);                        // Simple u32
                     */
-
                     match request_code {
                         BlkOp::BlkReqRead => {
+                            // If the future is some, block itself
+                            // Since we polling on 
                             // This match in the loop might seems to be ineffient here as the correct way is create future first and polling on that
                             // future. But as the driver would soon change into poll on interrupt instead of polling until finish, so just leave it for now
-                            loop {
-                                match &mut self.future {
-                                    Some(future) => {
-                                        let waker = create_dummy_waker();
-                                        let mut cx = Context::from_waker(&waker);
-                                        // TODO: I can get rid of this loop once I configure out how to enable interrupt from Linux kernel driver
-                                        match future.as_mut().poll(&mut cx) {
-                                            Poll::Ready((result, sdmmc)) => {
-                                                debug_println!("SDMMC_DRIVER: Future completed with result");
-                                                self.future = None; // Reset the future once done
-                                                self.sdmmc = sdmmc;
-                                                if result.is_err() {
-                                                    unsafe {
-                                                        blk_enqueue_resp_helper(BlkStatus::BlkRespSeekError, 0, id);
-                                                    }
-                                                }
-                                                else {
-                                                    unsafe {
-                                                        blk_enqueue_resp_helper(BlkStatus::BlkRespOk, count as u32, id);
-                                                    }
-                                                }
-                                                break;
-                                            }
-                                            Poll::Pending => {
-                                                debug_println!("SDMMC_DRIVER: Future is not ready, polling again...");
-                                            }
-                                        }
-                                        // Send the result back to sddf_blk here
-                                    }
-                                    None => {
-                                        if let Some(sdmmc) = self.sdmmc.take() {
-                                            self.future = Some(Box::pin(sdmmc.read_block(count as u32, block_number as u64, io_or_offset)));
-                                        }
-                                        else {
-                                            panic!("SDMMC_DRIVER: No sdmmc when future is not available which is an undefined state")
-                                        }
-                                    }
-                                }
+                            if let Some(sdmmc) = self.sdmmc.take() {
+                                self.future = Some(Box::pin(sdmmc.read_block(count as u32, block_number as u64, io_or_offset)));
+                            }
+                            else {
+                                panic!("SDMMC_DRIVER: The sdmmc should be here and the future should be empty!!!")
                             }
                         }
                         BlkOp::BlkReqWrite => {
-                            debug_println!("SDMMC_DRIVER: CARD IS READ ONLY FOR NOW!");
+                            if let Some(sdmmc) = self.sdmmc.take() {
+                                self.future = Some(Box::pin(sdmmc.write_block(count as u32, block_number as u64, io_or_offset)));
+                            }
+                            else {
+                                panic!("SDMMC_DRIVER: The sdmmc should be here and the future should be empty!!!")
+                            }
                         },
-                        BlkOp::BlkReqFlush => return Ok(()),
-                        BlkOp::BlkReqBarrier => return Ok(()),
+                        _ => ()
                     }
                     // Notify the virtualizer when there are results available
+                    // TODO: Add retry if the sdcard return an error
+                    if let Some(future) = &mut self.future {
+                        let waker = create_dummy_waker();
+                        let mut cx = Context::from_waker(&waker);
+                        // TODO: I can get rid of this loop once I configure out how to enable interrupt from Linux kernel driver
+                        loop {
+                            match future.as_mut().poll(&mut cx) {
+                                Poll::Ready((result, sdmmc)) => {
+                                    debug_println!("SDMMC_DRIVER: Future completed with result");
+                                    self.future = None; // Reset the future once done
+                                    self.sdmmc = sdmmc;
+                                    if result.is_err() {
+                                        unsafe {
+                                            blk_enqueue_resp_helper(BlkStatus::BlkRespSeekError, 0, id);
+                                        }
+                                    }
+                                    else {
+                                        unsafe {
+                                            blk_enqueue_resp_helper(BlkStatus::BlkRespOk, count as u32, id);
+                                        }
+                                    }
+                                    break;
+                                }
+                                Poll::Pending => {
+                                    debug_println!("SDMMC_DRIVER: Future is not ready, polling again...");
+                                }
+                            }
+                        }
+                    }
+                    debug_println!("SDMMC_DRIVER: Notify BLK_VIRTUALIZER");
                     BLK_VIRTUALIZER.notify();
                 }
             }
