@@ -5,17 +5,14 @@ extern crate alloc;
 
 mod sddf_blk;
 
-use core::{future::{self, Future}, pin::{self, Pin}, task::{Context, Poll, RawWaker, RawWakerVTable, Waker}};
+use core::{future::Future, pin::Pin, task::{Context, Poll, RawWaker, RawWakerVTable, Waker}};
 
 use alloc::boxed::Box;
 use sddf_blk::{blk_dequeue_req_helper, blk_enqueue_resp_helper, blk_queue_empty_req_helper, blk_queue_full_resp_helper, blk_queue_init_helper, BlkOp, BlkStatus};
 use sdmmc_hal::meson_gx_mmc::MesonSdmmcRegisters;
 
-use sdmmc_protocol::sdmmc::{self, SdmmcHalError, SdmmcHardware, SdmmcProtocol};
+use sdmmc_protocol::sdmmc::{SdmmcHalError, SdmmcHardware, SdmmcProtocol};
 use sel4_microkit::{debug_print, debug_println, protection_domain, Channel, Handler, Infallible};
-
-const SDMMC_BASE_ADDR: *mut MesonSdmmcRegisters = 0xffe05000 as *mut MesonSdmmcRegisters;
-const DATA_ADDR: *mut u8 = 0x50000000 as *mut u8;
 
 const BLK_VIRTUALIZER: sel4_microkit::Channel = sel4_microkit::Channel::new(0);
 
