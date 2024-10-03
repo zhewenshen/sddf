@@ -105,6 +105,20 @@ impl<'a, T: SdmmcHardware> Handler for HandlerImpl<'a, T> {
                             &mut id as *mut u32,
                         );
                     }
+                    // Translate block from sddf_block and sddf_count to real block number and count
+                    // Since the real block size is 512 byte and sddf_block_transfer size is 4KB
+                    // multiply 8 here
+                    // But I do not like this design as why block driver need to know the real transfer size???
+                    block_number = block_number * 8;
+                    count = count * 8;
+
+                    // Print the retrieved values
+                    /*
+                    debug_println!("io_or_offset: 0x{:x}", io_or_offset);// Simple u64
+                    debug_println!("block_number: {}", block_number);    // Simple u32
+                    debug_println!("count: {}", count);                  // Simple u16
+                    debug_println!("id: {}", id);                        // Simple u32
+                    */
 
                     match request_code {
                         BlkOp::BlkReqRead => {
