@@ -6,12 +6,12 @@ blk_queue_handle_t queue_handle_memory;
 blk_queue_handle_t *queue_handle = &queue_handle_memory;
 
 blk_req_queue_t *blk_req_queue;
-blk_resp_queue_t *blk_completion_queue;
+blk_resp_queue_t *blk_resp_queue;
 
 blk_storage_info_t *blk_config;
 
 void blk_queue_init_helper() {
-    blk_queue_init(queue_handle, blk_req_queue, blk_completion_queue, BLK_QUEUE_SIZE_DRIV);
+    blk_queue_init(queue_handle, blk_req_queue, blk_resp_queue, BLK_QUEUE_SIZE_DRIV);
     blk_config->sector_size = 512;
     blk_config->block_size = 1;
     blk_config->capacity = 0xFFFFFFFFFF;
