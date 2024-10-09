@@ -105,16 +105,16 @@ pub fn build(b: *std.Build) void {
     });
 
     const driver_class = switch (microkit_board_option.?) {
-        .qemu_virt_aarch64 => "arm",
+        .qemu_virt_aarch64 => "virtio",
         .odroidc4 => "meson",
         .maaxboard => "imx",
         .star64 => "snps",
     };
 
-    const driver = sddf_dep.artifact(b.fmt("driver_uart_{s}.elf", .{ driver_class }));
+    const driver = sddf_dep.artifact(b.fmt("driver_serial_{s}.elf", .{ driver_class }));
     // This is required because the SDF file is expecting a different name to the artifact we
     // are dealing with.
-    const driver_install = b.addInstallArtifact(driver, .{ .dest_sub_path = "uart_driver.elf" });
+    const driver_install = b.addInstallArtifact(driver, .{ .dest_sub_path = "serial_driver.elf" });
 
     const virt_rx = sddf_dep.artifact("serial_virt_rx.elf");
     b.installArtifact(virt_rx);
@@ -165,17 +165,16 @@ pub fn build(b: *std.Build) void {
     if (std.mem.eql(u8, microkit_board, "qemu_virt_aarch64")) {
         const qemu_cmd = b.addSystemCommand(&[_][]const u8{
             "qemu-system-aarch64",
-            "-machine",
-            "virt,virtualization=on,highmem=off,secure=off",
-            "-cpu",
-            "cortex-a53",
-            "-serial",
-            "mon:stdio",
-            "-device",
-            loader_arg,
-            "-m",
-            "2G",
+            "-machine", "virt,virtualization=on,highmem=off,secure=off",
+            "-cpu", "cortex-a53",
+            "-serial", "mon:stdio",
+            "-device", loader_arg,
+            "-m", "2G",
             "-nographic",
+            "-global", "virtio-mmio.force-legacy=false",
+            "-device", "virtio-serial-device",
+            "-chardev", "pty,id=virtcon",
+            "-device", "virtconsole,chardev=virtcon"
         });
         qemu_cmd.step.dependOn(b.default_step);
         const simulate_step = b.step("qemu", "Simulate the image using QEMU");

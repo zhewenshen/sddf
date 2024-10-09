@@ -6,11 +6,12 @@ const std = @import("std");
 const LazyPath = std.Build.LazyPath;
 
 const DriverClass = struct {
-    const Uart = enum {
+    const Serial = enum {
         arm,
         meson,
         imx,
         snps,
+        virtio,
     };
 
     const Timer = enum {
@@ -68,21 +69,22 @@ var libmicrokit: std.Build.LazyPath = undefined;
 var libmicrokit_linker_script: std.Build.LazyPath = undefined;
 var libmicrokit_include: std.Build.LazyPath = undefined;
 
-fn addUartDriver(
+fn addSerialDriver(
     b: *std.Build,
+    source_name: []const u8,
     serial_config_include: LazyPath,
     util: *std.Build.Step.Compile,
-    class: DriverClass.Uart,
+    class: DriverClass.Serial,
     target: std.Build.ResolvedTarget,
     optimize: std.builtin.OptimizeMode,
 ) *std.Build.Step.Compile {
     const driver = addPd(b, .{
-        .name = b.fmt("driver_uart_{s}.elf", .{@tagName(class)}),
+        .name = b.fmt("driver_serial_{s}.elf", .{@tagName(class)}),
         .target = target,
         .optimize = optimize,
         .strip = false,
     });
-    const source = b.fmt("drivers/serial/{s}/uart.c", .{@tagName(class)});
+    const source = b.fmt("drivers/serial/{s}/{s}", .{@tagName(class), source_name});
     const driver_include = b.fmt("drivers/serial/{s}/include", .{@tagName(class)});
     driver.addCSourceFile(.{
         .file = b.path(source),
@@ -385,9 +387,14 @@ pub fn build(b: *std.Build) void {
     serial_virt_tx.linkLibrary(util_putchar_debug);
     b.installArtifact(serial_virt_tx);
 
-    // UART drivers
-    inline for (std.meta.fields(DriverClass.Uart)) |class| {
-        const driver = addUartDriver(b, serial_config_include, util, @enumFromInt(class.value), target, optimize);
+    // Serial drivers
+    inline for (std.meta.fields(DriverClass.Serial)) |class| {
+        const device: DriverClass.Serial = @enumFromInt(class.value);
+        const source = switch (device) {
+            .virtio => "console.c",
+            else => "uart.c",
+        };
+        const driver = addSerialDriver(b, source, serial_config_include, util, @enumFromInt(class.value), target, optimize);
         driver.linkLibrary(util_putchar_debug);
         b.installArtifact(driver);
     }

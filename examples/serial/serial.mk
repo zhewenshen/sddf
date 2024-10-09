@@ -34,7 +34,8 @@ ifeq ($(strip $(MICROKIT_BOARD)), odroidc4)
 	CPU := cortex-a55
 else ifeq ($(strip $(MICROKIT_BOARD)), qemu_virt_aarch64)
 	ARCH := aarch64
-	DRIVER_DIR := arm
+# 	DRIVER_DIR := arm
+	DRIVER_DIR := virtio
 	CPU := cortex-a53
 else ifeq ($(strip $(MICROKIT_BOARD)), maaxboard)
 	ARCH := aarch64
@@ -54,18 +55,19 @@ endif
 TOP := ${SDDF}/examples/serial
 UTIL := $(SDDF)/util
 SERIAL_COMPONENTS := $(SDDF)/serial/components
-UART_DRIVER := $(SDDF)/drivers/serial/$(DRIVER_DIR)
+SERIAL_DRIVER := $(SDDF)/drivers/serial/$(DRIVER_DIR)
 SERIAL_CONFIG_INCLUDE:=${TOP}/include/serial_config
 BOARD_DIR := $(MICROKIT_SDK)/board/$(MICROKIT_BOARD)/$(MICROKIT_CONFIG)
 SYSTEM_FILE := ${TOP}/board/$(MICROKIT_BOARD)/serial.system
 
-IMAGES := uart_driver.elf \
+IMAGES := serial_driver.elf \
 	  serial_server.elf \
 	  serial_virt_tx.elf serial_virt_rx.elf
 CFLAGS := -ffreestanding \
 	  -g3 -O3 -Wall \
 	  -Wno-unused-function -Werror \
-	  -MD
+	  -MD \
+	  -Wno-unused-command-line-argument
 LDFLAGS := -L$(BOARD_DIR)/lib -L$(SDDF)/lib
 LIBS := --start-group -lmicrokit -Tmicrokit.ld libsddf_util_debug.a --end-group
 
@@ -92,7 +94,7 @@ ${CHECK_FLAGS_BOARD_MD5}:
 ${IMAGES}: libsddf_util_debug.a ${CHECK_FLAGS_BOARD_MD5}
 
 include ${SDDF}/util/util.mk
-include ${UART_DRIVER}/uart_driver.mk
+include ${SERIAL_DRIVER}/serial_driver.mk
 include ${SERIAL_COMPONENTS}/serial_components.mk
 
 %.elf: %.o
@@ -107,8 +109,26 @@ serial_server.o: ${TOP}/serial_server.c ${CHECK_FLAGS_BOARD_MD5}
 $(IMAGE_FILE) $(REPORT_FILE): $(IMAGES) $(SYSTEM_FILE)
 	MICROKIT_SDK=${MICROKIT_SDK} $(MICROKIT_TOOL) $(SYSTEM_FILE) --search-path $(BUILD_DIR) --board $(MICROKIT_BOARD) --config $(MICROKIT_CONFIG) -o $(IMAGE_FILE) -r $(REPORT_FILE)
 
+# qemu: ${IMAGE_FILE}
+# 	$(QEMU) -machine virt,virtualization=on \
+# 			-cpu cortex-a53 \
+#  			-serial mon:stdio \
+# 			-device loader,file=$(IMAGE_FILE),addr=0x70000000,cpu-num=0 \
+# 			-chardev stdio,id=char0 \
+# 			-device virtio-serial-device,chardev=char0 \
+# 			-m size=2G \
+# 			-nographic
+
+
 qemu: ${IMAGE_FILE}
-	$(QEMU) -machine virt,virtualization=on -cpu cortex-a53 -serial mon:stdio -device loader,file=$(IMAGE_FILE),addr=0x70000000,cpu-num=0 -m size=2G -nographic
+	$(QEMU) -machine virt,virtualization=on \
+			-cpu cortex-a53 \
+			-device loader,file=$(IMAGE_FILE),addr=0x70000000,cpu-num=0 \
+            -global virtio-mmio.force-legacy=false \
+			-device virtio-serial-device -chardev pty,id=virtcon -device virtconsole,chardev=virtcon \
+			-m size=2G \
+			-nographic
+
 
 
 clean::

@@ -5,7 +5,11 @@
     SPDX-License-Identifier: BSD-2-Clause
 -->
 <system>
-    <memory_region name="uart" size="0x1_000" phys_addr="0x9000000" />
+    <memory_region name="console" size="0x1_000" phys_addr="0xa003000" />
+
+    <memory_region name="hw_ring_buffer" size="0x10_000" />
+    <memory_region name="driver_virtio_tx_data" size="0x1000" />
+    <memory_region name="driver_virtio_rx_data" size="0x1000" />
 
     <memory_region name="rx_data_driver" size="0x2_000" />
     <memory_region name="tx_data_driver" size="0x4_000" />
@@ -21,10 +25,19 @@
     <memory_region name="rx_queue_client1" size="0x1_000" />
     <memory_region name="tx_queue_client1" size="0x1_000" />
 
-    <protection_domain name="uart" priority="100">
-        <program_image path="uart_driver.elf" />
+    <protection_domain name="serial_driver" priority="100">
+        <program_image path="serial_driver.elf" />
 
-        <map mr="uart" vaddr="0x5_000_000" perms="rw" cached="false" setvar_vaddr="uart_base" />
+        <map mr="console" vaddr="0x5_000_000" perms="rw" cached="false" setvar_vaddr="uart_regs" />
+
+        <map mr="hw_ring_buffer" vaddr="0x2_200_000" perms="rw" cached="false" setvar_vaddr="hw_ring_buffer_vaddr" />
+        <setvar symbol="hw_ring_buffer_paddr" region_paddr="hw_ring_buffer" />
+
+        <map mr="driver_virtio_tx_data" vaddr="0x6_000_000" cached="false" setvar_vaddr="virtio_tx_char" />
+        <setvar symbol="virtio_tx_char_paddr" region_paddr="driver_virtio_tx_data" />
+        <map mr="driver_virtio_rx_data" vaddr="0x6_001_000" cached="false" setvar_vaddr="virtio_rx_char" />
+        <setvar symbol="virtio_rx_char_paddr" region_paddr="driver_virtio_rx_data" />
+
 
         <map mr="rx_queue_driver" vaddr="0x4_000_000" perms="rw" cached="true" setvar_vaddr="rx_queue" />
         <map mr="tx_queue_driver" vaddr="0x4_001_000" perms="rw" cached="true" setvar_vaddr="tx_queue" />
@@ -32,7 +45,8 @@
         <map mr="rx_data_driver" vaddr="0x4_002_000" perms="rw" cached="true" setvar_vaddr="rx_data" />
         <map mr="tx_data_driver" vaddr="0x4_004_000" perms="rw" cached="true" setvar_vaddr="tx_data" />
 
-        <irq irq="33" id="0" /> <!-- UART interrupt -->
+        <irq irq="79" id="0" trigger="edge" />
+
     </protection_domain>
 
     <protection_domain name="client0" priority="97">
@@ -76,12 +90,12 @@
     </protection_domain>
 
     <channel>
-        <end pd="uart" id="1"/>
+        <end pd="serial_driver" id="1"/>
         <end pd="serial_virt_tx" id="0"/>
     </channel>
 
     <channel>
-        <end pd="uart" id="2"/>
+        <end pd="serial_driver" id="2"/>
         <end pd="serial_virt_rx" id="0"/>
     </channel>
 

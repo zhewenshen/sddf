@@ -118,3 +118,24 @@ character using `sddf_putchar_unbuffered` which flushes the character to the dev
 tenth character each client will print a string containing their name using `sddf_printf` which
 calls the serial `_sddf_putchar`, flushing characters to the device only when a `\n` is
 encountered.
+
+### Example with virtIO console
+
+The configuration is slightly different where the console input/output of the driver is not where
+stdio is.
+
+When QEMU starts, it will output the device to connect to, e.g:
+```
+char device redirected to /dev/ttys007 (label virtcon)
+```
+
+So instead of giving input to one of the clients via the stdio of QEMU, you will need to use a
+program such as `minicom`, `picocom` or `gtkterm` to interact with the serial device.
+
+For example:
+```sh
+picoom /dev/ttys007
+```
+
+Inputting characters should be visible, but debug output will still be in the terminal where you
+started QEMU.
