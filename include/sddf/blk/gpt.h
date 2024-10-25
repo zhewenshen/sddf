@@ -14,8 +14,6 @@
  * */
 
 #define GPT_SECTOR_SIZE 512
-#define GPT_PARTITION_INFO_CODE 0x1
-#define GPT_PARTITION_INFO_MIRROR_CODE 0x2
 #define GPT_HEADER_SIGNATURE "EFI PART"
 
 struct gpt_partition_header {
