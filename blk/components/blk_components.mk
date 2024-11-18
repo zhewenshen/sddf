@@ -7,7 +7,7 @@
 # it should be included into your project Makefile
 #
 # NOTES:
-#  Generates blk_virt.elf
+#  Generates blk_partitioning.elf
 #
 
 
@@ -22,23 +22,23 @@ ${CHECK_BLK_FLAGS_MD5}:
 	touch $@
 
 
-blk_virt.elf: blk_virt.o blk_mbr.o
+blk_virt.elf: blk_virt.o blk_partitioning.o
 	$(LD) $(LDFLAGS) $^ $(LIBS) -o $@
 
 blk_virt.o: ${CHECK_BLK_FLAGS_MD5}
 blk_virt.o: ${SDDF}/blk/components/virt.c
 	${CC} ${CFLAGS} ${CFLAGS_blk} -o $@ -c $<
 
-blk_mbr.o: ${CHECK_BLK_FLAGS_MD5}
-blk_mbr.o: ${SDDF}/blk/components/mbr.c
+blk_partitioning.o: ${CHECK_BLK_FLAGS_MD5}
+blk_partitioning.o: ${SDDF}/blk/components/partitioning.c
 	${CC} ${CFLAGS} ${CFLAGS_blk} -o $@ -c $<
 
 clean::
-	rm -f blk_virt.[od] blk_mbr.[od] .blk_cflags-*
+	rm -f blk_virt.[od] blk_partitioning.[od] .blk_cflags-*
 
 clobber::
 	rm -f ${BLK_IMAGES}
 
 
 -include blk_virt.d
--include blk_mbr.d
+-include blk_partitioning.d

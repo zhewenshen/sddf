@@ -366,7 +366,7 @@ pub fn build(b: *std.Build) void {
         .strip = false,
     });
     blk_virt.addCSourceFiles(.{
-        .files = &. { "blk/components/virt.c", "blk/components/mbr.c" },
+        .files = &. { "blk/components/virt.c", "blk/components/partitioning.c" },
     });
     blk_virt.addIncludePath(blk_config_include);
     blk_virt.addIncludePath(b.path("include"));
