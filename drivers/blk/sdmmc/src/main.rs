@@ -159,6 +159,10 @@ impl<T: SdmmcHardware + 'static> Handler for HandlerImpl<T> {
             );
             return Ok(());
         }
+        debug_println!(
+            "SDMMC_DRIVER: Received notif from: {}",
+            channel.index()
+        );
 
         let mut notify_virt: bool = false;
 
@@ -245,10 +249,10 @@ impl<T: SdmmcHardware + 'static> Handler for HandlerImpl<T> {
                 request.count = request.count * SDDF_TO_REAL_SECTOR;
                 // Print the retrieved values
                 
-                // debug_println!("io_or_offset: 0x{:x}", request.io_or_offset);// Simple u64
-                // debug_println!("block_number: {}", request.block_number);    // Simple u32
-                // debug_println!("count: {}", request.count);                  // Simple u16
-                // debug_println!("id: {}", request.id);                        // Simple u32
+                debug_println!("io_or_offset: 0x{:x}", request.io_or_offset);// Simple u64
+                debug_println!("block_number: {}", request.block_number);    // Simple u32
+                debug_println!("count: {}", request.count);                  // Simple u16
+                debug_println!("id: {}", request.id);                        // Simple u32
                 
                 match request.request_code {
                     BlkOp::BlkReqRead => {
