@@ -112,6 +112,7 @@ static void partitions_init()
         curr_blk_storage_info->capacity = clients[i].sectors / (BLK_TRANSFER_SIZE / MSDOS_MBR_SECTOR_SIZE);
         curr_blk_storage_info->read_only = false;
         __atomic_store_n(&curr_blk_storage_info->ready, true, __ATOMIC_RELEASE);
+        microkit_dbg_puts("virt set storage info\n");
     }
 }
 
@@ -168,7 +169,9 @@ static bool handle_mbr_reply()
 
 void init(void)
 {
+    microkit_dbg_puts("Virt: got before.\n");
     while (!blk_storage_is_ready(blk_driver_storage_info));
+    microkit_dbg_puts("Virt: got here.\n");
 
     /* Initialise client queues */
     for (int i = 0; i < BLK_NUM_CLIENTS; i++) {
