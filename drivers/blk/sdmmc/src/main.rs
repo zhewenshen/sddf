@@ -246,6 +246,14 @@ impl<T: SdmmcHardware + 'static> Handler for HandlerImpl<T> {
                     );
                 }
                 request.block_number = request.block_number * SDDF_TO_REAL_SECTOR;
+                match request.request_code {
+                    BlkOp::BlkReqWrite => {
+                        if request.block_number == 0 {
+                            panic!("sector zero\n");
+                        }
+                    },
+                    _ => {}
+                }
                 request.count = request.count * SDDF_TO_REAL_SECTOR;
                 // Print the retrieved values
                 
