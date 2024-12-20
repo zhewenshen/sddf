@@ -219,9 +219,7 @@ static void handle_driver()
         case BLK_REQ_READ:
             if (drv_status == BLK_RESP_OK) {
                 /* Invalidate cache */
-                /* TODO: This is a raw seL4 system call because Microkit does not (currently)
-                    * include a corresponding libmicrokit API. */
-                seL4_ARM_VSpace_Invalidate_Data(3, reqbk.vaddr, reqbk.vaddr + (BLK_TRANSFER_SIZE * reqbk.count));
+                cache_clean_and_invalidate(reqbk.vaddr, reqbk.vaddr + (BLK_TRANSFER_SIZE * reqbk.count));
             }
             break;
         case BLK_REQ_WRITE:
