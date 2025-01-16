@@ -19,11 +19,11 @@ ${CHECK_NETDRV_FLAGS_MD5}:
 	-rm -f .netdrv_cflags-*
 	touch $@
 
-eth_driver.elf: starfive/ethernet.o
+eth_driver.elf: network/starfive/ethernet.o
 	$(LD) $(LDFLAGS) $< $(LIBS) -o $@
 
-starfive/ethernet.o: ${ETHERNET_DRIVER_DIR}/ethernet.c ${CHECK_NETDRV_FLAGS}
-	mkdir -p starfive
+network/starfive/ethernet.o: ${ETHERNET_DRIVER_DIR}ethernet.c ${CHECK_NETDRV_FLAGS}
+	mkdir -p network/starfive
 	${CC} -c ${CFLAGS} ${CFLAGS_network} -I ${ETHERNET_DRIVER_DIR} -o $@ $<
 
 -include starfive/ethernet.d

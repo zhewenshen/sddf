@@ -6,30 +6,22 @@
 #include <stdbool.h>
 #include <stdint.h>
 #include <microkit.h>
+#include <sddf/resources/device.h>
 #include <sddf/network/queue.h>
-#include <sddf/util/fence.h>
+#include <sddf/network/config.h>
 #include <sddf/util/util.h>
+#include <sddf/util/fence.h>
 #include <sddf/util/printf.h>
-#include <ethernet_config.h>
+
 #include "ethernet.h"
-#include <sddf/network/util.h>
 
-#define IRQ_CH 0
-#define TX_CH  1
-#define RX_CH  2
+__attribute__((__section__(".device_resources"))) device_resources_t device_resources;
 
-uintptr_t eth_regs;
-uintptr_t hw_ring_buffer_vaddr;
-uintptr_t hw_ring_buffer_paddr;
-uintptr_t rx_desc_base;
-uintptr_t tx_desc_base;
-uintptr_t rx_free;
-uintptr_t rx_active;
-uintptr_t tx_free;
-uintptr_t tx_active;
+__attribute__((__section__(".net_driver_config"))) net_driver_config_t config;
 
 #ifdef CONFIG_PLAT_STAR64
-uintptr_t resets;
+// @kwinter: Figure out how to get this to work with the new elf patching.
+uintptr_t resets = 0x3000000;
 #endif /* CONFIG_PLAT_STAR64 */
 
 #define RX_COUNT 256
@@ -43,8 +35,6 @@ struct descriptor {
     uint32_t d3;
 };
 
-_Static_assert((RX_COUNT + TX_COUNT) * sizeof(struct descriptor) <= NET_HW_REGION_SIZE,
-               "Expect rx+tx buffers to fit in single 2MB page");
 
 typedef struct {
     uint32_t tail; /* index to insert at */
@@ -57,9 +47,13 @@ typedef struct {
 hw_ring_t rx;
 hw_ring_t tx;
 
+uintptr_t rx_desc_base;
+uintptr_t tx_desc_base;
+
 net_queue_handle_t rx_queue;
 net_queue_handle_t tx_queue;
 
+uintptr_t eth_regs;
 #define MAC_REG(x) ((volatile uint32_t *)(eth_regs + x))
 #define MTL_REG(x) ((volatile uint32_t *)(eth_regs + x))
 #define DMA_REG(x) ((volatile uint32_t *)(eth_regs + x))
@@ -154,7 +148,7 @@ static void rx_return(void)
             rx.tail++;
         } else {
             /* Read 0-14 bits to get length of received packet, manual pg 4081, table 11-152, RDES3 Normal Descriptor */
-            buffer.len = (d->d3 & 0x7FFF); 
+            buffer.len = (d->d3 & 0x7FFF);
             int err = net_enqueue_active(&rx_queue, buffer);
             assert(!err);
             packets_transferred = true;
@@ -166,7 +160,7 @@ static void rx_return(void)
 
     if (packets_transferred && net_require_signal_active(&rx_queue)) {
         net_cancel_signal_active(&rx_queue);
-        microkit_notify(RX_CH);
+        microkit_notify(config.virt_rx.id);
     }
 }
 
@@ -233,7 +227,7 @@ static void tx_return(void)
 
     if (enqueued && net_require_signal_free(&tx_queue)) {
         net_cancel_signal_free(&tx_queue);
-        microkit_notify(TX_CH);
+        microkit_notify(config.virt_tx.id);
     }
 }
 
@@ -375,8 +369,8 @@ static void eth_init()
     *rx_len = RX_COUNT - 1;
 
     // Init rx and tx descriptor list addresses.
-    tx_desc_base = hw_ring_buffer_paddr + (sizeof(struct descriptor) * RX_COUNT);
-    rx_desc_base = hw_ring_buffer_paddr;
+    rx_desc_base = device_resources.regions[1].io_addr;
+    tx_desc_base = device_resources.regions[2].io_addr;
 
     *DMA_REG(DMA_CHAN_RX_BASE_ADDR_HI(0)) = rx_desc_base >> 32;
     *DMA_REG(DMA_CHAN_RX_BASE_ADDR(0)) = rx_desc_base & 0xffffffff;
@@ -410,18 +404,28 @@ static void eth_init()
 
 static void eth_setup(void)
 {
-    assert((hw_ring_buffer_paddr & 0xFFFFFFFF) == hw_ring_buffer_paddr);
+    assert((device_resources.regions[1].io_addr & 0xFFFFFFFF) == device_resources.regions[1].io_addr);
 
     rx.capacity = RX_COUNT;
-    rx.descr = (volatile struct descriptor *)hw_ring_buffer_vaddr;
+    rx.descr = (volatile struct descriptor *)device_resources.regions[1].region.vaddr;
     tx.capacity = TX_COUNT;
-    tx.descr = (volatile struct descriptor *)(hw_ring_buffer_vaddr + (sizeof(struct descriptor) * RX_COUNT));
+    tx.descr = (volatile struct descriptor *)device_resources.regions[2].region.vaddr;
 
     eth_init();
 }
 
 void init(void)
 {
+    assert(net_config_check_magic((void *)&config));
+    assert(device_resources_check_magic(&device_resources));
+    assert(device_resources.num_irqs == 1);
+    assert(device_resources.num_regions == 3);
+    // All buffers should fit within our DMA region
+    assert(RX_COUNT * sizeof(struct descriptor) <= device_resources.regions[1].region.size);
+    assert(TX_COUNT * sizeof(struct descriptor) <= device_resources.regions[2].region.size);
+
+    eth_regs = (void *) device_resources.regions[0].region.vaddr;
+
     /* De-assert the reset signals that u-boot left asserted. */
 #ifdef CONFIG_PLAT_STAR64
     volatile uint32_t *reset_eth = (volatile uint32_t *)(resets + 0x38);
@@ -452,30 +456,26 @@ void init(void)
         sddf_dprintf("PHY device is operating in half duplex mode\n");
     }
 
-    net_queue_init(&rx_queue, (net_queue_t *)rx_free, (net_queue_t *)rx_active, NET_RX_QUEUE_SIZE_DRIV);
-    net_queue_init(&tx_queue, (net_queue_t *)tx_free, (net_queue_t *)tx_active, NET_TX_QUEUE_SIZE_DRIV);
-
+    net_queue_init(&rx_queue, config.virt_rx.free_queue.vaddr, config.virt_rx.active_queue.vaddr,
+                   config.virt_rx.num_buffers);
+    net_queue_init(&tx_queue, config.virt_tx.free_queue.vaddr, config.virt_tx.active_queue.vaddr,
+                   config.virt_tx.num_buffers);
     eth_setup();
 
 
-    microkit_irq_ack(IRQ_CH);
+    microkit_irq_ack(device_resources.irqs[0].id);
 }
 
 void notified(microkit_channel ch)
 {
-    switch (ch) {
-    case IRQ_CH:
+    if (ch == device_resources.irqs[0].id) {
         handle_irq();
         microkit_deferred_irq_ack(ch);
-        break;
-    case RX_CH:
+    } else if (ch == config.virt_rx.id) {
         rx_provide();
-        break;
-    case TX_CH:
+    } else if (ch == config.virt_tx.id) {
         tx_provide();
-        break;
-    default:
+    } else {
         sddf_dprintf("ETH|LOG: received notification on unexpected channel %u\n", ch);
-        break;
     }
 }

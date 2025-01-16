@@ -61,6 +61,7 @@
               nativeBuildInputs = with pkgs; [
                 pkgsCross.aarch64-embedded.stdenv.cc.bintools
                 pkgsCross.aarch64-embedded.stdenv.cc
+                pkgsCross.riscv64-embedded.buildPackages.gcc
                 zig
                 qemu
                 gnumake

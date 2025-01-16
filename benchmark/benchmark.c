@@ -16,12 +16,12 @@
 #include <sddf/util/util.h>
 #include <sddf/util/printf.h>
 
-#ifdef CONFIG_ARCH_ARM
-#define LOG_BUFFER_CAP 7
 
 __attribute__((__section__(".benchmark_config"))) benchmark_config_t benchmark_config;
 
 __attribute__((__section__(".serial_client_config"))) serial_client_config_t serial_config;
+#ifdef CONFIG_ARCH_ARM
+#define LOG_BUFFER_CAP 7
 
 ccnt_t counter_values[8];
 counter_bitfield_t benchmark_bf;

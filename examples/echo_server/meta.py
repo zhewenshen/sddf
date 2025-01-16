@@ -80,6 +80,14 @@ BOARDS: List[Board] = [
         timer="soc@0/bus@30000000/timer@302d0000",
         ethernet="soc@0/bus@30800000/ethernet@30be0000"
     ),
+    Board(
+        name="star64",
+        arch=SystemDescription.Arch.RISCV64,
+        paddr_top=0x100000000,
+        serial="soc/serial@10000000",
+        timer="soc/timer@13050000",
+        ethernet="soc/ethernet@16030000"
+    ),
 ]
 
 """
@@ -195,63 +203,83 @@ def generate(sdf_file: str, output_dir: str, dtb: DeviceTree):
 
     # Benchmark specific resources
 
-    bench_idle = ProtectionDomain("bench_idle", "idle.elf", priority=1)
-    bench = ProtectionDomain("bench", "benchmark.elf", priority=254)
+    if board.arch == SystemDescription.Arch.AARCH64:
+        bench_idle = ProtectionDomain("bench_idle", "idle.elf", priority=1)
+        bench = ProtectionDomain("bench", "benchmark.elf", priority=254)
 
-    serial_system.add_client(bench)
+        serial_system.add_client(bench)
 
-    benchmark_pds = [
-        uart_driver,
-        serial_virt_tx,
-        ethernet_driver,
-        net_virt_tx,
-        net_virt_rx,
-        client0,
-        client0_net_copier,
-        client1,
-        client1_net_copier,
-        timer_driver,
-    ]
-    pds = [
-        bench_idle,
-        bench,
-    ]
-    bench_children = []
-    for pd in benchmark_pds:
-        child_id = bench.add_child_pd(pd)
-        bench_children.append((child_id, pd.name))
-    for pd in pds:
-        sdf.add_pd(pd)
+        benchmark_pds = [
+            uart_driver,
+            serial_virt_tx,
+            ethernet_driver,
+            net_virt_tx,
+            net_virt_rx,
+            client0,
+            client0_net_copier,
+            client1,
+            client1_net_copier,
+            timer_driver,
+        ]
+        pds = [
+            bench_idle,
+            bench,
+        ]
+        bench_children = []
+        for pd in benchmark_pds:
+            child_id = bench.add_child_pd(pd)
+            bench_children.append((child_id, pd.name))
+        for pd in pds:
+            sdf.add_pd(pd)
 
-    # Benchmark START channel
-    bench_start_ch = Channel(client0, bench)
-    sdf.add_channel(bench_start_ch)
-    # Benchmark STOP channel
-    bench_stop_ch = Channel(client0, bench)
-    sdf.add_channel(bench_stop_ch)
+        # Benchmark START channel
+        bench_start_ch = Channel(client0, bench)
+        sdf.add_channel(bench_start_ch)
+        # Benchmark STOP channel
+        bench_stop_ch = Channel(client0, bench)
+        sdf.add_channel(bench_stop_ch)
 
-    bench_idle_ch = Channel(bench_idle, bench)
-    sdf.add_channel(bench_idle_ch)
+        bench_idle_ch = Channel(bench_idle, bench)
+        sdf.add_channel(bench_idle_ch)
 
-    cycle_counters_mr = MemoryRegion("cycle_counters", 0x1000)
-    sdf.add_mr(cycle_counters_mr)
+        cycle_counters_mr = MemoryRegion("cycle_counters", 0x1000)
+        sdf.add_mr(cycle_counters_mr)
 
-    bench_idle.add_map(Map(cycle_counters_mr, 0x5_000_000, perms=Map.Perms(r=True, w=True)))
-    client0.add_map(Map(cycle_counters_mr, 0x20_000_000, perms=Map.Perms(r=True, w=True)))
-    bench_idle_config = BenchmarkIdleConfig(0x5_000_000, bench_idle_ch.pd_a_id)
+        bench_idle.add_map(Map(cycle_counters_mr, 0x5_000_000, perms=Map.Perms(r=True, w=True)))
+        client0.add_map(Map(cycle_counters_mr, 0x20_000_000, perms=Map.Perms(r=True, w=True)))
+        bench_idle_config = BenchmarkIdleConfig(0x5_000_000, bench_idle_ch.pd_a_id)
 
-    bench_client_config = BenchmarkClientConfig(
-        0x20_000_000,
-        bench_start_ch.pd_a_id,
-        bench_stop_ch.pd_a_id
-    )
+        bench_client_config = BenchmarkClientConfig(
+            0x20_000_000,
+            bench_start_ch.pd_a_id,
+            bench_stop_ch.pd_a_id
+        )
 
-    benchmark_config = BenchmarkConfig(
-        bench_start_ch.pd_b_id,
-        bench_stop_ch.pd_b_id,
-        bench_idle_ch.pd_b_id,
-        bench_children
-    )
+        benchmark_config = BenchmarkConfig(
+            bench_start_ch.pd_b_id,
+            bench_stop_ch.pd_b_id,
+            bench_idle_ch.pd_b_id,
+            bench_children
+        )
+    else:
+        pds = [
+            uart_driver,
+            serial_virt_tx,
+            ethernet_driver,
+            net_virt_tx,
+            net_virt_rx,
+            client0,
+            client0_net_copier,
+            client1,
+            client1_net_copier,
+            timer_driver,
+        ]
+        for pd in pds:
+            sdf.add_pd(pd)
+
+        reset_reg = MemoryRegion("reset_reg", 0x1000, paddr=0x17000000)
+        sdf.add_mr(reset_reg)
+        ethernet_driver.add_map(Map(reset_reg, 0x3_000_000, perms=Map.Perms(r=True, w=True)))
 
     assert serial_system.connect()
     assert serial_system.serialise_config(output_dir)
@@ -260,14 +288,15 @@ def generate(sdf_file: str, output_dir: str, dtb: DeviceTree):
     assert timer_system.connect()
     assert timer_system.serialise_config(output_dir)
 
-    with open(f"{output_dir}/benchmark_config.data", "wb+") as f:
-        f.write(benchmark_config.serialise())
+    if board.arch == SystemDescription.Arch.AARCH64:
+        with open(f"{output_dir}/benchmark_config.data", "wb+") as f:
+            f.write(benchmark_config.serialise())
 
-    with open(f"{output_dir}/benchmark_idle_config.data", "wb+") as f:
-        f.write(bench_idle_config.serialise())
+        with open(f"{output_dir}/benchmark_idle_config.data", "wb+") as f:
+            f.write(bench_idle_config.serialise())
 
-    with open(f"{output_dir}/benchmark_client_config.data", "wb+") as f:
-        f.write(bench_client_config.serialise())
+        with open(f"{output_dir}/benchmark_client_config.data", "wb+") as f:
+            f.write(bench_client_config.serialise())
 
     with open(f"{output_dir}/{sdf_file}", "w+") as f:
         f.write(sdf.xml())

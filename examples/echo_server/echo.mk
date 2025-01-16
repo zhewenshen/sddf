@@ -47,15 +47,14 @@ CFLAGS := -mstrict-align \
 	-MD \
 	-MP
 
-LDFLAGS := -L$(BOARD_DIR)/lib -L${LIBC} -L.
-LIBS := --start-group -lmicrokit -Tmicrokit.ld -lc -lsddf_util_debug --end-group
+LDFLAGS := -L$(BOARD_DIR)/lib -L${LIBC}
+LIBS := --start-group -lmicrokit -Tmicrokit.ld -lc libsddf_util_debug.a --end-group
 
+BENCHMARK_EN =
 ifeq ($(ARCH),aarch64)
 	CFLAGS += -mcpu=$(CPU)
-	LIBS += -lc
 else ifeq ($(ARCH),riscv64)
 	CFLAGS += -mabi=lp64d -march=rv64imafdc
-	LIBS += -lc
 endif
 
 CHECK_FLAGS_BOARD_MD5:=.board_cflags-$(shell echo -- ${CFLAGS} ${BOARD} ${MICROKIT_CONFIG} | shasum | sed 's/ *-//')
@@ -101,6 +100,7 @@ ${IMAGES}: libsddf_util_debug.a
 $(DTB): $(DTS)
 	dtc -q -I dts -O dtb $(DTS) > $(DTB)
 
+ifeq ($(ARCH),aarch64)
 $(SYSTEM_FILE): $(METAPROGRAM) $(IMAGES) $(DTB)
 	$(PYTHON) $(METAPROGRAM) --sddf $(SDDF) --board $(MICROKIT_BOARD) --dtb $(DTB) --output . --sdf $(SYSTEM_FILE)
 	$(OBJCOPY) --update-section .device_resources=uart_driver_device_resources.data uart_driver.elf
@@ -123,10 +123,29 @@ $(SYSTEM_FILE): $(METAPROGRAM) $(IMAGES) $(DTB)
 	$(OBJCOPY) --update-section .benchmark_config=benchmark_config.data benchmark.elf
 	$(OBJCOPY) --update-section .benchmark_client_config=benchmark_client_config.data lwip0.elf
 	$(OBJCOPY) --update-section .benchmark_config=benchmark_idle_config.data idle.elf
+else ifeq ($(ARCH),riscv64)
+$(SYSTEM_FILE): $(METAPROGRAM) $(IMAGES) $(DTB)
+	$(PYTHON) $(METAPROGRAM) --sddf $(SDDF) --board $(MICROKIT_BOARD) --dtb $(DTB) --output . --sdf $(SYSTEM_FILE)
+	$(OBJCOPY) --update-section .device_resources=uart_driver_device_resources.data uart_driver.elf
+	$(OBJCOPY) --update-section .serial_driver_config=serial_driver_config.data uart_driver.elf
+	$(OBJCOPY) --update-section .serial_virt_tx_config=serial_virt_tx.data serial_virt_tx.elf
+	$(OBJCOPY) --update-section .device_resources=ethernet_driver_device_resources.data eth_driver.elf
+	$(OBJCOPY) --update-section .net_driver_config=net_driver.data eth_driver.elf
+	$(OBJCOPY) --update-section .net_virt_rx_config=net_virt_rx.data network_virt_rx.elf
+	$(OBJCOPY) --update-section .net_virt_tx_config=net_virt_tx.data network_virt_tx.elf
+	$(OBJCOPY) --update-section .net_copy_config=net_copy_client0_net_copier.data network_copy.elf network_copy0.elf
+	$(OBJCOPY) --update-section .net_copy_config=net_copy_client1_net_copier.data network_copy.elf network_copy1.elf
+	$(OBJCOPY) --update-section .device_resources=timer_driver_device_resources.data timer_driver.elf
+	$(OBJCOPY) --update-section .timer_client_config=timer_client_client0.data lwip0.elf
+	$(OBJCOPY) --update-section .net_client_config=net_client_client0.data lwip0.elf
+	$(OBJCOPY) --update-section .serial_client_config=serial_client_client0.data lwip0.elf
+	$(OBJCOPY) --update-section .timer_client_config=timer_client_client1.data lwip1.elf
+	$(OBJCOPY) --update-section .net_client_config=net_client_client1.data lwip1.elf
+	$(OBJCOPY) --update-section .serial_client_config=serial_client_client1.data lwip1.elf
+endif
 
 ${IMAGE_FILE} $(REPORT_FILE): $(IMAGES) $(SYSTEM_FILE)
 	$(MICROKIT_TOOL) $(SYSTEM_FILE) --search-path $(BUILD_DIR) --board $(MICROKIT_BOARD) --config $(MICROKIT_CONFIG) -o $(IMAGE_FILE) -r $(REPORT_FILE)
-
 
 include ${SDDF}/util/util.mk
 include ${SDDF}/network/components/network_components.mk

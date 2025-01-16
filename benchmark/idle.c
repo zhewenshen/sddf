@@ -16,6 +16,7 @@
 
 __attribute__((__section__(".benchmark_config"))) benchmark_idle_config_t config;
 
+#ifdef CONFIG_ARCH_ARM
 struct bench *b;
 
 void count_idle(void)
@@ -51,3 +52,11 @@ void init(void)
     b = (void *)config.cycle_counters;
     return;
 }
+#endif
+
+#ifdef CONFIG_ARCH_RISCV
+
+void init(void) {}
+void notified(microkit_channel ch) {}
+
+#endif
