@@ -4,6 +4,14 @@
  */
 #pragma once
 
+#pragma once
+
+#ifdef MICROKIT
+#include <sys/microkit.h>
+#else
+#include <sys/extern.h>
+#endif
+#include <sel4/sel4.h>
 #include <stdint.h>
 #include <sddf/util/printf.h>
 

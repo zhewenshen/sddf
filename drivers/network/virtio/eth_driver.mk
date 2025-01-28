@@ -23,6 +23,6 @@ eth_driver.elf: network/virtio/ethernet.o
 
 network/virtio/ethernet.o: ${ETHERNET_DRIVER_DIR}/ethernet.c ${CHECK_NETDRV_FLAGS}
 	mkdir -p network/virtio
-	${CC} -c ${CFLAGS} ${CFLAGS_network} -I ${ETHERNET_DRIVER_DIR} -o $@ $<
+	${CC} -c ${CFLAGS} -DMICROKIT ${CFLAGS_network} -I ${ETHERNET_DRIVER_DIR} -o $@ $<
 
 -include virtio/ethernet.d
