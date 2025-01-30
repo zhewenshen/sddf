@@ -3,6 +3,10 @@
 #include <sel4/sel4.h>
 #include <stdint.h>
 
+#define PD_NAME_LENGTH 64
+
+extern char *pd_name;
+
 extern void sddf_irq_ack(unsigned int id);
 extern void sddf_notify(unsigned int id);
 extern void sddf_deferred_notify(unsigned int id);

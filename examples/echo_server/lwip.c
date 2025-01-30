@@ -5,14 +5,18 @@
 
 #include <stdbool.h>
 #include <stdint.h>
-#include <microkit.h>
+#ifdef MICROKIT
+#include <sys/microkit.h>
+#else
+#include <sys/extern.h>
+#endif
 #include <sddf/util/util.h>
 #include <sddf/util/printf.h>
 #include <sddf/network/queue.h>
 #include <sddf/network/config.h>
 #include <sddf/network/util.h>
-#include <sddf/serial/queue.h>
-#include <sddf/serial/config.h>
+// #include <sddf/serial/queue.h>
+// #include <sddf/serial/config.h>
 #include <sddf/timer/client.h>
 #include <sddf/timer/config.h>
 #include <sddf/benchmark/sel4bench.h>
@@ -30,7 +34,7 @@
 
 #include "echo.h"
 
-__attribute__((__section__(".serial_client_config"))) serial_client_config_t serial_config;
+// __attribute__((__section__(".serial_client_config"))) serial_client_config_t serial_config;
 
 __attribute__((__section__(".timer_client_config"))) timer_client_config_t timer_config;
 
@@ -269,16 +273,16 @@ static err_t ethernet_init(struct netif *netif)
 static void netif_status_callback(struct netif *netif)
 {
     if (dhcp_supplied_address(netif)) {
-        sddf_printf("LWIP|NOTICE: DHCP request for %s returned IP address: %s\n", microkit_name,
-                    ip4addr_ntoa(netif_ip4_addr(netif)));
+         sddf_printf("LWIP|NOTICE: DHCP request for returned IP address: %s\n",
+                     ip4addr_ntoa(netif_ip4_addr(netif)));
     }
 }
 
 void init(void)
 {
-    serial_queue_init(&serial_tx_queue_handle, serial_config.tx.queue.vaddr, serial_config.tx.data.size,
-                      serial_config.tx.data.vaddr);
-    serial_putchar_init(serial_config.tx.id, &serial_tx_queue_handle);
+    // serial_queue_init(&serial_tx_queue_handle, serial_config.tx.queue.vaddr, serial_config.tx.data.size,
+                      // serial_config.tx.data.vaddr);
+    // serial_putchar_init(serial_config.tx.id, &serial_tx_queue_handle);
 
     net_queue_init(&state.rx_queue, net_config.rx.free_queue.vaddr, net_config.rx.active_queue.vaddr,
                    net_config.rx.num_buffers);
@@ -317,31 +321,31 @@ void init(void)
     }
 
     setup_udp_socket();
-    setup_utilization_socket(benchmark_config.cycle_counters, benchmark_config.start_ch, benchmark_config.stop_ch);
+    // setup_utilization_socket(benchmark_config.cycle_counters, benchmark_config.start_ch, benchmark_config.stop_ch);
     setup_tcp_socket();
 
     if (notify_rx && net_require_signal_free(&state.rx_queue)) {
         net_cancel_signal_free(&state.rx_queue);
         notify_rx = false;
-        if (!microkit_have_signal) {
-            microkit_deferred_notify(net_config.rx.id);
-        } else if (microkit_signal_cap != BASE_OUTPUT_NOTIFICATION_CAP + net_config.rx.id) {
-            microkit_notify(net_config.rx.id);
+        if (sddf_deferred_notify_curr() == -1) {
+            sddf_deferred_notify(net_config.rx.id);
+        } else if (sddf_deferred_notify_curr() != net_config.rx.id) {
+            sddf_notify(net_config.rx.id);
         }
     }
 
     if (notify_tx && net_require_signal_active(&state.tx_queue)) {
         net_cancel_signal_active(&state.tx_queue);
         notify_tx = false;
-        if (!microkit_have_signal) {
-            microkit_deferred_notify(net_config.tx.id);
-        } else if (microkit_signal_cap != BASE_OUTPUT_NOTIFICATION_CAP + net_config.tx.id) {
-            microkit_notify(net_config.tx.id);
+        if (sddf_deferred_notify_curr() == -1) {
+            sddf_deferred_notify(net_config.tx.id);
+        } else if (sddf_deferred_notify_curr() != net_config.tx.id) {
+            sddf_notify(net_config.tx.id);
         }
     }
 }
 
-void notified(microkit_channel ch)
+void notified(unsigned int ch)
 {
     if (ch == net_config.rx.id) {
         receive();
@@ -351,29 +355,29 @@ void notified(microkit_channel ch)
     } else if (ch == timer_config.driver_id) {
         sys_check_timeouts();
         set_timeout();
-    } else if (ch == serial_config.tx.id) {
+    } /* else if (ch == serial_config.tx.id) {
         // Nothing to do
-    } else {
+    } */ else {
         sddf_dprintf("LWIP|LOG: received notification on unexpected channel: %u\n", ch);
     }
 
     if (notify_rx && net_require_signal_free(&state.rx_queue)) {
         net_cancel_signal_free(&state.rx_queue);
         notify_rx = false;
-        if (!microkit_have_signal) {
-            microkit_deferred_notify(net_config.rx.id);
-        } else if (microkit_signal_cap != BASE_OUTPUT_NOTIFICATION_CAP + net_config.rx.id) {
-            microkit_notify(net_config.rx.id);
+        if (sddf_deferred_notify_curr() == -1) {
+            sddf_deferred_notify(net_config.rx.id);
+        } else if (sddf_deferred_notify_curr() != net_config.rx.id) {
+            sddf_notify(net_config.rx.id);
         }
     }
 
     if (notify_tx && net_require_signal_active(&state.tx_queue)) {
         net_cancel_signal_active(&state.tx_queue);
         notify_tx = false;
-        if (!microkit_have_signal) {
-            microkit_deferred_notify(net_config.tx.id);
-        } else if (microkit_signal_cap != BASE_OUTPUT_NOTIFICATION_CAP + net_config.tx.id) {
-            microkit_notify(net_config.tx.id);
+        if (sddf_deferred_notify_curr() == -1) {
+            sddf_deferred_notify(net_config.tx.id);
+        } else if (sddf_deferred_notify_curr() != net_config.tx.id) {
+            sddf_notify(net_config.tx.id);
         }
     }
 }

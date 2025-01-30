@@ -8,7 +8,11 @@
 #include <stdint.h>
 #include <stddef.h>
 #include <sddf/util/util.h>
-#include <microkit.h>
+#ifdef MICROKIT
+#include <sys/microkit.h>
+#else
+#include <sys/extern.h>
+#endif
 
 /* A counter is an index to a performance counter on a platform.
  * The max counter index is sizeof(seL4_Word) */

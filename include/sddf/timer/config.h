@@ -7,9 +7,17 @@
 
 #include <stdbool.h>
 #include <stdint.h>
-#include <microkit.h>
+#ifdef MICROKIT
+#include <sys/microkit.h>
+#else
+#include <sys/extern.h>
+#endif
 
+#ifdef MICROKIT
 #define SDDF_TIMER_MAX_CLIENTS (MICROKIT_MAX_CHANNELS - 1)
+#else
+#define SDDF_TIMER_MAX_CLIENTS 63
+#endif
 
 #define SDDF_TIMER_MAGIC_LEN 5
 static char SDDF_TIMER_MAGIC[SDDF_TIMER_MAGIC_LEN] = { 's', 'D', 'D', 'F', 0x6 };

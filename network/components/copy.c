@@ -4,7 +4,11 @@
  */
 
 #include <stdbool.h>
-#include <microkit.h>
+#ifdef MICROKIT
+#include <sys/microkit.h>
+#else
+#include <sys/extern.h>
+#endif
 #include <sddf/network/queue.h>
 #include <sddf/network/config.h>
 #include <sddf/util/string.h>
@@ -73,16 +77,16 @@ void rx_return(void)
 
     if (enqueued && net_require_signal_active(&rx_queue_cli)) {
         net_cancel_signal_active(&rx_queue_cli);
-        microkit_notify(config.client.id);
+        sddf_notify(config.client.id);
     }
 
     if (enqueued && net_require_signal_free(&rx_queue_virt)) {
         net_cancel_signal_free(&rx_queue_virt);
-        microkit_deferred_notify(config.virt_rx.id);
+        sddf_deferred_notify(config.virt_rx.id);
     }
 }
 
-void notified(microkit_channel ch)
+void notified(unsigned int ch)
 {
     rx_return();
 }

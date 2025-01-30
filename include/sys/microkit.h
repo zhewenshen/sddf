@@ -5,12 +5,9 @@
 #include <sel4/sel4.h>
 #include <stdint.h>
 
-void sddf_init(void);
-void sddf_notified(uint32_t ch);
+#define PD_NAME_LENGTH MICROKIT_PD_NAME_LENGTH
 
-void notified(microkit_channel ch) {
-	sddf_notified(ch);
-}
+static char *pd_name = microkit_name;
 
 static inline void sddf_irq_ack(microkit_channel ch) {
 	microkit_irq_ack(ch);

@@ -3,15 +3,17 @@
  *
  * SPDX-License-Identifier: BSD-2-Clause
  */
-#pragma once
-
-#include <microkit.h>
+#ifdef MICROKIT
+#include <sys/microkit.h>
+#else
+#include <sys/extern.h>
+#endif
 #include <stdint.h>
 
 #define BENCHMARK_MAX_CHILDREN 64 // TODO: is there an upper bound?
 
 typedef struct benchmark_child_config {
-    char name[MICROKIT_PD_NAME_LENGTH];
+    char name[PD_NAME_LENGTH];
     uint8_t child_id;
 } benchmark_child_config_t;
 

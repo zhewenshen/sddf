@@ -5,7 +5,11 @@
 
 #include <stdbool.h>
 #include <stdint.h>
-#include <microkit.h>
+#ifdef MICROKIT
+#include <sys/microkit.h>
+#else
+#include <sys/extern.h>
+#endif
 #include <sddf/network/constants.h>
 #include <sddf/network/queue.h>
 #include <sddf/network/util.h>
@@ -129,7 +133,7 @@ void rx_return(void)
     for (int client = 0; client < config.num_clients; client++) {
         if (notify_clients[client] && net_require_signal_active(&state.rx_queue_clients[client])) {
             net_cancel_signal_active(&state.rx_queue_clients[client]);
-            microkit_notify(config.clients[client].conn.id);
+            sddf_notify(config.clients[client].conn.id);
         }
     }
 }
@@ -177,12 +181,12 @@ void rx_provide(void)
 
     if (notify_drv && net_require_signal_free(&state.rx_queue_drv)) {
         net_cancel_signal_free(&state.rx_queue_drv);
-        microkit_deferred_notify(config.driver.id);
+        sddf_deferred_notify(config.driver.id);
         notify_drv = false;
     }
 }
 
-void notified(microkit_channel ch)
+void notified(unsigned int ch)
 {
     rx_return();
     rx_provide();
@@ -207,6 +211,6 @@ void init(void)
 
     if (net_require_signal_free(&state.rx_queue_drv)) {
         net_cancel_signal_free(&state.rx_queue_drv);
-        microkit_deferred_notify(config.driver.id);
+        sddf_deferred_notify(config.driver.id);
     }
 }

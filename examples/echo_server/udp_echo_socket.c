@@ -3,7 +3,11 @@
  * SPDX-License-Identifier: BSD-2-Clause
  */
 
-#include <microkit.h>
+#ifdef MICROKIT
+#include <sys/microkit.h>
+#else
+#include <sys/extern.h>
+#endif
 
 #include "lwip/ip.h"
 #include "lwip/pbuf.h"

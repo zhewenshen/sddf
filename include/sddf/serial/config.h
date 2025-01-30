@@ -5,7 +5,11 @@
  */
 #pragma once
 
-#include <microkit.h>
+#ifdef MICROKIT
+#include <sys/microkit.h>
+#else
+#include <sys/extern.h>
+#endif
 #include <stdbool.h>
 #include <stdint.h>
 #include <sddf/resources/common.h>

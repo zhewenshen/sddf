@@ -105,6 +105,12 @@ void rx_return(void)
 
 void init(void)
 {
+    volatile int i = 0;
+    while true {
+        i++;
+    }
+    seL4_Debug_Puts("hellooooooooo\n");
+
     assert(serial_config_check_magic(&config));
 
     serial_queue_init(&rx_queue_handle_drv, config.driver.queue.vaddr, config.driver.data.size,
