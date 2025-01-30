@@ -19,6 +19,8 @@ pub enum BlkOp {
     BlkReqWrite,
     BlkReqFlush,
     BlkReqBarrier,
+    BlkReqSDOff,
+    BlkReqSDOn,
 }
 
 #[repr(C)]

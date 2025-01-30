@@ -20,7 +20,7 @@ use sdmmc_hal::meson_gx_mmc::SdmmcMesonHardware;
 
 use sdmmc_protocol::sdmmc::{
     sdmmc_capability::{MMC_INTERRUPT_END_OF_CHAIN, MMC_INTERRUPT_ERROR},
-    SdmmcHalError, SdmmcHardware, SdmmcProtocol,
+    SdmmcHalError, SdmmcHardware, SdmmcProtocol, MmcPowerMode
 };
 use sel4_microkit::{debug_print, debug_println, protection_domain, Channel, Handler, Infallible};
 
@@ -274,6 +274,14 @@ impl<T: SdmmcHardware + 'static> Handler for HandlerImpl<T> {
                         self.retry = RETRY_CHANCE;
                         self.request = Some(request);
                         break;
+                    }
+                    BlkOp::BlkReqSDOff => {
+                        let _ = self.sdmmc.as_mut().unwrap().hardware.sdmmc_set_power(MmcPowerMode::Off);
+                        debug_println!("DRIV| Turning sd card off!\n");
+                    }
+                    BlkOp::BlkReqSDOn => {
+                        let _ = self.sdmmc.as_mut().unwrap().hardware.sdmmc_set_power(MmcPowerMode::On);
+                        debug_println!("DRIV| Turning sd card on!\n");
                     }
                     _ => {
                         // For other request, enqueue response
