@@ -1,5 +1,6 @@
 extern "C" {
     pub fn blk_queue_init_helper();
+    pub fn blk_queue_set_ready(ready: bool) -> bool;
 
     pub fn blk_queue_empty_req_helper() -> u8;
     pub fn blk_queue_full_resp_helper() -> u8;
