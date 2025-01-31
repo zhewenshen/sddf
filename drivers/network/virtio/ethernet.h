@@ -4,8 +4,6 @@
  */
 #pragma once
 
-#pragma once
-
 #ifdef MICROKIT
 #include <sys/microkit.h>
 #else

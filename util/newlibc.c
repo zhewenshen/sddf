@@ -3,7 +3,6 @@
  * SPDX-License-Identifier: BSD-2-Clause
  */
 
-// #include <microkit.h>
 
 /*
  * This source file is intended to be compiled with other code
