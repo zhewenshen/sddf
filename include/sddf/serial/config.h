@@ -14,7 +14,18 @@
 #include <stdint.h>
 #include <sddf/resources/common.h>
 
+#ifdef MICROKIT
 #define SDDF_SERIAL_MAX_CLIENTS (MICROKIT_MAX_CHANNELS - 1)
+#else
+#define SDDF_SERIAL_MAX_CLIENTS 61
+#endif
+
+#ifdef MICROKIT
+#define SDDF_NAME_LENGTH MICROKIT_PD_NAME_LENGTH
+#else
+#define SDDF_NAME_LENGTH 64
+#endif
+
 #define SDDF_SERIAL_BEGIN_STR_MAX_LEN 128
 
 #define SDDF_SERIAL_MAGIC_LEN 5
@@ -45,7 +56,7 @@ typedef struct serial_virt_rx_config {
 
 typedef struct serial_virt_tx_client_config {
     serial_connection_resource_t conn;
-    char name[MICROKIT_PD_NAME_LENGTH];
+    char name[SDDF_NAME_LENGTH];
 } serial_virt_tx_client_config_t;
 
 typedef struct serial_virt_tx_config {

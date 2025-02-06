@@ -3,13 +3,17 @@
  * SPDX-License-Identifier: BSD-2-Clause
  */
 
-#include <microkit.h>
+#ifdef MICROKIT
+#include <sys/microkit.h>
+#else
+#include <sys/extern.h>
+#endif
 #include <sddf/serial/queue.h>
 #include <sddf/util/printf.h>
 
 #define FLUSH_CHAR '\n'
 
-static microkit_channel tx_ch;
+static unsigned int tx_ch;
 static serial_queue_handle_t *tx_queue_handle;
 
 static uint32_t local_tail;
@@ -30,7 +34,7 @@ void _sddf_putchar(char character)
     if (serial_queue_full(tx_queue_handle, local_tail) || serial_queue_full(tx_queue_handle, local_tail + 1)
         || character == FLUSH_CHAR) {
         serial_update_shared_tail(tx_queue_handle, local_tail);
-        microkit_notify(tx_ch);
+        sddf_notify(tx_ch);
     }
 }
 
@@ -42,11 +46,11 @@ void sddf_putchar_unbuffered(char character)
 
     serial_enqueue_local(tx_queue_handle, &local_tail, character);
     serial_update_shared_tail(tx_queue_handle, local_tail);
-    microkit_notify(tx_ch);
+    sddf_notify(tx_ch);
 }
 
 /* Initialise the serial putchar library. */
-void serial_putchar_init(microkit_channel serial_tx_ch, serial_queue_handle_t *serial_tx_queue_handle)
+void serial_putchar_init(unsigned int serial_tx_ch, serial_queue_handle_t *serial_tx_queue_handle)
 {
     tx_ch = serial_tx_ch;
     tx_queue_handle = serial_tx_queue_handle;

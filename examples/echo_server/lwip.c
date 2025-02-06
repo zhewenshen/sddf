@@ -15,8 +15,8 @@
 #include <sddf/network/queue.h>
 #include <sddf/network/config.h>
 #include <sddf/network/util.h>
-// #include <sddf/serial/queue.h>
-// #include <sddf/serial/config.h>
+#include <sddf/serial/queue.h>
+#include <sddf/serial/config.h>
 #include <sddf/timer/client.h>
 #include <sddf/timer/config.h>
 #include <sddf/benchmark/sel4bench.h>
@@ -34,7 +34,7 @@
 
 #include "echo.h"
 
-// __attribute__((__section__(".serial_client_config"))) serial_client_config_t serial_config;
+__attribute__((__section__(".serial_client_config"))) serial_client_config_t serial_config;
 
 __attribute__((__section__(".timer_client_config"))) timer_client_config_t timer_config;
 
@@ -280,9 +280,11 @@ static void netif_status_callback(struct netif *netif)
 
 void init(void)
 {
-    // serial_queue_init(&serial_tx_queue_handle, serial_config.tx.queue.vaddr, serial_config.tx.data.size,
-                      // serial_config.tx.data.vaddr);
-    // serial_putchar_init(serial_config.tx.id, &serial_tx_queue_handle);
+    serial_queue_init(&serial_tx_queue_handle, serial_config.tx.queue.vaddr, serial_config.tx.data.size,
+                      serial_config.tx.data.vaddr);
+    serial_putchar_init(serial_config.tx.id, &serial_tx_queue_handle);
+
+    // sddf_dprintf("Hello what's going on nani????\n");
 
     net_queue_init(&state.rx_queue, net_config.rx.free_queue.vaddr, net_config.rx.active_queue.vaddr,
                    net_config.rx.num_buffers);
@@ -355,9 +357,9 @@ void notified(unsigned int ch)
     } else if (ch == timer_config.driver_id) {
         sys_check_timeouts();
         set_timeout();
-    } /* else if (ch == serial_config.tx.id) {
+    }  else if (ch == serial_config.tx.id) {
         // Nothing to do
-    } */ else {
+    }  else {
         sddf_dprintf("LWIP|LOG: received notification on unexpected channel: %u\n", ch);
     }
 

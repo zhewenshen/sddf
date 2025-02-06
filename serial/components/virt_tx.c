@@ -5,7 +5,11 @@
 
 #include <stdbool.h>
 #include <stdint.h>
-#include <microkit.h>
+#ifdef MICROKIT
+#include <sys/microkit.h>
+#else
+#include <sys/extern.h>
+#endif
 #include <sddf/serial/queue.h>
 #include <sddf/serial/config.h>
 #include <sddf/util/printf.h>
@@ -136,18 +140,18 @@ void tx_return(void)
     }
 
     if (transferred) {
-        microkit_notify(config.driver.id);
+        sddf_notify(config.driver.id);
     }
 
     for (uint32_t client = 0; client < config.num_clients; client++) {
         if (notify_client[client] && serial_require_consumer_signal(&tx_queue_handle_cli[client])) {
             serial_cancel_consumer_signal(&tx_queue_handle_cli[client]);
-            microkit_notify(config.clients[client].conn.id);
+            sddf_notify(config.clients[client].conn.id);
         }
     }
 }
 
-void tx_provide(microkit_channel ch)
+void tx_provide(unsigned int ch)
 {
     uint32_t active_client = SDDF_SERIAL_MAX_CLIENTS;
     for (int i = 0; i < config.num_clients; i++) {
@@ -164,12 +168,12 @@ void tx_provide(microkit_channel ch)
 
     bool transferred = process_tx_queue(active_client);
     if (transferred) {
-        microkit_notify(config.driver.id);
+        sddf_notify(config.driver.id);
     }
 
     if (transferred && serial_require_consumer_signal(&tx_queue_handle_cli[active_client])) {
         serial_cancel_consumer_signal(&tx_queue_handle_cli[active_client]);
-        microkit_notify(ch);
+        sddf_notify(ch);
     }
 }
 
@@ -189,7 +193,7 @@ void init(void)
         /* Print a deterministic string to allow console input to begin */
         sddf_memcpy(tx_queue_handle_drv.data_region, config.begin_str, config.begin_str_len + 1);
         serial_update_shared_tail(&tx_queue_handle_drv, config.begin_str_len + 1);
-        microkit_notify(config.driver.id);
+        sddf_notify(config.driver.id);
     }
 
     if (config.enable_colour) {
@@ -202,7 +206,7 @@ void init(void)
     }
 }
 
-void notified(microkit_channel ch)
+void notified(unsigned int ch)
 {
     if (ch == config.driver.id) {
         tx_return();
