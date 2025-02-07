@@ -24,6 +24,12 @@ BOARDS: List[Board] = [
         serial="pl011@9000000"
     ),
     Board(
+        name="qemu_virt_aarch64",
+        arch=SystemDescription.Arch.AARCH64,
+        paddr_top=0x6_0000_000,
+        serial="virtio_mmio@a003e00"
+    ),
+    Board(
         name="odroidc2",
         arch=SystemDescription.Arch.AARCH64,
         paddr_top=0x80000000,
@@ -97,10 +103,23 @@ if __name__ == '__main__':
     parser.add_argument("--board", required=True, choices=[b.name for b in BOARDS])
     parser.add_argument("--output", required=True)
     parser.add_argument("--sdf", required=True)
+    parser.add_argument("--virtio-con", action='store_true')
 
     args = parser.parse_args()
 
-    board = next(filter(lambda b: b.name == args.board, BOARDS))
+    if args.virtio_con and args.board != "qemu_virt_aarch64":
+        print("Can't use virtio console unless board is QEMU")
+        exit(1)
+
+    boards = filter(lambda b: b.name == args.board, BOARDS)
+
+    if args.board == "qemu_virt_aarch64":
+        if args.virtio_con:
+            board = next(filter(lambda b: b.serial.startswith("virtio_mmio"), boards))
+        else:
+            board = next(filter(lambda b: b.serial.startswith("pl011"), boards))
+    else:
+        board = next(boards);
 
     sdf = SystemDescription(board.arch, board.paddr_top)
     sddf = Sddf(args.sddf)

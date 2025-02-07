@@ -129,6 +129,12 @@ pub fn build(b: *std.Build) !void {
     const target = b.resolveTargetQuery(findTarget(microkit_board_option.?));
     const microkit_board = @tagName(microkit_board_option.?);
 
+    // Get whether we want to use virtio
+    const virtio_console_option = if (std.mem.eql(u8, microkit_board, "qemu_virt_aarch64"))
+        b.option(bool, "virtio_con", "Whether to output to virtio console (qemu only)") orelse false
+    else
+        false;
+
     // Since we are relying on Zig to produce the final ELF, it needs to do the
     // linking step as well.
     const microkit_board_dir = b.fmt("{s}/board/{s}/{s}", .{ microkit_sdk, microkit_board, microkit_config });
@@ -146,7 +152,7 @@ pub fn build(b: *std.Build) !void {
     });
 
     const driver_class = switch (microkit_board_option.?) {
-        .qemu_virt_aarch64 => "arm",
+        .qemu_virt_aarch64 => if (virtio_console_option) "virtio" else "arm",
         .odroidc2, .odroidc4 => "meson",
         .maaxboard, .imx8mm_evk => "imx",
         .star64 => "snps",
@@ -206,6 +212,9 @@ pub fn build(b: *std.Build) !void {
     run_metaprogram.addArg(microkit_board);
     run_metaprogram.addArg("--sdf");
     run_metaprogram.addArg("serial.system");
+    if (virtio_console_option) {
+        run_metaprogram.addArg("--virtio-con");
+    }
 
     const meta_output_install = b.addInstallDirectory(.{
         .source_dir = meta_output,
@@ -262,6 +271,14 @@ pub fn build(b: *std.Build) !void {
             loader_arg,
             "-m",
             "2G",
+            "-global",
+            "virtio-mmio.force-legacy=false",
+            "-device",
+            "virtio-serial-device",
+            "-chardev",
+            "pty,id=virtcon",
+            "-device",
+            "virtconsole,chardev=virtcon",
             "-nographic",
         });
         qemu_cmd.step.dependOn(b.default_step);

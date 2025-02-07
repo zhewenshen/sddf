@@ -41,7 +41,12 @@ else ifeq ($(strip $(MICROKIT_BOARD)), odroidc2)
 	CPU := cortex-a53
 else ifeq ($(strip $(MICROKIT_BOARD)), qemu_virt_aarch64)
 	ARCH := aarch64
-	DRIVER_DIR := arm
+	ifeq ($(strip $(USE_VIRTIO_CONSOLE)),)
+		DRIVER_DIR := arm
+	else
+		DRIVER_DIR := virtio
+		SDF_GEN_VIRTIO_FLAG := --virtio-con
+	endif
 	CPU := cortex-a53
 else ifeq ($(strip $(MICROKIT_BOARD)), maaxboard)
 	ARCH := aarch64
@@ -119,7 +124,7 @@ $(DTB): $(DTS)
 	dtc -q -I dts -O dtb $(DTS) > $(DTB)
 
 $(SYSTEM_FILE): $(METAPROGRAM) $(IMAGES) $(DTB)
-	$(PYTHON) $(METAPROGRAM) --sddf $(SDDF) --board $(MICROKIT_BOARD) --dtb $(DTB) --output . --sdf $(SYSTEM_FILE)
+	$(PYTHON) $(METAPROGRAM) --sddf $(SDDF) --board $(MICROKIT_BOARD) --dtb $(DTB) --output . --sdf $(SYSTEM_FILE) $(SDF_GEN_VIRTIO_FLAG)
 	$(OBJCOPY) --update-section .device_resources=serial_driver_device_resources.data serial_driver.elf
 	$(OBJCOPY) --update-section .serial_driver_config=serial_driver_config.data serial_driver.elf
 	$(OBJCOPY) --update-section .serial_virt_rx_config=serial_virt_rx.data serial_virt_rx.elf
@@ -131,7 +136,8 @@ $(IMAGE_FILE) $(REPORT_FILE): $(IMAGES) $(SYSTEM_FILE)
 	MICROKIT_SDK=${MICROKIT_SDK} $(MICROKIT_TOOL) $(SYSTEM_FILE) --search-path $(BUILD_DIR) --board $(MICROKIT_BOARD) --config $(MICROKIT_CONFIG) -o $(IMAGE_FILE) -r $(REPORT_FILE)
 
 qemu: ${IMAGE_FILE}
-	$(QEMU) -machine virt,virtualization=on -cpu cortex-a53 -serial mon:stdio -device loader,file=$(IMAGE_FILE),addr=0x70000000,cpu-num=0 -m size=2G -nographic
+	$(QEMU) -machine virt,virtualization=on -cpu cortex-a53 -serial mon:stdio -device loader,file=$(IMAGE_FILE),addr=0x70000000,cpu-num=0 -global virtio-mmio.force-legacy=false \
+		    -device virtio-serial-device -chardev pty,id=virtcon -device virtconsole,chardev=virtcon -m size=2G -nographic
 
 
 clean::
