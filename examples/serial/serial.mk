@@ -54,6 +54,9 @@ else ifeq ($(strip $(MICROKIT_BOARD)), imx8mm_evk)
 else ifeq ($(strip $(MICROKIT_BOARD)), star64)
 	ARCH := riscv64
 	DRIVER_DIR := snps
+else ifeq ($(strip $(MICROKIT_BOARD)), hifive_p550)
+	ARCH := riscv64
+	DRIVER_DIR := snps
 else
 $(error Unsupported MICROKIT_BOARD given)
 endif

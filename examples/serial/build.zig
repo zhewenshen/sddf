@@ -5,7 +5,15 @@
 const std = @import("std");
 const LazyPath = std.Build.LazyPath;
 
-const MicrokitBoard = enum { qemu_virt_aarch64, odroidc2, odroidc4, maaxboard, imx8mm_evk, star64 };
+const MicrokitBoard = enum {
+    imx8mm_evk,
+    hifive_p550,
+    odroidc2,
+    odroidc4,
+    maaxboard,
+    qemu_virt_aarch64,
+    star64,
+};
 
 const Target = struct {
     board: MicrokitBoard,
@@ -65,6 +73,15 @@ const targets = [_]Target{
     },
     .{
         .board = MicrokitBoard.star64,
+        .zig_target = std.Target.Query{
+            .cpu_arch = .riscv64,
+            .cpu_model = .{ .explicit = &std.Target.riscv.cpu.baseline_rv64 },
+            .os_tag = .freestanding,
+            .abi = .none,
+        }
+    },
+    .{
+        .board = MicrokitBoard.hifive_p550,
         .zig_target = std.Target.Query{
             .cpu_arch = .riscv64,
             .cpu_model = .{ .explicit = &std.Target.riscv.cpu.baseline_rv64 },
@@ -149,7 +166,7 @@ pub fn build(b: *std.Build) !void {
         .qemu_virt_aarch64 => "arm",
         .odroidc2, .odroidc4 => "meson",
         .maaxboard, .imx8mm_evk => "imx",
-        .star64 => "snps",
+        .star64, .hifive_p550 => "snps",
     };
 
     const driver = sddf_dep.artifact(b.fmt("driver_uart_{s}.elf", .{ driver_class }));
