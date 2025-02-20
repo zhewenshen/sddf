@@ -9,15 +9,14 @@
 # NOTES
 #  Generates eth_driver.elf
 #  Expects libsddf_util_debug.a to be in LIBS
-# Define paths and tools
 
 ETHERNET_DRIVER_DIR := $(dir $(lastword $(MAKEFILE_LIST)))
 
 CHECK_NETDRV_FLAGS_MD5 := .netdrv_cflags-$(shell echo -- ${CFLAGS} ${CFLAGS_network} | shasum | sed 's/ *-//')
 
-CCOMP := ccomp
-
 ETH_DRIVER_ELF := eth_driver.elf
+
+CCOMP_CFLAGS := $(filter-out -mcpu=cortex-a53 -mstrict-align -ffreestanding -Wno-unused-function -MD -MP,$(CFLAGS))
 
 ${CHECK_NETDRV_FLAGS_MD5}:
 	-rm -f .netdrv_cflags-*
@@ -32,11 +31,7 @@ network/imx/ethernet.o: ${ETHERNET_DRIVER_DIR}/ethernet.c ${CHECK_NETDRV_FLAGS_M
 
 network/imx/ethernet_ccomp.o: ${ETHERNET_DRIVER_DIR}/ethernet_ccomp.c ${CHECK_NETDRV_FLAGS_MD5}
 	mkdir -p network/imx
-	${CCOMP} -c \
-	    -I${ETHERNET_DRIVER_DIR} \
-	    -I/Users/zws/Documents/code/thesis/sddf/include/ \
-	    -o $@ $<
-
+	ccomp -c ${CCOMP_CFLAGS} -I${ETHERNET_DRIVER_DIR} -o $@ $<
 
 -include network/imx/ethernet.d
 -include network/imx/ethernet_ccomp.d

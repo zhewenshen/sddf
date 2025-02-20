@@ -15,7 +15,8 @@
 
 #include "ethernet.h"
 
-#include "ethernet_ccomp.h"
+__attribute__((__section__(".device_resources"))) device_resources_t device_resources;
+__attribute__((__section__(".net_driver_config"))) net_driver_config_t config;
 
 void _ccomp_thread_memory_acquire(void) {
     THREAD_MEMORY_ACQUIRE();
@@ -52,7 +53,3 @@ void _ccomp_handle_irq_sddf_dprintf(unsigned int e) {
 void _ccomp_notified_sddf_dprintf(microkit_channel ch) {
     sddf_dprintf("ETH|LOG: received notification on unexpected channel: %u\n", ch);
 }
-
-__attribute__((__section__(".device_resources"))) device_resources_t device_resources;
-__attribute__((__section__(".net_driver_config"))) net_driver_config_t config;
-
