@@ -61,20 +61,5 @@ net_queue_handle_t tx_queue;
 
 volatile struct enet_regs *eth;
 
-// ignore the naming... the long names were to make it easier to decipher between the original and the compcert stuff
-void ethernet_ccomp_init_hw_ring(hw_ring_t *ring, volatile struct descriptor *descr, uint32_t capacity);
-void ethernet_ccomp_update_ring_slot(hw_ring_t *ring, unsigned int idx, uintptr_t phys, uint16_t len, uint16_t stat);
-bool ethernet_ccomp_hw_ring_full(hw_ring_t *ring);
-bool ethernet_ccomp_hw_ring_empty(hw_ring_t *ring);
-void ethernet_ccomp_rx_provide(void);
-void ethernet_ccomp_rx_return(void);
-void ethernet_ccomp_tx_provide(void);
-void ethernet_ccomp_tx_return(void);
-void ethernet_ccomp_handle_irq(void);
-void ethernet_ccomp_eth_setup(void);
-
-void ethernet_ccomp_init(void);
-void ethernet_ccomp_notified(microkit_channel ch);
-
 
 #endif // ETHERNET_CCOMP_H

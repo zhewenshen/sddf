@@ -1,21 +1,14 @@
 #include "ethernet_ccomp.h"
 
-void ethernet_ccomp_init_hw_ring(hw_ring_t *ring, volatile struct descriptor *descr, uint32_t capacity) {
-    ring->descr = descr;
-    ring->capacity = capacity;
-    ring->head = 0;
-    ring->tail = 0;
-}
-
-bool ethernet_ccomp_hw_ring_full(hw_ring_t *ring) {
+static inline bool ethernet_ccomp_hw_ring_full(hw_ring_t *ring) {
     return ring->tail - ring->head == ring->capacity;
 }
 
-bool ethernet_ccomp_hw_ring_empty(hw_ring_t *ring) {
+static inline bool ethernet_ccomp_hw_ring_empty(hw_ring_t *ring) {
     return ring->tail - ring->head == 0;
 }
 
-void ethernet_ccomp_update_ring_slot(hw_ring_t *ring, unsigned int idx, uintptr_t phys, uint16_t len, uint16_t stat) {
+static void ethernet_ccomp_update_ring_slot(hw_ring_t *ring, unsigned int idx, uintptr_t phys, uint16_t len, uint16_t stat) {
     volatile struct descriptor *d = &(ring->descr[idx]);
 
     d->addr = phys;
@@ -26,7 +19,7 @@ void ethernet_ccomp_update_ring_slot(hw_ring_t *ring, unsigned int idx, uintptr_
     d->stat = stat;
 }
 
-void ethernet_ccomp_rx_provide(void)
+static void ethernet_ccomp_rx_provide(void)
 {
     bool reprocess = true;
     while (reprocess) {
@@ -63,7 +56,7 @@ void ethernet_ccomp_rx_provide(void)
     }
 }
 
-void ethernet_ccomp_rx_return(void)
+static void ethernet_ccomp_rx_return(void)
 {
     bool packets_transferred = false;
     while (!ethernet_ccomp_hw_ring_empty(&rx)) {
@@ -99,7 +92,7 @@ void ethernet_ccomp_rx_return(void)
     }
 }
 
-void ethernet_ccomp_tx_provide(void)
+static void ethernet_ccomp_tx_provide(void)
 {
     bool reprocess = true;
     while (reprocess) {
@@ -130,7 +123,7 @@ void ethernet_ccomp_tx_provide(void)
     }
 }
 
-void ethernet_ccomp_tx_return(void)
+static void ethernet_ccomp_tx_return(void)
 {
     bool enqueued = false;
     while (!ethernet_ccomp_hw_ring_empty(&tx)) {
@@ -161,7 +154,7 @@ void ethernet_ccomp_tx_return(void)
     }
 }
 
-void ethernet_ccomp_handle_irq(void)
+static void ethernet_ccomp_handle_irq(void)
 {
     uint32_t e = eth->eir & IRQ_MASK;
     eth->eir = e;
@@ -183,25 +176,7 @@ void ethernet_ccomp_handle_irq(void)
     }
 }
 
-void ethernet_ccomp_notified(microkit_channel ch)
-{
-    if (ch == device_resources.irqs[0].id) {
-        ethernet_ccomp_handle_irq();
-        /*
-         * Delay calling into the kernel to ack the IRQ until the next loop
-         * in the microkit event handler loop.
-         */
-        _ccomp_microkit_deferred_irq_ack(ch);
-    } else if (ch == config.virt_rx.id) {
-        ethernet_ccomp_rx_provide();
-    } else if (ch == config.virt_tx.id) {
-        ethernet_ccomp_tx_provide();
-    } else {
-        _ccomp_notified_sddf_dprintf(ch);
-    }
-}
-
-void ethernet_ccomp_eth_setup(void)
+static void ethernet_ccomp_eth_setup(void)
 {
     eth = device_resources.regions[0].region.vaddr;
 
@@ -285,7 +260,25 @@ void ethernet_ccomp_eth_setup(void)
     eth->eimr = IRQ_MASK;
 }
 
-void ethernet_ccomp_init(void)
+static void ethernet_ccomp_notified(microkit_channel ch)
+{
+    if (ch == device_resources.irqs[0].id) {
+        ethernet_ccomp_handle_irq();
+        /*
+         * Delay calling into the kernel to ack the IRQ until the next loop
+         * in the microkit event handler loop.
+         */
+        _ccomp_microkit_deferred_irq_ack(ch);
+    } else if (ch == config.virt_rx.id) {
+        ethernet_ccomp_rx_provide();
+    } else if (ch == config.virt_tx.id) {
+        ethernet_ccomp_tx_provide();
+    } else {
+        _ccomp_notified_sddf_dprintf(ch);
+    }
+}
+
+static void ethernet_ccomp_init(void)
 {
     _ccomp_assert(net_config_check_magic(&config));
     _ccomp_assert(device_resources_check_magic(&device_resources));
@@ -305,7 +298,6 @@ void ethernet_ccomp_init(void)
     ethernet_ccomp_rx_provide();
     ethernet_ccomp_tx_provide();
 }
-
 
 void init(void)
 {
