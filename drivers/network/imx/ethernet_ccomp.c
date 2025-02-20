@@ -318,25 +318,7 @@ static void ethernet_ccomp_eth_setup(void)
     eth->eimr = IRQ_MASK;
 }
 
-static void ethernet_ccomp_notified(microkit_channel ch)
-{
-    if (ch == device_resources.irqs[0].id) {
-        ethernet_ccomp_handle_irq();
-        /*
-         * Delay calling into the kernel to ack the IRQ until the next loop
-         * in the microkit event handler loop.
-         */
-        _ccomp_microkit_deferred_irq_ack(ch);
-    } else if (ch == config.virt_rx.id) {
-        ethernet_ccomp_rx_provide();
-    } else if (ch == config.virt_tx.id) {
-        ethernet_ccomp_tx_provide();
-    } else {
-        _ccomp_notified_sddf_dprintf(ch);
-    }
-}
-
-static void ethernet_ccomp_init(void)
+void init(void)
 {
     _ccomp_assert(net_config_check_magic(&config));
     _ccomp_assert(device_resources_check_magic(&device_resources));
@@ -357,12 +339,20 @@ static void ethernet_ccomp_init(void)
     ethernet_ccomp_tx_provide();
 }
 
-void init(void)
-{
-    ethernet_ccomp_init();
-}
-
 void notified(microkit_channel ch)
 {
-    ethernet_ccomp_notified(ch);
+    if (ch == device_resources.irqs[0].id) {
+        ethernet_ccomp_handle_irq();
+        /*
+         * Delay calling into the kernel to ack the IRQ until the next loop
+         * in the microkit event handler loop.
+         */
+        _ccomp_microkit_deferred_irq_ack(ch);
+    } else if (ch == config.virt_rx.id) {
+        ethernet_ccomp_rx_provide();
+    } else if (ch == config.virt_tx.id) {
+        ethernet_ccomp_tx_provide();
+    } else {
+        _ccomp_notified_sddf_dprintf(ch);
+    }
 }
