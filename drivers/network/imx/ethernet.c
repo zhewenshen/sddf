@@ -13,8 +13,6 @@
 #include <sddf/util/fence.h>
 #include <sddf/util/printf.h>
 
-#include "ethernet.h"
-
 __attribute__((__section__(".device_resources"))) device_resources_t device_resources;
 __attribute__((__section__(".net_driver_config"))) net_driver_config_t config;
 
