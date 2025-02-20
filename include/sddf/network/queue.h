@@ -123,6 +123,20 @@ static inline int net_enqueue_free(net_queue_handle_t *queue, net_buff_desc_t bu
     return 0;
 }
 
+static inline int ccomp_net_enqueue_free(net_queue_handle_t *queue, net_buff_desc_t *buffer)
+{
+    // not sure if this is even allowed but...
+    if (net_queue_full_free(queue)) {
+        return -1;
+    }
+
+    queue->free->buffers[queue->free->tail % queue->capacity] = *buffer;
+
+    queue->free->tail++;
+
+    return 0;
+}
+
 /**
  * Enqueue an element into an active queue.
  *
@@ -217,7 +231,9 @@ static inline void net_buffers_init(net_queue_handle_t *queue, uintptr_t base_ad
 {
     for (uint32_t i = 0; i < queue->capacity; i++) {
         net_buff_desc_t buffer = {(NET_BUFFER_SIZE * i) + base_addr, 0};
-        int err = net_enqueue_free(queue, buffer);
+        // int err = net_enqueue_free(queue, buffer);
+        int err = ccomp_net_enqueue_free(queue, &buffer);
+        (void)err;
         // assert(!err);
     }
 }

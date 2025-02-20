@@ -27,8 +27,14 @@ network/components/network_virt_%_ccomp.o: ${SDDF}/network/components/virt_%_cco
 	mkdir -p network/components
 	ccomp -c ${CCOMP_CFLAGS} -I${SDDF}/network/components -o $@ $<
 
+# Normal copy component
 network/components/network_copy.o: ${SDDF}/network/components/copy.c
 	${CC} ${CFLAGS} -c -o $@ $<
+
+# CompCert version of copy component
+network/components/network_copy_ccomp.o: ${SDDF}/network/components/copy_ccomp.c ${CHECK_NETWORK_FLAGS_MD5}
+	mkdir -p network/components
+	ccomp -c ${CCOMP_CFLAGS} -I${SDDF}/network/components -o $@ $<
 
 network/components/network_arp.o: ${SDDF}/network/components/arp.c
 	${CC} ${CFLAGS} -c -o $@ $<
@@ -40,7 +46,8 @@ ${CHECK_NETWORK_FLAGS_MD5}:
 	touch $@
 
 NETWORK_COMPONENT_OBJ := $(addprefix network/components/, \
-	network_copy.o network_arp.o \
+	network_copy.o network_copy_ccomp.o \
+	network_arp.o \
 	network_virt_tx.o network_virt_rx.o \
 	network_virt_tx_ccomp.o network_virt_rx_ccomp.o)
 
@@ -59,14 +66,16 @@ network_virt_rx.elf: network/components/network_virt_rx.o network/components/net
 network_virt_tx.elf: network/components/network_virt_tx.o network/components/network_virt_tx_ccomp.o
 	${LD} ${LDFLAGS} -o $@ $^ ${LIBS}
 
-network_copy.elf: network/components/network_copy.o
-	${LD} ${LDFLAGS} -o $@ $< ${LIBS}
+network_copy.elf: network/components/network_copy.o network/components/network_copy_ccomp.o
+	${LD} ${LDFLAGS} -o $@ $^ ${LIBS}
 
 network_arp.elf: network/components/network_arp.o
 	${LD} ${LDFLAGS} -o $@ $< ${LIBS}
 
 clean::
-	rm -f network_virt_[rt]x.[od] network_virt_[rt]x_ccomp.[od] network_copy.[od] network_arp.[od]
+	rm -f network_virt_[rt]x.[od] network_virt_[rt]x_ccomp.[od] \
+		network_copy.[od] network_copy_ccomp.[od] \
+		network_arp.[od]
 
 clobber::
 	rm -f ${NETWORK_IMAGES}

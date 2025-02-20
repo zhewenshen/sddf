@@ -27,4 +27,4 @@ int virt_tx_ccomp_extract_offset(uintptr_t *phys);
 void virt_tx_ccomp_tx_provide(void);
 void virt_tx_ccomp_tx_return(void);
 
-#endif // VIRT_RX_CCOMP_H
+#endif // VIRT_TX_CCOMP_H
