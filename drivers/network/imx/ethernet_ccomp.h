@@ -28,6 +28,8 @@ extern void _ccomp_microkit_deferred_irq_ack(microkit_channel ch);
 extern void _ccomp_thread_memory_release(void);
 extern void _ccomp_thread_memory_acquire(void);
 extern void _ccomp_assert(bool condition);
+extern void _ccomp_notified_sddf_dprintf(microkit_channel ch);
+extern void _ccomp_handle_irq_sddf_dprintf(unsigned int e);
 
 // sddf stuff
 extern int _ccomp_net_enqueue_active(net_queue_handle_t *queue, net_buff_desc_t *buffer);
@@ -68,6 +70,11 @@ void ethernet_ccomp_rx_provide(void);
 void ethernet_ccomp_rx_return(void);
 void ethernet_ccomp_tx_provide(void);
 void ethernet_ccomp_tx_return(void);
+void ethernet_ccomp_handle_irq(void);
+void ethernet_ccomp_eth_setup(void);
+
+void ethernet_ccomp_init(void);
+void ethernet_ccomp_notified(microkit_channel ch);
 
 
 #endif // ETHERNET_CCOMP_H
