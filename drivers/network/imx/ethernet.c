@@ -15,127 +15,74 @@
 
 #include "ethernet.h"
 
-__attribute__((__section__(".device_resources"))) device_resources_t device_resources;
+#include "ethernet_ccomp.h"
 
+void _ccomp_thread_memory_acquire(void) {
+    THREAD_MEMORY_ACQUIRE();
+}
+
+void _ccomp_thread_memory_release(void) {
+    THREAD_MEMORY_RELEASE();
+}
+
+void _ccomp_microkit_notify(microkit_channel ch) {
+    microkit_notify(ch);
+}
+
+void _ccomp_microkit_deferred_irq_ack(microkit_channel ch) {
+    microkit_deferred_irq_ack(ch);
+}
+
+void _ccomp_assert(bool condition) {
+    assert(condition);
+}
+
+int _ccomp_net_enqueue_active(net_queue_handle_t *queue, net_buff_desc_t *buffer) {
+    return net_enqueue_active(queue, *buffer);
+}
+
+void _ccomp_handle_irq_sddf_dprintf(unsigned int e) {
+    sddf_dprintf("ETH|ERROR: System bus/uDMA %u\n", e);
+}
+
+void _ccomp_notified_sddf_dprintf(microkit_channel ch) {
+    sddf_dprintf("ETH|LOG: received notification on unexpected channel: %u\n", ch);
+}
+
+__attribute__((__section__(".device_resources"))) device_resources_t device_resources;
 __attribute__((__section__(".net_driver_config"))) net_driver_config_t config;
 
-/* HW ring capacity must be a power of 2 */
-#define RX_COUNT 256
-#define TX_COUNT 256
-#define MAX_COUNT MAX(RX_COUNT, TX_COUNT)
-
-/* HW ring descriptor (shared with device) */
-struct descriptor {
-    uint16_t len;
-    uint16_t stat;
-    uint32_t addr;
-};
-
-/* HW ring buffer data type */
-typedef struct {
-    uint32_t tail; /* index to insert at */
-    uint32_t head; /* index to remove from */
-    uint32_t capacity; /* capacity of the ring */
-    volatile struct descriptor *descr; /* buffer descriptor array */
-    net_buff_desc_t descr_mdata[MAX_COUNT]; /* associated meta data array */
-} hw_ring_t;
-
-hw_ring_t rx; /* Rx NIC ring */
-hw_ring_t tx; /* Tx NIC ring */
-
-net_queue_handle_t rx_queue;
-net_queue_handle_t tx_queue;
-
-#define MAX_PACKET_SIZE     1536
-
-volatile struct enet_regs *eth;
+extern net_queue_handle_t rx_queue;
+extern net_queue_handle_t tx_queue;
+extern volatile struct enet_regs *eth;
 
 static inline bool hw_ring_full(hw_ring_t *ring)
 {
-    return ring->tail - ring->head == ring->capacity;
+    return ethernet_ccomp_hw_ring_full(ring);
 }
 
 static inline bool hw_ring_empty(hw_ring_t *ring)
 {
-    return ring->tail - ring->head == 0;
+    return ethernet_ccomp_hw_ring_empty(ring);
 }
 
 static void update_ring_slot(hw_ring_t *ring, unsigned int idx, uintptr_t phys,
                              uint16_t len, uint16_t stat)
 {
-    volatile struct descriptor *d = &(ring->descr[idx]);
-    d->addr = phys;
-    d->len = len;
-
-    /* Ensure all writes to the descriptor complete, before we set the flags
-     * that makes hardware aware of this slot.
-     */
-    THREAD_MEMORY_RELEASE();
-    d->stat = stat;
+    ethernet_ccomp_update_ring_slot(ring, idx, phys, len, stat);
 }
 
 static void rx_provide(void)
 {
-    bool reprocess = true;
-    while (reprocess) {
-        while (!hw_ring_full(&rx) && !net_queue_empty_free(&rx_queue)) {
-            net_buff_desc_t buffer;
-            int err = net_dequeue_free(&rx_queue, &buffer);
-            assert(!err);
-
-            uint32_t idx = rx.tail % rx.capacity;
-            uint16_t stat = RXD_EMPTY;
-            if (idx + 1 == rx.capacity) {
-                stat |= WRAP;
-            }
-            rx.descr_mdata[idx] = buffer;
-            update_ring_slot(&rx, idx, buffer.io_or_offset, 0, stat);
-            rx.tail++;
-            eth->rdar = RDAR_RDAR;
-        }
-
-        /* Only request a notification from virtualiser if HW ring not full */
-        if (!hw_ring_full(&rx)) {
-            net_request_signal_free(&rx_queue);
-        } else {
-            net_cancel_signal_free(&rx_queue);
-        }
-        reprocess = false;
-
-        if (!net_queue_empty_free(&rx_queue) && !hw_ring_full(&rx)) {
-            net_cancel_signal_free(&rx_queue);
-            reprocess = true;
-        }
-    }
+    ethernet_ccomp_rx_provide();
 }
 
 static void rx_return(void)
 {
-    bool packets_transferred = false;
-    while (!hw_ring_empty(&rx)) {
-        /* If buffer slot is still empty, we have processed all packets the device has filled */
-        uint32_t idx = rx.head % rx.capacity;
-        volatile struct descriptor *d = &(rx.descr[idx]);
-        if (d->stat & RXD_EMPTY) {
-            break;
-        }
-
-        THREAD_MEMORY_ACQUIRE();
-
-        net_buff_desc_t buffer = rx.descr_mdata[idx];
-        buffer.len = d->len;
-        int err = net_enqueue_active(&rx_queue, buffer);
-        assert(!err);
-
-        packets_transferred = true;
-        rx.head++;
-    }
-
-    if (packets_transferred && net_require_signal_active(&rx_queue)) {
-        net_cancel_signal_active(&rx_queue);
-        microkit_notify(config.virt_rx.id);
-    }
+    ethernet_ccomp_rx_return();
 }
+
+// --- up to here ---
 
 static void tx_provide(void)
 {

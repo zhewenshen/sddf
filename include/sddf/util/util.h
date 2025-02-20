@@ -44,7 +44,7 @@
        _d * (_n/_d + (_n % _d == 0 ? 0 : 1)); \
     })
 #endif
-#ifndef MIN
+#ifndef MINs
 #define MIN(a, b) ((a) < (b) ? (a) : (b))
 #endif
 #ifndef MAX

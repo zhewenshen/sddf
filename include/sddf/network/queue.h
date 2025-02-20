@@ -11,7 +11,7 @@
 #include <stdint.h>
 #include <sddf/network/constants.h>
 #include <sddf/util/fence.h>
-#include <sddf/util/util.h>
+// #include <sddf/util/util.h>
 
 typedef struct net_buff_desc {
     /* offset of buffer within buffer memory region or io address of buffer */
@@ -218,7 +218,7 @@ static inline void net_buffers_init(net_queue_handle_t *queue, uintptr_t base_ad
     for (uint32_t i = 0; i < queue->capacity; i++) {
         net_buff_desc_t buffer = {(NET_BUFFER_SIZE * i) + base_addr, 0};
         int err = net_enqueue_free(queue, buffer);
-        assert(!err);
+        // assert(!err);
     }
 }
 
