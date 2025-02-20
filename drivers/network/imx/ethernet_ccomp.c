@@ -99,3 +99,64 @@ void ethernet_ccomp_rx_return(void)
     }
 }
 
+void ethernet_ccomp_tx_provide(void)
+{
+    bool reprocess = true;
+    while (reprocess) {
+        while (!(ethernet_ccomp_hw_ring_full(&tx)) && !net_queue_empty_active(&tx_queue)) {
+            net_buff_desc_t buffer;
+            int err = net_dequeue_active(&tx_queue, &buffer);
+            // assert(!err);
+            _ccomp_assert(!err);
+
+            uint32_t idx = tx.tail % tx.capacity;
+            uint16_t stat = TXD_READY | TXD_ADDCRC | TXD_LAST;
+            if (idx + 1 == tx.capacity) {
+                stat |= WRAP;
+            }
+            tx.descr_mdata[idx] = buffer;
+            ethernet_ccomp_update_ring_slot(&tx, idx, buffer.io_or_offset, buffer.len, stat);
+            tx.tail++;
+            eth->tdar = TDAR_TDAR;
+        }
+
+        net_request_signal_active(&tx_queue);
+        reprocess = false;
+
+        if (!ethernet_ccomp_hw_ring_full(&tx) && !net_queue_empty_active(&tx_queue)) {
+            net_cancel_signal_active(&tx_queue);
+            reprocess = true;
+        }
+    }
+}
+
+void ethernet_ccomp_tx_return(void)
+{
+    bool enqueued = false;
+    while (!ethernet_ccomp_hw_ring_empty(&tx)) {
+        /* Ensure that this buffer has been sent by the device */
+        uint32_t idx = tx.head % tx.capacity;
+        volatile struct descriptor *d = &(tx.descr[idx]);
+        if (d->stat & TXD_READY) {
+            break;
+        }
+
+        // THREAD_MEMORY_ACQUIRE();
+        _ccomp_thread_memory_acquire();
+
+        net_buff_desc_t buffer = tx.descr_mdata[idx];
+        buffer.len = 0;
+        // int err = net_enqueue_free(&tx_queue, buffer);
+        int err = _ccomp_net_enqueue_free(&tx_queue, &buffer);
+        // assert(!err);
+        _ccomp_assert(!err);
+
+        enqueued = true;
+        tx.head++;
+    }
+
+    if (enqueued && net_require_signal_free(&tx_queue)) {
+        net_cancel_signal_free(&tx_queue);
+        _ccomp_microkit_notify(config.virt_tx.id);
+    }
+}

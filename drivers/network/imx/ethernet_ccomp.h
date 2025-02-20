@@ -31,6 +31,7 @@ extern void _ccomp_assert(bool condition);
 
 // sddf stuff
 extern int _ccomp_net_enqueue_active(net_queue_handle_t *queue, net_buff_desc_t *buffer);
+extern int _ccomp_net_enqueue_free(net_queue_handle_t *queue, net_buff_desc_t *buffer);
 extern void _ccomp_handle_irq_sddf_dprintf(unsigned int e);
 extern void _ccomp_notified_sddf_dprintf(microkit_channel ch);
 
