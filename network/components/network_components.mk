@@ -14,6 +14,7 @@
 NETWORK_COMPONENTS_DIR := $(abspath $(dir $(lastword ${MAKEFILE_LIST})))
 NETWORK_IMAGES := network_virt_rx.elf network_virt_tx.elf network_arp.elf network_copy.elf
 
+# TODO: check with ivan about the flags
 CCOMP_CFLAGS := $(filter-out -mcpu=cortex-a53 -mstrict-align -ffreestanding -Wno-unused-function -MD -MP,$(CFLAGS))
 
 network/components/%.o: ${SDDF}/network/components/%.c
@@ -22,16 +23,13 @@ network/components/%.o: ${SDDF}/network/components/%.c
 network/components/network_virt_%.o: ${SDDF}/network/components/virt_%.c
 	${CC} ${CFLAGS} -c -o $@ $<
 
-# Use CompCert for transitioning virtualizer files
 network/components/network_virt_%_ccomp.o: ${SDDF}/network/components/virt_%_ccomp.c ${CHECK_NETWORK_FLAGS_MD5}
 	mkdir -p network/components
 	ccomp -c ${CCOMP_CFLAGS} -I${SDDF}/network/components -o $@ $<
 
-# Normal copy component
 network/components/network_copy.o: ${SDDF}/network/components/copy.c
 	${CC} ${CFLAGS} -c -o $@ $<
 
-# CompCert version of copy component
 network/components/network_copy_ccomp.o: ${SDDF}/network/components/copy_ccomp.c ${CHECK_NETWORK_FLAGS_MD5}
 	mkdir -p network/components
 	ccomp -c ${CCOMP_CFLAGS} -I${SDDF}/network/components -o $@ $<
@@ -55,11 +53,9 @@ ${NETWORK_COMPONENT_OBJ}: | network/components
 ${NETWORK_COMPONENT_OBJ}: ${CHECK_NETWORK_FLAGS_MD5}
 ${NETWORK_COMPONENT_OBJ}: CFLAGS+=${CFLAGS_network}
 
-# Ensure both normal and _ccomp.o objects are linked into the final ELF
 %.elf: network/components/%.o
 	${LD} ${LDFLAGS} -o $@ $^ ${LIBS}
 
-# Explicit linking rules for each ELF to ensure _ccomp.o files are included where needed
 network_virt_rx.elf: network/components/network_virt_rx.o network/components/network_virt_rx_ccomp.o
 	${LD} ${LDFLAGS} -o $@ $^ ${LIBS}
 

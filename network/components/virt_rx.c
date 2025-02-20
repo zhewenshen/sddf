@@ -40,4 +40,3 @@ int _ccomp_net_enqueue_active(net_queue_handle_t *queue, net_buff_desc_t *buffer
 {
     return net_enqueue_active(queue, *buffer);
 }
-
