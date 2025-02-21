@@ -462,6 +462,7 @@ void init(void)
 
 void notified(microkit_channel ch)
 {
+    sddf_dprintf("virtio ethernet notified on channel %u\n", ch);
     if (ch == device_resources.irqs[0].id) {
         handle_irq();
         microkit_deferred_irq_ack(ch);
