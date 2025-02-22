@@ -160,6 +160,19 @@ static inline int net_enqueue_active(net_queue_handle_t *queue, net_buff_desc_t 
     return 0;
 }
 
+static inline int ccomp_net_enqueue_active(net_queue_handle_t *queue, net_buff_desc_t *buffer)
+{
+    if (net_queue_full_active(queue)) {
+        return -1;
+    }
+
+    queue->active->buffers[queue->active->tail % queue->capacity] = *buffer;
+
+    queue->active->tail++;
+
+    return 0;
+}
+
 /**
  * Dequeue an element from the free queue.
  *
