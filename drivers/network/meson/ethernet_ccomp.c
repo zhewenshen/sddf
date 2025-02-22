@@ -1,16 +1,16 @@
 #include "ethernet_ccomp.h"
 
-bool hw_ring_full(hw_ring_t *ring)
+static inline bool hw_ring_full(hw_ring_t *ring)
 {
     return ring->tail - ring->head == ring->capacity;
 }
 
-bool hw_ring_empty(hw_ring_t *ring)
+static inline bool hw_ring_empty(hw_ring_t *ring)
 {
     return ring->tail - ring->head == 0;
 }
 
-void update_ring_slot(hw_ring_t *ring, unsigned int idx, uint32_t status,
+static void update_ring_slot(hw_ring_t *ring, unsigned int idx, uint32_t status,
                              uint32_t cntl, uint32_t phys, uint32_t next)
 {
     volatile struct descriptor *d = &(ring->descr[idx]);
@@ -25,7 +25,7 @@ void update_ring_slot(hw_ring_t *ring, unsigned int idx, uint32_t status,
     d->status = status;
 }
 
-void rx_provide(void)
+static void rx_provide(void)
 {
     bool reprocess = true;
     while (reprocess) {
@@ -57,7 +57,7 @@ void rx_provide(void)
     }
 }
 
-void rx_return(void)
+static void rx_return(void)
 {
     bool packets_transferred = false;
     while (!hw_ring_empty(&rx)) {
@@ -99,7 +99,7 @@ void rx_return(void)
     }
 }
 
-void tx_provide(void)
+static void tx_provide(void)
 {
     bool reprocess = true;
     while (reprocess) {
@@ -132,7 +132,7 @@ void tx_provide(void)
 }
 
 
-void tx_return(void)
+static void tx_return(void)
 {
     bool enqueued = false;
     while (!hw_ring_empty(&tx)) {
@@ -159,7 +159,7 @@ void tx_return(void)
     }
 }
 
-void eth_setup(void)
+static void eth_setup(void)
 {
     eth_mac = device_resources.regions[0].region.vaddr;
     eth_dma = (void *)((uintptr_t)eth_mac + DMA_REG_OFFSET);
@@ -205,8 +205,6 @@ void eth_setup(void)
     flow_ctrl |= (pause_time << GMAC_FLOW_CTRL_PT_SHIFT);
     eth_mac->flowcontrol = flow_ctrl;
 }
-
-
 
 void init(void)
 {
