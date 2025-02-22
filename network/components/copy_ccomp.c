@@ -51,10 +51,10 @@ void copy_ccomp_rx_return(void)
             cli_buffer.len = virt_buffer.len;
             virt_buffer.len = 0;
 
-            err = _ccomp_net_enqueue_active(&rx_queue_cli, &cli_buffer);
+            err = net_enqueue_active(&rx_queue_cli, cli_buffer);
             _ccomp_assert(!err);
 
-            err = _ccomp_net_enqueue_free(&rx_queue_virt, &virt_buffer);
+            err = net_enqueue_free(&rx_queue_virt, virt_buffer);
             _ccomp_assert(!err);
 
             enqueued = true;

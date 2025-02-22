@@ -96,8 +96,8 @@ void virt_rx_ccomp_rx_return(void)
                 buffer_refs[ref_index] = config.num_clients;
 
                 for (int i = 0; i < config.num_clients; i++) {
-                    // err = net_enqueue_active(&state.rx_queue_clients[i], buffer);
-                    err = _ccomp_net_enqueue_active(&state.rx_queue_clients[i], &buffer);
+                    err = net_enqueue_active(&state.rx_queue_clients[i], buffer);
+                    // err = _ccomp_net_enqueue_active(&state.rx_queue_clients[i], &buffer);
                     _ccomp_assert(!err);
                     notify_clients[i] = true;
                 }

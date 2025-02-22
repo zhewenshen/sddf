@@ -16,6 +16,7 @@ NETWORK_IMAGES := network_virt_rx.elf network_virt_tx.elf network_arp.elf networ
 
 # TODO: check with ivan about the flags
 CCOMP_CFLAGS := $(filter-out -mcpu=cortex-a53 -mstrict-align -ffreestanding -Wno-unused-function -MD -MP,$(CFLAGS))
+CCOMP_CFLAGS += -fstruct-passing
 
 network/components/%.o: ${SDDF}/network/components/%.c
 	${CC} ${CFLAGS} -c -o $@ $<

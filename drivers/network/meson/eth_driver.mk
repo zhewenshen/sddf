@@ -18,7 +18,7 @@ ETH_DRIVER_ELF := eth_driver.elf
 
 CCOMP_CFLAGS := $(filter-out -mcpu=cortex-a55 -mstrict-align -ffreestanding -Wno-unused-function -MD -MP,$(CFLAGS))
 # for testing - this is not verified compcert configuration
-# CCOMP_CFLAGS += -fstruct-passing
+CCOMP_CFLAGS += -fstruct-passing
 
 ${CHECK_NETDRV_FLAGS_MD5}:
 	-rm -f .netdrv_cflags-*

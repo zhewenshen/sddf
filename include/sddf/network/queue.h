@@ -244,8 +244,8 @@ static inline void net_buffers_init(net_queue_handle_t *queue, uintptr_t base_ad
 {
     for (uint32_t i = 0; i < queue->capacity; i++) {
         net_buff_desc_t buffer = {(NET_BUFFER_SIZE * i) + base_addr, 0};
-        // int err = net_enqueue_free(queue, buffer);
-        int err = ccomp_net_enqueue_free(queue, &buffer);
+        int err = net_enqueue_free(queue, buffer);
+        // int err = ccomp_net_enqueue_free(queue, &buffer);
         (void)err;
         // assert(!err);
     }
