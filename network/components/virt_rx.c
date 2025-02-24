@@ -14,8 +14,6 @@
 #include <sddf/util/printf.h>
 #include <sddf/util/cache.h>
 
-__attribute__((__section__(".net_virt_rx_config"))) net_virt_rx_config_t config;
-
 void _ccomp_microkit_notify(microkit_channel ch)
 {
     microkit_notify(ch);

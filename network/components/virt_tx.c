@@ -10,8 +10,6 @@
 #include <sddf/util/util.h>
 #include <sddf/util/printf.h>
 
-__attribute__((__section__(".net_virt_tx_config"))) net_virt_tx_config_t config;
-
 void _ccomp_microkit_notify(microkit_channel ch)
 {
     microkit_notify(ch);

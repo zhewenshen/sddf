@@ -15,10 +15,6 @@
 
 #include "ethernet.h"
 
-__attribute__((__section__(".device_resources"))) device_resources_t device_resources;
-__attribute__((__section__(".net_driver_config"))) net_driver_config_t config;
-
-
 void _microkit_deferred_irq_ack(microkit_channel ch)
 {
     microkit_deferred_irq_ack(ch);

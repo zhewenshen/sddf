@@ -18,7 +18,7 @@ ETH_DRIVER_ELF := eth_driver.elf
 
 CCOMP_CFLAGS := $(filter-out -mcpu=cortex-a55 -mstrict-align -ffreestanding -Wno-unused-function -MD -MP,$(CFLAGS))
 # for testing - this is not verified compcert configuration
-# CCOMP_CFLAGS += -fstruct-passing
+CCOMP_CFLAGS += -fstruct-passing
 
 ${CHECK_NETDRV_FLAGS_MD5}:
 	-rm -f .netdrv_cflags-*
@@ -33,7 +33,7 @@ network/meson/ethernet.o: ${ETHERNET_DRIVER_DIR}/ethernet.c ${CHECK_NETDRV_FLAGS
 
 network/meson/ethernet_ccomp.o: ${ETHERNET_DRIVER_DIR}/ethernet_ccomp.c ${CHECK_NETDRV_FLAGS_MD5}
 	mkdir -p network/meson
-	ccomp -c ${CCOMP_CFLAGS} -I${ETHERNET_DRIVER_DIR} -o $@ $<
+	ccomp -c ${CCOMP_CFLAGS} ${CFLAGS_network} -I${ETHERNET_DRIVER_DIR} -o $@ $<
 
 -include network/meson/ethernet.d
 -include network/meson/ethernet_ccomp.d

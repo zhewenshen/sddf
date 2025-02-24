@@ -86,7 +86,8 @@ static void rx_return(void)
             rx.tail++;
         } else {
             buffer.len = (d->status & DESC_RXSTS_LENMSK) >> DESC_RXSTS_LENSHFT;
-            int err = ccomp_net_enqueue_active(&rx_queue, &buffer);
+            // int err = ccomp_net_enqueue_active(&rx_queue, &buffer);
+            int err = net_enqueue_active(&rx_queue, buffer);
             _assert(!err);
             packets_transferred = true;
         }

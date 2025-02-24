@@ -1,7 +1,7 @@
 #include <sddf/network/queue.h>
 #include <sddf/network/config.h>
 
-extern net_virt_tx_config_t config;
+__attribute__((__section__(".net_virt_tx_config"))) net_virt_tx_config_t config;
 
 typedef unsigned int microkit_channel;
 
@@ -59,8 +59,8 @@ void virt_tx_ccomp_tx_provide(void)
                 _ccomp_cache_clean(buffer_vaddr, buffer_vaddr + buffer.len);
 
                 buffer.io_or_offset = buffer.io_or_offset + config.clients[client].data.io_addr;
-                // err = net_enqueue_active(&state.tx_queue_drv, buffer);
-                err = _ccomp_net_enqueue_active(&state.tx_queue_drv, &buffer);
+                err = net_enqueue_active(&state.tx_queue_drv, buffer);
+                // err = _ccomp_net_enqueue_active(&state.tx_queue_drv, &buffer);
                 _ccomp_assert(!err);
                 enqueued = true;
             }
@@ -94,7 +94,8 @@ void virt_tx_ccomp_tx_return(void)
             int client = virt_tx_ccomp_extract_offset(&buffer.io_or_offset);
             _ccomp_assert(client >= 0);
 
-            err = _ccomp_net_enqueue_free(&state.tx_queue_clients[client], &buffer);
+            // err = _ccomp_net_enqueue_free(&state.tx_queue_clients[client], &buffer);
+            err = net_enqueue_free(&state.tx_queue_clients[client], buffer);
             _ccomp_assert(!err);
             notify_clients[client] = true;
         }

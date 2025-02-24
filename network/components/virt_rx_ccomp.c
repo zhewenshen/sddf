@@ -17,7 +17,7 @@ extern int _ccomp_net_enqueue_active(net_queue_handle_t *queue, net_buff_desc_t 
  * any particular client. */
 #define BROADCAST_ID (-2)
 
-extern net_virt_rx_config_t config;
+__attribute__((__section__(".net_virt_rx_config"))) net_virt_rx_config_t config;
 
 /* In order to handle broadcast packets where the same buffer is given to multiple clients
   * we keep track of a reference count of each buffer and only hand it back to the driver once
@@ -96,8 +96,8 @@ void virt_rx_ccomp_rx_return(void)
                 buffer_refs[ref_index] = config.num_clients;
 
                 for (int i = 0; i < config.num_clients; i++) {
-                    // err = net_enqueue_active(&state.rx_queue_clients[i], buffer);
-                    err = _ccomp_net_enqueue_active(&state.rx_queue_clients[i], &buffer);
+                    err = net_enqueue_active(&state.rx_queue_clients[i], buffer);
+                    // err = _ccomp_net_enqueue_active(&state.rx_queue_clients[i], &buffer);
                     _ccomp_assert(!err);
                     notify_clients[i] = true;
                 }

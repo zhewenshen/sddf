@@ -13,7 +13,7 @@ extern int _ccomp_net_enqueue_active(net_queue_handle_t *queue, net_buff_desc_t 
 extern int _ccomp_net_enqueue_free(net_queue_handle_t *queue, net_buff_desc_t *buffer);
 extern void _ccomp_rx_return_sddf_dprintf(unsigned long offset);
 
-extern net_copy_config_t config;
+__attribute__((__section__(".net_copy_config"))) net_copy_config_t config;
 
 net_queue_handle_t rx_queue_virt;
 net_queue_handle_t rx_queue_cli;
@@ -51,10 +51,10 @@ void copy_ccomp_rx_return(void)
             cli_buffer.len = virt_buffer.len;
             virt_buffer.len = 0;
 
-            err = _ccomp_net_enqueue_active(&rx_queue_cli, &cli_buffer);
+            err = net_enqueue_active(&rx_queue_cli, cli_buffer);
             _ccomp_assert(!err);
 
-            err = _ccomp_net_enqueue_free(&rx_queue_virt, &virt_buffer);
+            err = net_enqueue_free(&rx_queue_virt, virt_buffer);
             _ccomp_assert(!err);
 
             enqueued = true;

@@ -36,8 +36,8 @@ hw_ring_t tx;
 net_queue_handle_t rx_queue;
 net_queue_handle_t tx_queue;
 
-device_resources_t device_resources;
-net_driver_config_t config;
+__attribute__((__section__(".device_resources"))) device_resources_t device_resources;
+__attribute__((__section__(".net_driver_config"))) net_driver_config_t config;
 
 typedef unsigned int microkit_channel;
 

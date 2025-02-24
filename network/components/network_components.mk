@@ -16,6 +16,7 @@ NETWORK_IMAGES := network_virt_rx.elf network_virt_tx.elf network_arp.elf networ
 
 # TODO: check with ivan about the flags
 CCOMP_CFLAGS := $(filter-out -mcpu=cortex-a53 -mstrict-align -ffreestanding -Wno-unused-function -MD -MP,$(CFLAGS))
+CCOMP_CFLAGS += -fstruct-passing
 
 network/components/%.o: ${SDDF}/network/components/%.c
 	${CC} ${CFLAGS} -c -o $@ $<
@@ -25,14 +26,16 @@ network/components/network_virt_%.o: ${SDDF}/network/components/virt_%.c
 
 network/components/network_virt_%_ccomp.o: ${SDDF}/network/components/virt_%_ccomp.c ${CHECK_NETWORK_FLAGS_MD5}
 	mkdir -p network/components
-	ccomp -c ${CCOMP_CFLAGS} -I${SDDF}/network/components -o $@ $<
+	ccomp -c ${CCOMP_CFLAGS} -o $@ $<
+# ${CC} ${CFLAGS} -c -o $@ $<
 
 network/components/network_copy.o: ${SDDF}/network/components/copy.c
 	${CC} ${CFLAGS} -c -o $@ $<
 
 network/components/network_copy_ccomp.o: ${SDDF}/network/components/copy_ccomp.c ${CHECK_NETWORK_FLAGS_MD5}
 	mkdir -p network/components
-	ccomp -c ${CCOMP_CFLAGS} -I${SDDF}/network/components -o $@ $<
+	ccomp -c ${CCOMP_CFLAGS} -o $@ $<
+	# ${CC} ${CFLAGS} -c -o $@ $<
 
 network/components/network_arp.o: ${SDDF}/network/components/arp.c
 	${CC} ${CFLAGS} -c -o $@ $<
