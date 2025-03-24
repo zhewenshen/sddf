@@ -17,6 +17,7 @@ CHECK_NETDRV_FLAGS_MD5 := .netdrv_cflags-$(shell echo -- ${CFLAGS} ${CFLAGS_netw
 ETH_DRIVER_ELF := eth_driver.elf
 
 CCOMP_CFLAGS := $(filter-out -mcpu=cortex-a53 -mstrict-align -ffreestanding -Wno-unused-function -MD -MP,$(CFLAGS))
+CCOMP_CFLAGS += -fstruct-passing
 
 ${CHECK_NETDRV_FLAGS_MD5}:
 	-rm -f .netdrv_cflags-*

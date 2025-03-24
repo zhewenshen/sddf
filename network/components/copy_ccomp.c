@@ -12,11 +12,20 @@ extern void _ccomp_assert(bool condition);
 extern int _ccomp_net_enqueue_active(net_queue_handle_t *queue, net_buff_desc_t *buffer);
 extern int _ccomp_net_enqueue_free(net_queue_handle_t *queue, net_buff_desc_t *buffer);
 extern void _ccomp_rx_return_sddf_dprintf(unsigned long offset);
+extern void _ccomp_sddf_memcpy(void *dest, const void *src, size_t n);
 
 __attribute__((__section__(".net_copy_config"))) net_copy_config_t config;
 
 net_queue_handle_t rx_queue_virt;
 net_queue_handle_t rx_queue_cli;
+
+void test_sddf_memcpy(void)
+{
+    char src[10] = "123456789";
+    char dest[10] = "000000000";
+    _ccomp_sddf_memcpy(dest, src, 10);
+    _ccomp_assert(!strcmp(src, dest));
+}
 
 void copy_ccomp_rx_return(void)
 {
@@ -46,8 +55,9 @@ void copy_ccomp_rx_return(void)
             void *cli_addr = (char *)config.client_data.vaddr + cli_buffer.io_or_offset;
             void *virt_addr = (char *)config.device_data.vaddr + virt_buffer.io_or_offset;
 
+            // sddf_memcpy(cli_addr, virt_addr, virt_buffer.len);
+            _ccomp_sddf_memcpy(cli_addr, virt_addr, virt_buffer.len);
 
-            sddf_memcpy(cli_addr, virt_addr, virt_buffer.len);
             cli_buffer.len = virt_buffer.len;
             virt_buffer.len = 0;
 

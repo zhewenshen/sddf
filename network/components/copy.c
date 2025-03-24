@@ -40,3 +40,8 @@ int _ccomp_net_enqueue_free(net_queue_handle_t *queue, net_buff_desc_t *buffer)
 {
     return net_enqueue_free(queue, *buffer);
 }
+
+void _ccomp_sddf_memcpy(void *dest, const void *src, size_t n)
+{
+    sddf_memcpy(dest, src, n);
+}

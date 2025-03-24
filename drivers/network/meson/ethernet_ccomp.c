@@ -20,7 +20,6 @@ static void update_ring_slot(hw_ring_t *ring, unsigned int idx, uint32_t status,
     /* Ensure all writes to the descriptor complete, before we set the flags
      * that makes hardware aware of this slot.
      */
-    // THREAD_MEMORY_RELEASE();
     _thread_memory_release();
     d->status = status;
 }
@@ -68,7 +67,6 @@ static void rx_return(void)
             break;
         }
 
-        // THREAD_MEMORY_ACQUIRE();
         _thread_memory_acquire();
 
         net_buff_desc_t buffer = rx.descr_mdata[idx];
@@ -144,7 +142,6 @@ static void tx_return(void)
             break;
         }
 
-        // THREAD_MEMORY_ACQUIRE();
         _thread_memory_acquire();
 
         net_buff_desc_t buffer = tx.descr_mdata[idx];

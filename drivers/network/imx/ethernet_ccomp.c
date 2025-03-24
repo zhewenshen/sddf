@@ -29,8 +29,6 @@ extern void _ccomp_notified_sddf_dprintf(microkit_channel ch);
 extern void _ccomp_handle_irq_sddf_dprintf(unsigned int e);
 
 // sddf stuff
-extern int _ccomp_net_enqueue_active(net_queue_handle_t *queue, net_buff_desc_t *buffer);
-extern int _ccomp_net_enqueue_free(net_queue_handle_t *queue, net_buff_desc_t *buffer);
 extern void _ccomp_handle_irq_sddf_dprintf(unsigned int e);
 extern void _ccomp_notified_sddf_dprintf(microkit_channel ch);
 
@@ -132,8 +130,8 @@ static void ethernet_ccomp_rx_return(void)
         buffer.len = d->len;
 
         // ccomp dont support struct as function parameter... this is so sad...
-        // int err = net_enqueue_active(&rx_queue, buffer);
-        int err = _ccomp_net_enqueue_active(&rx_queue, &buffer);
+        int err = net_enqueue_active(&rx_queue, buffer);
+        // int err = _ccomp_net_enqueue_active(&rx_queue, &buffer);
         // assert(!err);
         _ccomp_assert(!err);
 
@@ -197,8 +195,8 @@ static void ethernet_ccomp_tx_return(void)
 
         net_buff_desc_t buffer = tx.descr_mdata[idx];
         buffer.len = 0;
-        // int err = net_enqueue_free(&tx_queue, buffer);
-        int err = _ccomp_net_enqueue_free(&tx_queue, &buffer);
+        int err = net_enqueue_free(&tx_queue, buffer);
+        // int err = _ccomp_net_enqueue_free(&tx_queue, &buffer);
         // assert(!err);
         _ccomp_assert(!err);
 
