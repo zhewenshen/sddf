@@ -14,6 +14,9 @@
 #  define __has_builtin(x) 0
 #endif
 
+#define OPSIZ sizeof(size_t)
+#define OP_T_THRES 16
+
 static inline void *sddf_memset(void *s, int c, size_t n)
 {
     unsigned char *p = s;
@@ -23,14 +26,68 @@ static inline void *sddf_memset(void *s, int c, size_t n)
     return s;
 }
 
-static inline void *sddf_memcpy(void *dest, const void *src, size_t n)
+static inline void *sddf_memcpy(void *dstpp, const void *srcpp, size_t len)
 {
-    unsigned char *to = dest;
-    const unsigned char *from = src;
-    while (n-- > 0) {
-        *to++ = *from++;
+    unsigned long int dstp = (unsigned long int) dstpp;
+    unsigned long int srcp = (unsigned long int) srcpp;
+    void *ret = dstpp;
+
+    if (len < OP_T_THRES)
+    {
+        unsigned char *dst = (unsigned char *)dstp;
+        const unsigned char *src = (const unsigned char *)srcp;
+        
+        while (len--)
+            *dst++ = *src++;
+            
+        return ret;
     }
-    return dest;
+
+    size_t align = (-dstp) & (OPSIZ - 1);
+    if (align) 
+    {
+        unsigned char *dst = (unsigned char *)dstp;
+        const unsigned char *src = (const unsigned char *)srcp;
+        
+        len -= align;
+        while (align--)
+            *dst++ = *src++;
+            
+        dstp = (unsigned long int) dst;
+        srcp = (unsigned long int) src;
+    }
+
+    size_t *dst_w = (size_t *)dstp;
+    const size_t *src_w = (const size_t *)srcp;
+    
+    while (len >= OPSIZ * 8) 
+    {
+        dst_w[0] = src_w[0];
+        dst_w[1] = src_w[1];
+        dst_w[2] = src_w[2];
+        dst_w[3] = src_w[3];
+        dst_w[4] = src_w[4];
+        dst_w[5] = src_w[5];
+        dst_w[6] = src_w[6];
+        dst_w[7] = src_w[7];
+        dst_w += 8;
+        src_w += 8;
+        len -= OPSIZ * 8;
+    }
+    
+    while (len >= OPSIZ) 
+    {
+        *dst_w++ = *src_w++;
+        len -= OPSIZ;
+    }
+
+    unsigned char *dst_b = (unsigned char *)dst_w;
+    const unsigned char *src_b = (const unsigned char *)src_w;
+    
+    while (len--)
+        *dst_b++ = *src_b++;
+
+    return ret;
 }
 
 static inline char *sddf_strncpy(char *dest, const char *restrict src,

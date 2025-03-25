@@ -42,7 +42,8 @@ void rx_return(void)
             void *cli_addr = (char*)config.client_data.vaddr + cli_buffer.io_or_offset;
             void *virt_addr = (char*)config.device_data.vaddr + virt_buffer.io_or_offset;
 
-            sddf_memcpy(cli_addr, virt_addr, virt_buffer.len);
+            // sddf_memcpy(cli_addr, virt_addr, virt_buffer.len);
+            memcpy(cli_addr, virt_addr, virt_buffer.len);
             cli_buffer.len = virt_buffer.len;
             virt_buffer.len = 0;
 
