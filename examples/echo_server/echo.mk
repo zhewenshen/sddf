@@ -50,6 +50,10 @@ CFLAGS := -mcpu=$(CPU) \
 	  -MD \
 	  -MP
 
+ifneq (,$(filter $(MICROKIT_BOARD), imx8mm_evk imx8mp_evk maaxboard))
+CFLAGS += -DNETWORK_HW_HAS_CHECKSUM
+endif
+
 LDFLAGS := -L$(BOARD_DIR)/lib -L${LIBC}
 LIBS := --start-group -lmicrokit -Tmicrokit.ld -lc libsddf_util_debug.a --end-group
 
