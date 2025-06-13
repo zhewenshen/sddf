@@ -32,6 +32,11 @@ util/sddf_printf.o: ${SDDF}/util/printf.c
 util/%.o: ${SDDF}/util/%.c
 	${CC} ${CFLAGS} -c -o $@ $<
 
+ifneq ($(filter 1,$(PANCAKE_DRIVER) $(PANCAKE_VIRT)),)
+pancake_ffi.o: ${SDDF}/util/pancake_ffi.c
+	${CC} ${CFLAGS} -c -o $@ $<
+endif
+
 util:
 	mkdir -p $@
 
