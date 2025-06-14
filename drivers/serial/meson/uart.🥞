@@ -22,6 +22,8 @@
 /* UART register base */
 #define UART_REG_BASE       pnk_mem(0)
 
+#define RX_ENABLED          pnk_mem(1024)
+
 /////////////////// UART Hardware Constants
 /* Register offsets */
 #define WFIFO_OFFSET        0
@@ -107,7 +109,7 @@ fun serial_queue_get_tail(1 queue_ptr)
 
 /////////////////// Main Driver Functions
 
-fun tx_provide()
+export fun tx_provide()
 {
   var transferred = false;
   var tx_queue = SERIAL_TX_QUEUE;
@@ -166,7 +168,7 @@ fun tx_provide()
   return 0;
 }
 
-fun rx_return()
+export fun rx_return()
 {
   var reprocess = true;
   var enqueued = false;
@@ -234,7 +236,7 @@ fun rx_return()
   return 0;
 }
 
-fun handle_irq()
+export fun handle_irq()
 {
   var 1 uart_sr = uart_read_sr();
   var 1 uart_cr = uart_read_cr();
@@ -243,7 +245,7 @@ fun handle_irq()
          ((uart_cr & AML_UART_TX_INT_EN) && (!(uart_sr & AML_UART_TX_FULL))))
   {
     // Handle RX if enabled and data available
-    if (!(uart_sr & AML_UART_RX_EMPTY)) {
+    if (RX_ENABLED && !(uart_sr & AML_UART_RX_EMPTY)) {
       rx_return();
     }
 
@@ -269,28 +271,27 @@ fun handle_irq()
 
 /////////////////// Main Entry Points
 
-fun main()
-{
-  return 0;
-}
-
 export fun notified(1 ch)
 {
   if (ch == IRQ_CH) {
     handle_irq();
     microkit_deferred_irq_ack(ch)
+    return 0;
   }
+
   if (ch == TX_CH) {
     tx_provide();
+    return 0;
   }
+
   if (ch == RX_CH) {
     var 1 cr = uart_read_cr();
     cr = cr | AML_UART_RX_INT_EN;
     uart_write_cr(cr);
+
     rx_return();
+    return 0;
   }
-  if ((ch != IRQ_CH) && (ch != RX_CH) && (ch != TX_CH)) {
-    @assert(0,0,0,0);
-  }
+
   return 0;
 }

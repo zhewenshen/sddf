@@ -160,6 +160,7 @@ void init(void)
     pnk_mem[1] = device_resources.irqs[0].id;
     pnk_mem[2] = config.rx.id;
     pnk_mem[3] = config.tx.id;
+    pnk_mem[1024] = config.rx_enabled;
 
     rx_queue_handle = (serial_queue_handle_t *) &pnk_mem[4];
     tx_queue_handle = (serial_queue_handle_t *) &pnk_mem[7];
@@ -169,7 +170,9 @@ void init(void)
     pnk_mem[0] = (volatile uintptr_t) uart_regs;
 
     // queue
-    serial_queue_init(rx_queue_handle, config.rx.queue.vaddr, config.rx.data.size, config.rx.data.vaddr);
+    if (config.rx_enabled) {
+        serial_queue_init(rx_queue_handle, config.rx.queue.vaddr, config.rx.data.size, config.rx.data.vaddr);
+    }
     serial_queue_init(tx_queue_handle, config.tx.queue.vaddr, config.tx.data.size, config.tx.data.vaddr);
 
     cml_main();

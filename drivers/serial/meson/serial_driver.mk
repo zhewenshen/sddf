@@ -16,11 +16,11 @@ DRIVER_PNK = ${UTIL}/util.🥞 \
 	${SERIAL_QUEUE_INCLUDE}/queue.🥞 \
 	${serial_DRIVER_DIR}/uart.🥞
 
-serial_pnk.o: serial_pnk.S
-	$(CC) -c -mcpu=$(CPU) -target aarch64-none-elf $< -o $@
-
 # serial_pnk.o: serial_pnk.S
-# 	$(CC) -c -mcpu=$(CPU) $< -o $@
+# 	$(CC) -c -mcpu=$(CPU) -target aarch64-none-elf $< -o $@
+
+serial_pnk.o: serial_pnk.S
+	$(CC) -c -mcpu=$(CPU) $< -o $@
 
 serial_pnk.S: $(DRIVER_PNK)
 	cat $(DRIVER_PNK) | cpp -P | $(CAKE_COMPILER) --target=arm8 --pancake --main_return=true > $@
