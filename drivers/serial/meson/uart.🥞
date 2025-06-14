@@ -168,7 +168,7 @@ export fun tx_provide()
   return 0;
 }
 
-export fun rx_return()
+fun rx_return()
 {
   var reprocess = true;
   var enqueued = false;
@@ -236,7 +236,7 @@ export fun rx_return()
   return 0;
 }
 
-export fun handle_irq()
+fun handle_irq()
 {
   var 1 uart_sr = uart_read_sr();
   var 1 uart_cr = uart_read_cr();
