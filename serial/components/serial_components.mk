@@ -7,7 +7,7 @@
 # it should be included into your project Makefile
 #
 # NOTES:
-#  Generates serial_virt_rx.elf serial_virt_tx.elf
+# Generates serial_virt_rx.elf serial_virt_tx.elf
 #
 
 SERIAL_IMAGES:= serial_virt_rx.elf serial_virt_tx.elf
@@ -17,6 +17,13 @@ CFLAGS_serial := -I ${SDDF}/include
 
 CHECK_SERIAL_FLAGS_MD5:=.serial_cflags-$(shell echo -- ${CFLAGS} ${CFLAGS_serial} | shasum | sed 's/ *-//')
 
+# Set up clang target flags if using clang
+ifeq ($(CC),clang)
+    CLANG_TARGET_FLAGS := -target aarch64-none-elf
+else
+    CLANG_TARGET_FLAGS :=
+endif
+
 ${CHECK_SERIAL_FLAGS_MD5}:
 	-rm -f .serial_cflags-*
 	touch $@
@@ -25,10 +32,10 @@ ${SERIAL_COMPONENT_OBJ}: |serial/components
 ${SERIAL_COMPONENT_OBJ}: ${CHECK_SERIAL_FLAGS_MD5}
 
 VIRT_RX_PNK = ${UTIL}/util.🥞 \
-			${SDDF}/serial/components/virt_rx.🥞
+	${SDDF}/serial/components/virt_rx.🥞
 
 VIRT_TX_PNK = ${UTIL}/util.🥞 \
-			${SDDF}/serial/components/virt_tx.🥞
+	${SDDF}/serial/components/virt_tx.🥞
 
 serial_virt_rx.elf: serial/components/virt_rx_pnk.o serial/components/serial_virt_rx.o pancake_ffi.o libsddf_util_debug.a
 	$(LD) $(LDFLAGS) $^ $(LIBS) -o $@
@@ -37,7 +44,7 @@ serial_virt_tx.elf: serial/components/virt_tx_pnk.o serial/components/serial_vir
 	$(LD) $(LDFLAGS) $^ $(LIBS) -o $@
 
 serial/components/virt_%_pnk.o: serial/components/virt_%_pnk.S
-	$(CC) -c -mcpu=$(CPU) $< -o $@
+	$(CC) $(CLANG_TARGET_FLAGS) -c -mcpu=$(CPU) $< -o $@
 
 serial/components/virt_rx_pnk.S: $(VIRT_RX_PNK) | serial/components
 	cat $(VIRT_RX_PNK) | cpp -P | $(CAKE_COMPILER) --target=arm8 --pancake --main_return=true > $@

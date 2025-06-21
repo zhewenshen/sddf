@@ -1,11 +1,96 @@
-#define CONFIG_DRIVER_ID pnk_mem(0)
+/*
+ * Copyright 2024, UNSW
+ * SPDX-License-Identifier: BSD-2-Clause
+ */
 
-export fun notified(1 ch) {
-    if (ch == CONFIG_DRIVER_ID) {
-        @rx_return(0,0,0,0);
-    } else {
-        @assert(0,0,0,0);
+#define CURRENT_MODE        pnk_mem(0)
+#define CURRENT_CLIENT      pnk_mem(1)
+#define NEXT_CLIENT_INDEX   pnk_mem(2)
+
+#define DRV_QUEUE_BASE      10
+#define CLI_QUEUE_BASE      20
+
+// Constants
+#define NORMAL 0
+#define DRIVER_CH 0
+
+fun rx_return() {
+    var transferred = false;
+    
+    var current_client = CURRENT_CLIENT;
+    
+    var drv_queue_ptr = pnk_mem(10);
+    var drv_capacity = pnk_mem(11);
+    var drv_data_ptr = pnk_mem(12);
+    
+    var cli_offset = CLI_QUEUE_BASE + current_client * 3;
+    var cli_queue_ptr = pnk_mem(cli_offset);
+    var cli_capacity = pnk_mem(cli_offset + 1);
+    var cli_data_ptr = pnk_mem(cli_offset + 2);
+    
+    var local_tail = 0;
+    !ld32 local_tail, cli_queue_ptr;
+    
+    while (true) {
+        var drv_head = 0;
+        !ld32 drv_head, drv_queue_ptr + 4;
+        var drv_tail = 0;
+        !ld32 drv_tail, drv_queue_ptr;
+        
+        if (drv_head == drv_tail) {
+            break;
+        }
+        
+        var drv_pos = drv_head & (drv_capacity - 1);
+        var c = 0;
+        !ld8 c, drv_data_ptr + drv_pos;
+        var new_drv_head = drv_head + 1;
+        !st32 drv_queue_ptr + 4, new_drv_head;
+        
+        var current_mode = CURRENT_MODE;
+        if (current_mode == NORMAL) {
+            var cli_head = 0;
+            !ld32 cli_head, cli_queue_ptr + 4;
+            var cli_used = local_tail - cli_head;
+            
+            if (cli_used < cli_capacity) {
+                var cli_pos = local_tail & (cli_capacity - 1);
+                !st8 cli_data_ptr + cli_pos, c;
+                local_tail = local_tail + 1;
+                transferred = true;
+            }
+        }
     }
 
+    !st32 cli_queue_ptr, local_tail;
+    
+    var drv_head = 0;
+    !ld32 drv_head, drv_queue_ptr + 4;
+    var drv_tail = 0;
+    !ld32 drv_tail, drv_queue_ptr;
+    var drv_used = drv_tail - drv_head;
+    
+    if (drv_used < drv_capacity) {
+        var producer_signalled = 0;
+        !ld32 producer_signalled, drv_queue_ptr + 8;
+        if (!producer_signalled) {
+            !st32 drv_queue_ptr + 8, 1;
+            microkit_notify(DRIVER_CH)
+        }
+    }
+    
+    if (transferred) {
+        var current_client = CURRENT_CLIENT;
+        var ch = current_client + 1; // CLIENT_OFFSET
+        microkit_notify(ch)
+    }
+    
+    return 0;
+}
+
+export fun notified(1 ch) {
+    if (ch == DRIVER_CH) {
+        rx_return();
+    }
     return 0;
 }
