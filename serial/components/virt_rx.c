@@ -24,6 +24,40 @@ uint32_t current_client = 0;
 char next_client[MAX_CLI_BASE_10 + 1];
 uint8_t next_client_index;
 
+static char cml_memory[1024*20];
+extern void *cml_heap;
+extern void *cml_stack;
+extern void *cml_stackend;
+
+extern void cml_main(void);
+
+void cml_exit(int arg) {
+    microkit_dbg_puts("ERROR! We should not be getting here\n");
+}
+
+void cml_err(int arg) {
+    if (arg == 3) {
+        microkit_dbg_puts("Memory not ready for entry. You may have not run the init code yet, or be trying to enter during an FFI call.\n");
+    }
+  cml_exit(arg);
+}
+
+/* Need to come up with a replacement for this clear cache function.
+    Might be worth testing just flushing the entire l1 cache,
+    but might cause issues with returning to this file
+*/
+void cml_clear() {
+    microkit_dbg_puts("Trying to clear cache\n");
+}
+
+void init_pancake_mem() {
+    unsigned long cml_heap_sz = 1024*10;
+    unsigned long cml_stack_sz = 1024*10;
+    cml_heap = cml_memory;
+    cml_stack = cml_heap + cml_heap_sz;
+    cml_stackend = cml_stack + cml_stack_sz;
+}
+
 void reset_state(void)
 {
     sddf_memset(next_client, '\0', MAX_CLI_BASE_10 + 1);
@@ -107,19 +141,24 @@ void init(void)
 {
     assert(serial_config_check_magic(&config));
 
+    init_pancake_mem();
+
+    uintptr_t *pnk_mem = (uintptr_t *) cml_heap;
+    pnk_mem[0] = config.driver.id;
+
     serial_queue_init(&rx_queue_handle_drv, config.driver.queue.vaddr, config.driver.data.size,
                       config.driver.data.vaddr);
     for (uint64_t i = 0; i < config.num_clients; i++) {
         serial_queue_init(&rx_queue_handle_cli[i], config.clients[i].queue.vaddr, config.clients[i].data.size,
                           config.clients[i].data.vaddr);
     }
+
+
+    cml_main();
 }
 
-void notified(sddf_channel ch)
-{
-    if (ch == config.driver.id) {
-        rx_return();
-    } else {
-        sddf_dprintf("VIRT_RX|LOG: received notification on unexpected channel: %u\n", ch);
-    }
+void ffirx_return(unsigned char *c, long clen, unsigned char *a, long alen) {
+    rx_return();
 }
+
+extern void notified(sddf_channel ch);

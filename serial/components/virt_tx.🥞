@@ -1,0 +1,11 @@
+#define CONFIG_DRIVER_ID pnk_mem(0)
+
+export fun notified(1 ch) {
+    if (ch == CONFIG_DRIVER_ID) {
+        @tx_return(0,0,0,0);
+    } else {
+        @tx_provide(0,ch,0,0);
+    }
+
+    return 0;
+}

@@ -24,20 +24,41 @@ ${CHECK_SERIAL_FLAGS_MD5}:
 ${SERIAL_COMPONENT_OBJ}: |serial/components
 ${SERIAL_COMPONENT_OBJ}: ${CHECK_SERIAL_FLAGS_MD5}
 
+VIRT_RX_PNK = ${UTIL}/util.🥞 \
+			${SDDF}/serial/components/virt_rx.🥞
+
+VIRT_TX_PNK = ${UTIL}/util.🥞 \
+			${SDDF}/serial/components/virt_tx.🥞
+
+serial_virt_rx.elf: serial/components/virt_rx_pnk.o serial/components/serial_virt_rx.o pancake_ffi.o libsddf_util_debug.a
+	$(LD) $(LDFLAGS) $^ $(LIBS) -o $@
+
+serial_virt_tx.elf: serial/components/virt_tx_pnk.o serial/components/serial_virt_tx.o pancake_ffi.o libsddf_util_debug.a
+	$(LD) $(LDFLAGS) $^ $(LIBS) -o $@
+
+serial/components/virt_%_pnk.o: serial/components/virt_%_pnk.S
+	$(CC) -c -mcpu=$(CPU) $< -o $@
+
+serial/components/virt_rx_pnk.S: $(VIRT_RX_PNK) | serial/components
+	cat $(VIRT_RX_PNK) | cpp -P | $(CAKE_COMPILER) --target=arm8 --pancake --main_return=true > $@
+
+serial/components/virt_tx_pnk.S: $(VIRT_TX_PNK) | serial/components
+	cat $(VIRT_TX_PNK) | cpp -P | $(CAKE_COMPILER) --target=arm8 --pancake --main_return=true > $@
+
 serial/components/serial_virt_%.o: ${SDDF}/serial/components/virt_%.c
 	${CC} ${CFLAGS} ${CFLAGS_serial} -o $@ -c $<
-
-%.elf: serial/components/%.o libsddf_util_debug.a
-	$(LD) $(LDFLAGS) $^ $(LIBS) -o $@
 
 serial/components:
 	mkdir -p $@
 
 clean::
 	rm -f serial_virt_[rt]x.[od] .serial_cflags-*
+	rm -f serial/components/virt_[rt]x_pnk.[So]
 
 clobber::
 	rm -f ${SERIAL_IMAGES}
 
 -include serial/components/serial_virt_rx.d
 -include serial/components/serial_virt_tx.d
+-include serial/components/virt_rx.d
+-include serial/components/virt_tx.d
