@@ -61,6 +61,7 @@ void reset_state(void)
     *current_mode = normal;
 }
 
+
 void init(void)
 {
     assert(serial_config_check_magic(&config));
@@ -89,6 +90,25 @@ void init(void)
     }
 
     cml_main();
+}
+
+void ffireset_state(unsigned char *c, long clen, unsigned char *a, long alen) {
+    reset_state();
+}
+
+
+void ffisimple_atoi(unsigned char *str, long str_len, unsigned char *result_addr, long alen) {
+    char temp_str[MAX_CLI_BASE_10 + 1];
+    long copy_len = (str_len > MAX_CLI_BASE_10) ? MAX_CLI_BASE_10 : str_len;
+    sddf_memcpy(temp_str, str, copy_len);
+    temp_str[copy_len] = '\0';
+    
+    int result = sddf_atoi(temp_str);
+    *((int*)result_addr) = result;
+}
+
+void ffidebug(unsigned char *str, long str_len, unsigned char *result_addr, long alen) {
+    sddf_dprintf("VIRT_RX|LOG: we are here... some val %ld\n", str_len);
 }
 
 extern void notified(sddf_channel ch);
