@@ -1,0 +1,105 @@
+#define IRQ_CH              pnk_mem(0)
+#define TIMER_REG_BASE      pnk_mem(1)
+#define TIMEOUT_BASE    10
+#define MAX_TIMEOUTS    6
+#define TIMER_A_EN      65536
+#define TIMER_A_MODE    4096
+#define TIMER_A_OFFSET  4
+#define TIMER_E_OFFSET  72
+#define TIMER_E_HI_OFFSET 76
+
+// #define TIMEOUT_INVALID 18446744073709551615  // UINT64_MAX - causes Pancake comparison bug???
+#define TIMEOUT_INVALID 9999999999999999
+
+fun get_ticks() {
+    var timer_base = TIMER_REG_BASE;
+    var timer_e_hi_addr = timer_base + TIMER_E_HI_OFFSET;
+    var timer_e_addr = timer_base + TIMER_E_OFFSET;
+    
+    var initial_high = 0;
+    !ld32 initial_high, timer_e_hi_addr;
+    
+    var low = 0;
+    !ld32 low, timer_e_addr;
+    
+    var high = 0;
+    !ld32 high, timer_e_hi_addr;
+    
+    if (high != initial_high) {
+        !ld32 low, timer_e_addr;
+    }
+    
+    var ticks = (high << 32) | low;
+    return ticks;
+}
+
+fun process_timeouts(1 curr_time) {
+    var i = 0;
+    while (i < MAX_TIMEOUTS) {
+        var timeout_addr = pnk_mem_ptr(TIMEOUT_BASE + i);
+        var timeout_val = 0;
+        !ldw timeout_val, timeout_addr;
+        
+        if (timeout_val <= curr_time) {
+            microkit_notify(i)
+            !stw timeout_addr, TIMEOUT_INVALID;
+        }
+        
+        i = i + 1;
+    }
+    
+    var next_timeout = TIMEOUT_INVALID;
+    i = 0;
+    while (i < MAX_TIMEOUTS) {
+        var timeout_addr = pnk_mem_ptr(TIMEOUT_BASE + i);
+        var timeout_val = 0;
+        !ldw timeout_val, timeout_addr;
+        
+        if (timeout_val < next_timeout) {
+            next_timeout = timeout_val;
+        }
+        
+        i = i + 1;
+    }
+    
+    if (next_timeout != TIMEOUT_INVALID) {
+        var timer_base = TIMER_REG_BASE;
+        
+        var mux_val = 0;
+        !ld32 mux_val, timer_base;
+        mux_val = mux_val & 4294963199;
+        !st32 timer_base, mux_val;
+        
+        var timer_a_addr = timer_base + TIMER_A_OFFSET;
+        var timeout_diff = next_timeout - curr_time;
+        !st32 timer_a_addr, timeout_diff;
+        
+        !ld32 mux_val, timer_base;
+        mux_val = mux_val | TIMER_A_EN;
+        !st32 timer_base, mux_val;
+    }
+    
+    return 0;
+}
+
+export fun notified(1 ch)
+{
+    var irq_ch = IRQ_CH;
+    if (ch != irq_ch) {
+        return 0;
+    }
+
+    microkit_deferred_irq_ack(ch)
+    
+    var timer_base = TIMER_REG_BASE;
+    var mux_val = 0;
+    !ld32 mux_val, timer_base;
+    mux_val = mux_val & 4294901759;
+    !st32 timer_base, mux_val;
+
+    var 1 curr_time = get_ticks();
+    
+    process_timeouts(curr_time);
+    
+    return 0;
+} 
