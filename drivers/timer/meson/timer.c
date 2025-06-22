@@ -13,6 +13,7 @@
 
 // Workaround for Pancake 64-bit comparison bug: use a large but safe value
 // instead of UINT64_MAX to represent "no timeout set"
+// #define TIMEOUT_INVALID_VALUE UINT64_MAX
 #define TIMEOUT_INVALID_VALUE 9999999999999999ULL
 
 #define TIMER_REG_START   0x70    // TIMER_MUX
