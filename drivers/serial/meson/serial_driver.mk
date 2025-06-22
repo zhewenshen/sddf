@@ -16,11 +16,16 @@ DRIVER_PNK = ${UTIL}/util.🥞 \
 	${SERIAL_QUEUE_INCLUDE}/queue.🥞 \
 	${serial_DRIVER_DIR}/uart.🥞
 
-serial_pnk.o: serial_pnk.S
-	$(CC) -c -mcpu=$(CPU) -target aarch64-none-elf $< -o $@
+CC_IS_CLANG := $(shell $(CC) --version 2>/dev/null | grep -q clang && echo yes || echo no)
 
-# serial_pnk.o: serial_pnk.S
-# 	$(CC) -c -mcpu=$(CPU) $< -o $@
+ifeq ($(CC_IS_CLANG),yes)
+    TARGET_FLAG := -target aarch64-none-elf
+else
+    TARGET_FLAG :=
+endif
+
+serial_pnk.o: serial_pnk.S
+	$(CC) -c -mcpu=$(CPU) $(TARGET_FLAG) $< -o $@
 
 serial_pnk.S: $(DRIVER_PNK)
 	cat $(DRIVER_PNK) | cpp -P | $(CAKE_COMPILER) --target=arm8 --pancake --main_return=true > $@
@@ -28,7 +33,7 @@ serial_pnk.S: $(DRIVER_PNK)
 serial_driver.elf: serial_pnk.o serial/meson/serial_driver.o pancake_ffi.o
 	$(LD) $(LDFLAGS) $^ $(LIBS) -o $@
 
-serial/meson/serial_driver.o: ${serial_DRIVER_DIR}/uart.c |serial/meson
+serial/meson/serial_driver.o: ${serial_DRIVER_DIR}/uart.c | serial/meson
 	$(CC) -c $(CFLAGS) -I${serial_DRIVER_DIR}/include -o $@ $<
 
 -include serial_driver.d

@@ -129,8 +129,6 @@ static void process_timeouts(uint64_t curr_time)
     }
 }
 
-
-
 seL4_MessageInfo_t protected(microkit_channel ch, microkit_msginfo msginfo)
 {
     switch (microkit_msginfo_get_label(msginfo)) {
@@ -193,6 +191,4 @@ void init(void)
     cml_main();
 }
 
-// Pancake will provide the notified function
 extern void notified(microkit_channel ch);
-
