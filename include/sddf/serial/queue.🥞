@@ -3,130 +3,170 @@
  * SPDX-License-Identifier: BSD-2-Clause
  */
 
-// Minimal serial queue functions needed for UART driver
-// Memory layout of serial_queue_t:
-// Offset 0: tail (uint32_t)
-// Offset 4: head (uint32_t) 
-// Offset 8: producer_signalled (uint32_t)
+/*
+ * Pancake Serial Queue Library
+ * 
+ * Shared queue functions for serial drivers and components.
+ * Provides common operations for managing serial queues in Pancake.
+ */
 
-fun serial_dequeue(1 queue_handle_ptr, 1 char_ptr)
+/////////////////// Serial Queue Helper Functions
+
+fun serial_queue_get_head(1 queue_ptr)
 {
-  var queue_ptr = 0;
   var head = 0;
+  !ld32 head, queue_ptr + 4;
+  return head;
+}
+
+fun serial_queue_get_tail(1 queue_ptr)
+{
   var tail = 0;
-  var capacity = 0;
-  var data_region = 0;
-  
-  !ldw queue_ptr, queue_handle_ptr;         // Load queue pointer
-  !ld32 head, queue_ptr + 4;                // Load current head
-  !ld32 tail, queue_ptr;                    // Load current tail
-  !ld32 capacity, queue_handle_ptr + @biw;  // Load capacity
-  !ldw data_region, queue_handle_ptr + @biw + 4; // Load data region
-  
-  // Check if empty (head == tail)
-  if (head == tail) {
-    return -1;
-  }
-  
-  // Calculate position and load character
-  var pos = head & (capacity - 1);
-  var char_addr = data_region + pos;
-  var character = 0;
-  !ld8 character, char_addr;               // Load character as byte
-  
-  // Store character at provided pointer
-  !st8 char_ptr, character;
-  
-  // Update head
-  var new_head = head + 1;
-  !st32 queue_ptr + 4, new_head;           // Update shared head
-  
+  !ld32 tail, queue_ptr;
+  return tail;
+}
+
+fun serial_queue_set_head(1 queue_ptr, 1 new_head)
+{
+  !st32 queue_ptr + 4, new_head;
   return 0;
 }
 
-fun serial_queue_empty(1 queue_handle_ptr, 1 local_head)
+fun serial_queue_set_tail(1 queue_ptr, 1 new_tail)
 {
-  var queue_ptr = 0;
-  var tail = 0;
-  
-  !ldw queue_ptr, queue_handle_ptr;        // Load queue pointer
-  !ld32 tail, queue_ptr;                   // Load shared tail
-  
-  var empty = (local_head == tail);
-  return empty;
+  !st32 queue_ptr, new_tail;
+  return 0;
 }
 
-fun serial_queue_full(1 queue_handle_ptr, 1 local_tail)
+fun serial_queue_is_empty(1 queue_ptr)
 {
-  var queue_ptr = 0;
-  var head = 0;
-  var capacity = 0;
-  
-  !ldw queue_ptr, queue_handle_ptr;        // Load queue pointer
-  !ld32 head, queue_ptr + 4;               // Load shared head
-  !ld32 capacity, queue_handle_ptr + @biw; // Load capacity
-  
-  var used = local_tail - head;
-  var full = (used == capacity);
-  return full;
+  var 1 head = serial_queue_get_head(queue_ptr);
+  var 1 tail = serial_queue_get_tail(queue_ptr);
+  return (head == tail);
 }
 
-fun serial_enqueue(1 queue_handle_ptr, 1 character)
+fun serial_queue_is_full(1 queue_ptr, 1 capacity)
 {
-  var queue_ptr = 0;
-  var tail = 0;
-  var head = 0;
-  var capacity = 0;
-  var data_region = 0;
-  
-  !ldw queue_ptr, queue_handle_ptr;         // Load queue pointer
-  !ld32 tail, queue_ptr;                    // Load current tail
-  !ld32 head, queue_ptr + 4;                // Load current head
-  !ld32 capacity, queue_handle_ptr + @biw;  // Load capacity
-  !ldw data_region, queue_handle_ptr + @biw + 4; // Load data region
-  
-  // Check if full
+  var 1 head = serial_queue_get_head(queue_ptr);
+  var 1 tail = serial_queue_get_tail(queue_ptr);
   var used = tail - head;
-  if (used == capacity) {
-    return -1;
-  }
-  
-  // Calculate position and store character
+  return (used == capacity);
+}
+
+fun serial_queue_get_used(1 queue_ptr)
+{
+  var 1 head = serial_queue_get_head(queue_ptr);
+  var 1 tail = serial_queue_get_tail(queue_ptr);
+  return (tail - head);
+}
+
+fun serial_queue_get_free(1 queue_ptr, 1 capacity)
+{
+  var 1 used = serial_queue_get_used(queue_ptr);
+  return (capacity - used);
+}
+
+fun serial_queue_enqueue_char(1 queue_ptr, 1 capacity, 1 data_ptr, 1 c)
+{
+  var 1 tail = serial_queue_get_tail(queue_ptr);
   var pos = tail & (capacity - 1);
-  var char_addr = data_region + pos;
-  !st8 char_addr, character;               // Store character as byte
+  var char_addr = data_ptr + pos;
+  !st8 char_addr, c;
   
-  // Update tail
   var new_tail = tail + 1;
-  !st32 queue_ptr, new_tail;               // Update shared tail
-  
+  serial_queue_set_tail(queue_ptr, new_tail);
   return 0;
 }
 
-fun serial_require_consumer_signal(1 queue_handle_ptr)
+fun serial_queue_dequeue_char(1 queue_ptr, 1 capacity, 1 data_ptr)
 {
-  var queue_ptr = 0;
-  var signalled = 0;
+  var 1 head = serial_queue_get_head(queue_ptr);
+  var pos = head & (capacity - 1);
+  var char_addr = data_ptr + pos;
+  var c = 0;
+  !ld8 c, char_addr;
   
-  !ldw queue_ptr, queue_handle_ptr;         // Load queue pointer
-  !ld32 signalled, queue_ptr + 8;           // Load producer_signalled
-  
-  var require = !signalled;                 // Return NOT signalled
-  return require;
+  var new_head = head + 1;
+  serial_queue_set_head(queue_ptr, new_head);
+  return c;
 }
 
-fun serial_cancel_consumer_signal(1 queue_handle_ptr)
+fun serial_queue_get_signal_state(1 queue_ptr)
 {
-  var queue_ptr = 0;
-  !ldw queue_ptr, queue_handle_ptr;         // Load queue pointer
-  !st32 queue_ptr + 8, 1;                   // Set producer_signalled = 1
+  var signal_state = 0;
+  !ld32 signal_state, queue_ptr + 8;
+  return signal_state;
+}
+
+fun serial_queue_set_signal_state(1 queue_ptr, 1 state)
+{
+  !st32 queue_ptr + 8, state;
   return 0;
 }
 
-fun serial_request_consumer_signal(1 queue_handle_ptr)
+fun serial_queue_request_signal(1 queue_ptr)
 {
-  var queue_ptr = 0;
-  !ldw queue_ptr, queue_handle_ptr;         // Load queue pointer
-  !st32 queue_ptr + 8, 0;                   // Set producer_signalled = 0
-  return 0;
+  return serial_queue_set_signal_state(queue_ptr, 0);
 }
+
+fun serial_queue_cancel_signal(1 queue_ptr)
+{
+  return serial_queue_set_signal_state(queue_ptr, 1);
+}
+
+fun serial_queue_require_signal(1 queue_ptr)
+{
+  var 1 signal_state = serial_queue_get_signal_state(queue_ptr);
+  return (!signal_state);
+}
+
+/////////////////// Client-specific Queue Functions (for Virtualization)
+
+fun serial_require_consumer_signal_client(1 client, 1 cli_queue_base) {
+    var cli_offset = cli_queue_base + client * 3;
+    var cli_queue_ptr = pnk_mem(cli_offset);
+    
+    var producer_signalled = 0;
+    !ld32 producer_signalled, cli_queue_ptr + 8;
+    
+    return !producer_signalled;
+}
+
+fun serial_cancel_consumer_signal_client(1 client, 1 cli_queue_base) {
+    var cli_offset = cli_queue_base + client * 3;
+    var cli_queue_ptr = pnk_mem(cli_offset);
+    
+    !st32 cli_queue_ptr + 8, 1;
+    return 0;
+}
+
+fun serial_request_consumer_signal_client(1 client, 1 cli_queue_base) {
+    var cli_offset = cli_queue_base + client * 3;
+    var cli_queue_ptr = pnk_mem(cli_offset);
+    
+    !st32 cli_queue_ptr + 8, 0;
+    return 0;
+}
+
+/////////////////// Queue Transfer Functions
+
+fun serial_queue_get_length(1 queue_ptr)
+{
+  var 1 head = serial_queue_get_head(queue_ptr);
+  var 1 tail = serial_queue_get_tail(queue_ptr);
+  return (tail - head);
+}
+
+fun serial_queue_transfer_byte(1 src_queue_ptr, 1 src_capacity, 1 src_data_ptr, 1 dst_queue_ptr, 1 dst_capacity, 1 dst_data_ptr)
+{
+  var 1 src_empty = serial_queue_is_empty(src_queue_ptr);
+  if (src_empty) { return 0; }
+  
+  var 1 dst_full = serial_queue_is_full(dst_queue_ptr, dst_capacity);
+  if (dst_full) { return 0; }
+  
+  var 1 byte_val = serial_queue_dequeue_char(src_queue_ptr, src_capacity, src_data_ptr);
+  serial_queue_enqueue_char(dst_queue_ptr, dst_capacity, dst_data_ptr, byte_val);
+  return 1;
+}
+

@@ -1,16 +1,16 @@
 #define CONFIG_DRIVER_ID pnk_mem(0)
 
 // Memory layout
-#define DRV_QUEUE_BASE      10  // Driver queue handle: indices 10-12
-#define CLI_QUEUE_BASE      20  // Client queue handles: indices 20+ (3 slots per client)
-#define CLI_CONN_ID_BASE    50  // Client connection IDs: indices 50+
-#define TX_PENDING_HEAD     60  // TX pending queue state
+#define DRV_QUEUE_BASE      10
+#define CLI_QUEUE_BASE      20
+#define CLI_CONN_ID_BASE    50
+#define TX_PENDING_HEAD     60
 #define TX_PENDING_TAIL     61
-#define TX_PENDING_QUEUE_BASE    70    // TX pending queue array: indices 70-134
-#define TX_PENDING_CLIENTS_BASE  140   // TX pending clients_pending array: indices 140-203
-#define COLOR_ENABLED           210    // Color configuration
-#define COLOR_START_BASE        220    // 6 colors × 5 bytes = indices 220-249
-#define COLOR_END_BASE          250    // 4 bytes for end color = indices 250-253
+#define TX_PENDING_QUEUE_BASE    70
+#define TX_PENDING_CLIENTS_BASE  140
+#define COLOR_ENABLED           210
+#define COLOR_START_BASE        220
+#define COLOR_END_BASE          250
 
 fun get_conn_id(1 client) {
     var conn_id_offset = CLI_CONN_ID_BASE + client;
@@ -30,21 +30,11 @@ fun get_tx_pending_length() {
 }
 
 fun serial_require_consumer_signal(1 client) {
-    var cli_offset = CLI_QUEUE_BASE + client * 3;
-    var cli_queue_ptr = pnk_mem(cli_offset);
-    
-    var producer_signalled = 0;
-    !ld32 producer_signalled, cli_queue_ptr + 8;
-    
-    return !producer_signalled;
+    return serial_require_consumer_signal_client(client, CLI_QUEUE_BASE);
 }
 
 fun serial_cancel_consumer_signal(1 client) {
-    var cli_offset = CLI_QUEUE_BASE + client * 3;
-    var cli_queue_ptr = pnk_mem(cli_offset);
-    
-    !st32 cli_queue_ptr + 8, 1;
-    return 0;
+    return serial_cancel_consumer_signal_client(client, CLI_QUEUE_BASE);
 }
 
 fun tx_pending_pop() {
@@ -101,16 +91,12 @@ fun process_tx_queue(1 client) {
     var drv_capacity = pnk_mem(DRV_QUEUE_BASE + 1);
     var drv_data_ptr = pnk_mem(DRV_QUEUE_BASE + 2);
     
-    var cli_head = 0;
-    !ld32 cli_head, cli_queue_ptr + 4;
-    var cli_tail = 0;
-    !ld32 cli_tail, cli_queue_ptr;
-    
-    if (cli_head == cli_tail) {
+    var 1 cli_empty = serial_queue_is_empty(cli_queue_ptr);
+    if (cli_empty) {
         return 0;
     }
     
-    var cli_length = cli_tail - cli_head;
+    var 1 cli_length = serial_queue_get_length(cli_queue_ptr);
     
     var color_enabled = pnk_mem(COLOR_ENABLED);
     var total_length = cli_length;
@@ -118,18 +104,16 @@ fun process_tx_queue(1 client) {
         total_length = cli_length + 5 + 4;
     }
     
-    var drv_head = 0;
-    !ld32 drv_head, drv_queue_ptr + 4;
-    var drv_tail = 0;
-    !ld32 drv_tail, drv_queue_ptr;
-    var drv_used = drv_tail - drv_head;
-    var drv_free = drv_capacity - drv_used;
+    var 1 drv_free = serial_queue_get_free(drv_queue_ptr, drv_capacity);
     
     if (total_length > drv_free) {
         tx_pending_push(client);
-        !st32 drv_queue_ptr + 8, 0;
+        serial_queue_request_signal(drv_queue_ptr);
         return 0;
     }
+    
+    var 1 cli_head = serial_queue_get_head(cli_queue_ptr);
+    var 1 drv_tail = serial_queue_get_tail(drv_queue_ptr);
     
     if (color_enabled) {
         // Transfer color start (5 bytes)
@@ -223,8 +207,8 @@ fun process_tx_queue(1 client) {
     }
     
     var new_cli_head = cli_head + cli_length;
-    !st32 cli_queue_ptr + 4, new_cli_head;
-    !st32 drv_queue_ptr, drv_tail;
+    serial_queue_set_head(cli_queue_ptr, new_cli_head);
+    serial_queue_set_tail(drv_queue_ptr, drv_tail);
     
     return 1;
 }

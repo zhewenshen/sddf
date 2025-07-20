@@ -10,14 +10,14 @@
 
 /* Mirror `serial_queue_handle_t` struct */
 /* RX Queue Handle */
-#define SERIAL_RX_QUEUE     pnk_mem(4)   // queue pointer
-#define SERIAL_RX_CAPACITY  pnk_mem(5)   // capacity
-#define SERIAL_RX_DATA      pnk_mem(6)   // data_region pointer
+#define SERIAL_RX_QUEUE     pnk_mem(4)
+#define SERIAL_RX_CAPACITY  pnk_mem(5)
+#define SERIAL_RX_DATA      pnk_mem(6)
 
 /* TX Queue Handle */
-#define SERIAL_TX_QUEUE     pnk_mem(7)   // queue pointer  
-#define SERIAL_TX_CAPACITY  pnk_mem(8)   // capacity
-#define SERIAL_TX_DATA      pnk_mem(9)   // data_region pointer
+#define SERIAL_TX_QUEUE     pnk_mem(7)
+#define SERIAL_TX_CAPACITY  pnk_mem(8)
+#define SERIAL_TX_DATA      pnk_mem(9)
 
 /* UART register base */
 #define UART_REG_BASE       pnk_mem(0)
@@ -48,8 +48,8 @@
 #define AML_UART_TX_FIFO_WERR (1 << 18)
 #define UART_INTR_ABNORMAL  (AML_UART_PARITY_ERR | AML_UART_FRAME_ERR | AML_UART_TX_FIFO_WERR)
 
-#define AML_UART_RX_INT_EN_MASK  4160749567  // ~(1 << 27) = 0xF7FFFFFF
-#define AML_UART_TX_INT_EN_MASK  4026531839  // ~(1 << 28) = 0xEFFFFFFF
+#define AML_UART_RX_INT_EN_MASK  4160749567
+#define AML_UART_TX_INT_EN_MASK  4026531839
 
 /////////////////// Hardware Helper Functions
 
@@ -91,21 +91,7 @@ fun uart_write_char(1 c)
   return 0;
 }
 
-/////////////////// Serial Queue Helper Functions
-
-fun serial_queue_get_head(1 queue_ptr)
-{
-  var head = 0;
-  !ld32 head, queue_ptr + 4;
-  return head;
-}
-
-fun serial_queue_get_tail(1 queue_ptr)
-{
-  var tail = 0;
-  !ld32 tail, queue_ptr;
-  return tail;
-}
+/////////////////// Serial Queue Functions (from shared library)
 
 /////////////////// Main Driver Functions
 
@@ -122,32 +108,21 @@ export fun tx_provide()
     if (sr & AML_UART_TX_FULL) { break; }
 
     // Try to dequeue a character
-    var 1 head = serial_queue_get_head(tx_queue);
-    var 1 tail = serial_queue_get_tail(tx_queue);
-    if (head == tail) { break; } // Queue empty
+    var 1 is_empty = serial_queue_is_empty(tx_queue);
+    if (is_empty) { break; } // Queue empty
 
-    // Calculate position and read character
-    var pos = head & (tx_capacity - 1);
-    var char_addr = tx_data + pos;
-    var c = 0;
-    !ld8 c, char_addr;
-
-    // Send character to UART
+    // Dequeue and send character to UART
+    var 1 c = serial_queue_dequeue_char(tx_queue, tx_capacity, tx_data);
     uart_write_char(c);
     transferred = true;
-
-    // Update head
-    var new_head = head + 1;
-    !st32 tx_queue + 4, new_head;
   }
 
   // Handle TX interrupt enable/disable
   var 1 sr = uart_read_sr();
   var 1 cr = uart_read_cr();
-  var 1 head = serial_queue_get_head(tx_queue);
-  var 1 tail = serial_queue_get_tail(tx_queue);
+  var 1 is_empty = serial_queue_is_empty(tx_queue);
   
-  if ((sr & AML_UART_TX_FULL) && (head != tail)) {
+  if ((sr & AML_UART_TX_FULL) && (!is_empty)) {
     // TX FIFO full and data remaining - enable interrupt
     cr = cr | AML_UART_TX_INT_EN;
     uart_write_cr(cr);
@@ -158,10 +133,9 @@ export fun tx_provide()
   }
 
   // Check if need to signal consumer
-  var signalled = 0;
-  !ld32 signalled, tx_queue + 8;
-  if (transferred && (!signalled)) {
-    !st32 tx_queue + 8, 1; // Cancel signal
+  var 1 requires_signal = serial_queue_require_signal(tx_queue);
+  if (transferred && requires_signal) {
+    serial_queue_cancel_signal(tx_queue);
     microkit_notify(TX_CH)
   }
 
@@ -184,44 +158,32 @@ fun rx_return()
       var 1 sr = uart_read_sr();
       if (sr & AML_UART_RX_EMPTY) { break; }
 
-      var 1 head = serial_queue_get_head(rx_queue);
-      var 1 tail = serial_queue_get_tail(rx_queue);
-      var used = tail - head;
-      if (used == rx_capacity) { break; } // Queue full
+      var 1 is_full = serial_queue_is_full(rx_queue, rx_capacity);
+      if (is_full) { break; } // Queue full
 
-      // Read character from UART
+      // Read character from UART and enqueue
       var 1 c = uart_read_char();
-
-      // Enqueue character
-      var pos = tail & (rx_capacity - 1);
-      var char_addr = rx_data + pos;
-      !st8 char_addr, c;
-
-      // Update tail
-      var new_tail = tail + 1;
-      !st32 rx_queue, new_tail;
+      serial_queue_enqueue_char(rx_queue, rx_capacity, rx_data, c);
       enqueued = true;
     }
 
     // Handle interrupt control when queue full
     var 1 sr = uart_read_sr();
-    var 1 head = serial_queue_get_head(rx_queue);
-    var 1 tail = serial_queue_get_tail(rx_queue);
-    var used = tail - head;
+    var 1 is_full = serial_queue_is_full(rx_queue, rx_capacity);
     
-    if ((!(sr & AML_UART_RX_EMPTY)) && (used == rx_capacity)) {
+    if ((!(sr & AML_UART_RX_EMPTY)) && is_full) {
       // UART has data but queue full - disable RX interrupt and request signal
       var 1 cr = uart_read_cr();
       cr = cr & AML_UART_RX_INT_EN_MASK;
       uart_write_cr(cr);
-      !st32 rx_queue + 8, 0; // Request signal
+      serial_queue_request_signal(rx_queue);
     }
     
     reprocess = false;
 
     // Check if we can re-enable interrupts
-    if ((!(sr & AML_UART_RX_EMPTY)) && (used != rx_capacity)) {
-      !st32 rx_queue + 8, 1; // Cancel signal
+    if ((!(sr & AML_UART_RX_EMPTY)) && (!is_full)) {
+      serial_queue_cancel_signal(rx_queue);
       var 1 cr = uart_read_cr();
       cr = cr | AML_UART_RX_INT_EN;
       uart_write_cr(cr);

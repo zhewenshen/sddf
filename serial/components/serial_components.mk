@@ -12,6 +12,7 @@
 
 SERIAL_IMAGES:= serial_virt_rx.elf serial_virt_tx.elf
 SERIAL_COMPONENT_OBJ := $(addprefix serial/components/, serial_virt_tx.o serial_virt_rx.o)
+PANCAKE_VIRT := 1
 
 CFLAGS_serial := -I ${SDDF}/include
 
@@ -31,10 +32,14 @@ ${CHECK_SERIAL_FLAGS_MD5}:
 ${SERIAL_COMPONENT_OBJ}: |serial/components
 ${SERIAL_COMPONENT_OBJ}: ${CHECK_SERIAL_FLAGS_MD5}
 
+SERIAL_QUEUE_INCLUDE := ${SDDF}/include/sddf/serial
+
 VIRT_RX_PNK = ${UTIL}/util.🥞 \
+	${SERIAL_QUEUE_INCLUDE}/queue.🥞 \
 	${SDDF}/serial/components/virt_rx.🥞
 
 VIRT_TX_PNK = ${UTIL}/util.🥞 \
+	${SERIAL_QUEUE_INCLUDE}/queue.🥞 \
 	${SDDF}/serial/components/virt_tx.🥞
 
 serial_virt_rx.elf: serial/components/virt_rx_pnk.o serial/components/serial_virt_rx.o pancake_ffi.o libsddf_util_debug.a

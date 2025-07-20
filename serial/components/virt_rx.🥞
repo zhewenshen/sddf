@@ -36,24 +36,15 @@ fun rx_return() {
     var cli_capacity = pnk_mem(cli_offset + 1);
     var cli_data_ptr = pnk_mem(cli_offset + 2);
     
-    var local_tail = 0;
-    !ld32 local_tail, cli_queue_ptr;
+    var 1 local_tail = serial_queue_get_tail(cli_queue_ptr);
     
     while (true) {
-        var drv_head = 0;
-        !ld32 drv_head, drv_queue_ptr + 4;
-        var drv_tail = 0;
-        !ld32 drv_tail, drv_queue_ptr;
-        
-        if (drv_head == drv_tail) {
+        var 1 drv_empty = serial_queue_is_empty(drv_queue_ptr);
+        if (drv_empty) {
             break;
         }
         
-        var drv_pos = drv_head & (drv_capacity - 1);
-        var c = 0;
-        !ld8 c, drv_data_ptr + drv_pos;
-        var new_drv_head = drv_head + 1;
-        !st32 drv_queue_ptr + 4, new_drv_head;
+        var 1 c = serial_queue_dequeue_char(drv_queue_ptr, drv_capacity, drv_data_ptr);
         
         var current_mode = CURRENT_MODE;
         if (current_mode == NORMAL) {
@@ -61,8 +52,7 @@ fun rx_return() {
                 var addr = @base + 0 * @biw;
                 !stw addr, SWITCHED;
             }
-            var cli_head = 0;
-            !ld32 cli_head, cli_queue_ptr + 4;
+            var 1 cli_head = serial_queue_get_head(cli_queue_ptr);
             var cli_used = local_tail - cli_head;
             
             if (cli_used < cli_capacity) {
@@ -86,8 +76,7 @@ fun rx_return() {
                 !stw addr, NUMBER;
             } else {
                 if (c == SERIAL_SWITCH_CHAR) {
-                    var cli_head = 0;
-                    !ld32 cli_head, cli_queue_ptr + 4;
+                    var 1 cli_head = serial_queue_get_head(cli_queue_ptr);
                     var cli_used = local_tail - cli_head;
                     if (cli_used < cli_capacity) {
                         var cli_pos = local_tail & (cli_capacity - 1);
@@ -111,7 +100,7 @@ fun rx_return() {
                 
                 if (input_number >= 0 && input_number < 2) {
                     if (transferred) {
-                        !st32 cli_queue_ptr, local_tail;
+                        serial_queue_set_tail(cli_queue_ptr, local_tail);
                         var ch = current_client + 1;
                         microkit_notify(ch)
                     }
@@ -125,7 +114,7 @@ fun rx_return() {
                     cli_capacity = pnk_mem(cli_offset + 1);
                     cli_data_ptr = pnk_mem(cli_offset + 2);
                     
-                    !ld32 local_tail, cli_queue_ptr;
+                    local_tail = serial_queue_get_tail(cli_queue_ptr);
                     transferred = false;
                 }
                 @reset_state(0, 0, 0, 0);
@@ -150,19 +139,14 @@ fun rx_return() {
         }
     }
 
-    !st32 cli_queue_ptr, local_tail;
+    serial_queue_set_tail(cli_queue_ptr, local_tail);
     
-    var drv_head = 0;
-    !ld32 drv_head, drv_queue_ptr + 4;
-    var drv_tail = 0;
-    !ld32 drv_tail, drv_queue_ptr;
-    var drv_used = drv_tail - drv_head;
+    var 1 drv_used = serial_queue_get_used(drv_queue_ptr);
     
     if (drv_used < drv_capacity) {
-        var producer_signalled = 0;
-        !ld32 producer_signalled, drv_queue_ptr + 8;
-        if (!producer_signalled) {
-            !st32 drv_queue_ptr + 8, 1;
+        var 1 signal_required = serial_queue_require_signal(drv_queue_ptr);
+        if (signal_required) {
+            serial_queue_cancel_signal(drv_queue_ptr);
             microkit_notify(DRIVER_CH)
         }
     }
