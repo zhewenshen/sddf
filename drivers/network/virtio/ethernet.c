@@ -332,6 +332,7 @@ static void handle_irq()
 
 static void eth_setup(void)
 {
+    // Do MMIO device init (section 4.2.3.1)
     if (!virtio_mmio_check_magic(regs)) {
         LOG_DRIVER_ERR("invalid virtIO magic value!\n");
         assert(false);
@@ -349,10 +350,14 @@ static void eth_setup(void)
 
     LOG_DRIVER("version: 0x%x\n", virtio_mmio_version(regs));
 
+    // Do normal device initialisation (section 3.2)
 
+    // First reset the device
     regs->Status = 0;
 
+    // Set the ACKNOWLEDGE bit to say we have noticed the device
     regs->Status = VIRTIO_DEVICE_STATUS_ACKNOWLEDGE;
+    // Set the DRIVER bit to say we know how to drive the device
     regs->Status = VIRTIO_DEVICE_STATUS_DRIVER;
 
 #ifdef DEBUG_DRIVER
@@ -379,6 +384,7 @@ static void eth_setup(void)
     virtio_net_print_config(config);
 #endif
 
+    // Setup the virtqueues
 
     size_t rx_desc_off = 0;
     size_t rx_avail_off = ALIGN(rx_desc_off + (16 * RX_COUNT), 2);
@@ -416,7 +422,12 @@ static void eth_setup(void)
 
     assert(virtq_size + tx_headers_size + rx_headers_size <= HW_RING_SIZE);
 
+#ifndef PANCAKE_DRIVER
+    rx_provide();
+    tx_provide();
+#endif
 
+    // Setup RX queue first
     assert(regs->QueueNumMax >= RX_COUNT);
     regs->QueueSel = VIRTIO_NET_RX_QUEUE;
     regs->QueueNum = RX_COUNT;
@@ -428,6 +439,7 @@ static void eth_setup(void)
     regs->QueueDeviceHigh = (hw_ring_buffer_paddr + rx_used_off) >> 32;
     regs->QueueReady = 1;
 
+    // Setup TX queue
     assert(regs->QueueNumMax >= TX_COUNT);
     regs->QueueSel = VIRTIO_NET_TX_QUEUE;
     regs->QueueNum = TX_COUNT;
@@ -439,6 +451,7 @@ static void eth_setup(void)
     regs->QueueDeviceHigh = (hw_ring_buffer_paddr + tx_used_off) >> 32;
     regs->QueueReady = 1;
 
+    // Set the MAC address
     config->mac[0] = 0x52;
     config->mac[1] = 0x54;
     config->mac[2] = 0x01;
@@ -446,6 +459,7 @@ static void eth_setup(void)
     config->mac[4] = 0x00;
     config->mac[5] = 0x07;
 
+    // Set the DRIVER_OK status bit
     regs->Status = VIRTIO_DEVICE_STATUS_DRIVER_OK;
     regs->InterruptACK = VIRTIO_MMIO_IRQ_VQUEUE;
 }
@@ -470,7 +484,7 @@ void init(void)
                    config.virt_tx.num_buffers);
 
 #ifdef PANCAKE_DRIVER
-    pancake_mem();
+    init_pancake_mem();
 
     /* init_pancake_data */
     uintptr_t *pnk_mem = (uintptr_t *) cml_heap;
