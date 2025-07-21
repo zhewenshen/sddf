@@ -516,7 +516,7 @@ void init(void)
     pnk_mem[11] = (uintptr_t) &rx_virtq;
     pnk_mem[12] = (uintptr_t) &tx_virtq;
     pnk_mem[13] = (uintptr_t) &rx_last_seen_used;
-    pnk_mem[14] = (uintptr_t) &tx_last_seen_used;    
+    pnk_mem[14] = (uintptr_t) &tx_last_seen_used;
     pnk_mem[15] = (uintptr_t) &rx_last_desc_idx;
     pnk_mem[16] = (uintptr_t) &tx_last_desc_idx;
     
@@ -524,7 +524,7 @@ void init(void)
     pnk_mem[18] = (uintptr_t) &tx_ialloc_desc;
     pnk_mem[19] = virtio_net_rx_headers_paddr;
     pnk_mem[20] = virtio_net_tx_headers_paddr;
-    pnk_mem[21] = 0;
+    pnk_mem[21] = 0; // FIXME: what is this slot for?
     
     pnk_mem[22] = hw_ring_buffer_vaddr;
     pnk_mem[23] = hw_ring_buffer_paddr;
