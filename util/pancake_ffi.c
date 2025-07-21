@@ -3,6 +3,7 @@
 #include <sddf/util/fence.h>
 #include <sddf/util/util.h>
 #include <sddf/util/cache.h>
+#include <sddf/util/printf.h>
 
 void ffiTHREAD_MEMORY_RELEASE(unsigned char *c, long clen, unsigned char *a, long alen) {
     THREAD_MEMORY_RELEASE();
@@ -14,6 +15,7 @@ void ffiTHREAD_MEMORY_ACQUIRE(unsigned char *c, long clen, unsigned char *a, lon
 
 void ffiassert(unsigned char *c, long clen, unsigned char *a, long alen) {
     // clen is the condition
+    sddf_dprintf("ASSERT: c=%p clen=%ld a=%p alen=%ld\n", c, clen, a, alen);
     assert(clen);
 }
 

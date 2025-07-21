@@ -80,6 +80,184 @@ uint32_t tx_descriptors[TX_COUNT];
 int rx_last_desc_idx = 0;
 int tx_last_desc_idx = 0;
 
+#ifdef PANCAKE_DRIVER
+static char cml_memory[1024*20];
+extern void *cml_heap;
+extern void *cml_stack;
+extern void *cml_stackend;
+
+extern void cml_main(void);
+
+void cml_exit(int arg) {
+    LOG_DRIVER_ERR("ERROR! We should not be getting here\n");
+}
+
+void cml_err(int arg) {
+    if (arg == 3) {
+        LOG_DRIVER_ERR("Memory not ready for entry. You may have not run the init code yet, or be trying to enter during an FFI call.\n");
+    }
+  cml_exit(arg);
+}
+
+void cml_clear() {
+    LOG_DRIVER("Trying to clear cache\n");
+}
+
+void init_pancake_mem() {
+    unsigned long cml_heap_sz = 1024*10;
+    unsigned long cml_stack_sz = 1024*10;
+    cml_heap = cml_memory;
+    cml_stack = cml_heap + cml_heap_sz;
+    cml_stackend = cml_stack + cml_stack_sz;
+}
+
+// FFI helper functions for complex VirtIO operations
+int ffi_virtio_rx_setup_buffer(uintptr_t io_addr) {
+    // Allocate descriptors and set up virtio RX buffer
+    uint32_t hdr_desc_idx = -1;
+    int err = ialloc_alloc(&rx_ialloc_desc, &hdr_desc_idx);
+    if (err || hdr_desc_idx == -1) return 0;
+    
+    uint32_t pkt_desc_idx = -1;
+    err = ialloc_alloc(&rx_ialloc_desc, &pkt_desc_idx);
+    if (err || pkt_desc_idx == -1) {
+        ialloc_free(&rx_ialloc_desc, hdr_desc_idx);
+        return 0;
+    }
+    
+    assert(hdr_desc_idx < rx_virtq.num);
+    assert(pkt_desc_idx < rx_virtq.num);
+    
+    // Set up header descriptor
+    rx_virtq.desc[hdr_desc_idx].addr = virtio_net_rx_headers_paddr + (hdr_desc_idx * sizeof(virtio_net_hdr_t));
+    rx_virtq.desc[hdr_desc_idx].len = sizeof(virtio_net_hdr_t);
+    rx_virtq.desc[hdr_desc_idx].next = pkt_desc_idx;
+    rx_virtq.desc[hdr_desc_idx].flags = VIRTQ_DESC_F_NEXT | VIRTQ_DESC_F_WRITE;
+    
+    // Set up packet descriptor  
+    rx_virtq.desc[pkt_desc_idx].addr = io_addr;
+    rx_virtq.desc[pkt_desc_idx].len = NET_BUFFER_SIZE;
+    rx_virtq.desc[pkt_desc_idx].flags = VIRTQ_DESC_F_WRITE;
+    
+    // Add to available ring
+    rx_virtq.avail->ring[rx_virtq.avail->idx % rx_virtq.num] = hdr_desc_idx;
+    rx_virtq.avail->idx++;
+    rx_last_desc_idx += 2;
+    
+    return 1;
+}
+
+int ffi_virtio_tx_setup_buffer(uintptr_t io_addr, uint32_t len) {
+    // Allocate descriptors for TX
+    uint32_t hdr_desc_idx = -1;
+    int err = ialloc_alloc(&tx_ialloc_desc, &hdr_desc_idx);
+    if (err || hdr_desc_idx == -1) return 0;
+    
+    uint32_t pkt_desc_idx = -1;
+    err = ialloc_alloc(&tx_ialloc_desc, &pkt_desc_idx);
+    if (err || pkt_desc_idx == -1) {
+        ialloc_free(&tx_ialloc_desc, hdr_desc_idx);
+        return 0;
+    }
+    
+    assert(hdr_desc_idx < tx_virtq.num);
+    assert(pkt_desc_idx < tx_virtq.num);
+    
+    // Zero out the TX header
+    virtio_net_tx_headers[hdr_desc_idx] = (virtio_net_hdr_t){ 0 };
+    
+    // Set up header descriptor
+    tx_virtq.desc[hdr_desc_idx].addr = virtio_net_tx_headers_paddr + (hdr_desc_idx * sizeof(virtio_net_hdr_t));
+    tx_virtq.desc[hdr_desc_idx].len = sizeof(virtio_net_hdr_t);
+    tx_virtq.desc[hdr_desc_idx].next = pkt_desc_idx;
+    tx_virtq.desc[hdr_desc_idx].flags = VIRTQ_DESC_F_NEXT;
+    
+    // Set up packet descriptor
+    tx_virtq.desc[pkt_desc_idx].addr = io_addr;
+    tx_virtq.desc[pkt_desc_idx].len = len;
+    tx_virtq.desc[pkt_desc_idx].flags = 0;
+    
+    // Add to available ring
+    tx_virtq.avail->ring[tx_virtq.avail->idx % tx_virtq.num] = hdr_desc_idx;
+    tx_virtq.avail->idx++;
+    tx_last_desc_idx += 2;
+    
+    return 1;
+}
+
+// Temporary buffer for returning multiple buffers to Pancake
+static net_buff_desc_t rx_extract_buffers[64];
+static net_buff_desc_t tx_extract_buffers[64];
+
+typedef struct {
+    uint32_t count;
+    uintptr_t buffers_ptr;
+} buffer_extract_result_t;
+
+buffer_extract_result_t ffi_virtio_rx_extract_buffers(void) {
+    uint16_t packets_transferred = 0;
+    uint16_t i = rx_last_seen_used;
+    uint16_t curr_idx = rx_virtq.used->idx;
+    
+    while (i != curr_idx && packets_transferred < 64) {
+        struct virtq_used_elem hdr_used = rx_virtq.used->ring[i % rx_virtq.num];
+        assert(rx_virtq.desc[hdr_used.id].flags & VIRTQ_DESC_F_NEXT);
+        
+        struct virtq_desc pkt = rx_virtq.desc[rx_virtq.desc[hdr_used.id].next % rx_virtq.num];
+        uint64_t addr = pkt.addr;
+        uint32_t len = pkt.len;
+        assert(!(pkt.flags & VIRTQ_DESC_F_NEXT));
+        
+        rx_extract_buffers[packets_transferred] = (net_buff_desc_t){ addr, len };
+        
+        // Free the descriptors
+        int err = ialloc_free(&rx_ialloc_desc, hdr_used.id);
+        assert(!err);
+        err = ialloc_free(&rx_ialloc_desc, rx_virtq.desc[hdr_used.id].next);
+        assert(!err);
+        
+        rx_last_desc_idx -= 2;
+        assert(rx_last_desc_idx >= 0);
+        i++;
+        packets_transferred++;
+    }
+    rx_last_seen_used += packets_transferred;
+    
+    return (buffer_extract_result_t){ packets_transferred, (uintptr_t)rx_extract_buffers };
+}
+
+buffer_extract_result_t ffi_virtio_tx_extract_buffers(void) {
+    uint16_t packets_transferred = 0;
+    uint16_t i = tx_last_seen_used;
+    uint16_t curr_idx = tx_virtq.used->idx;
+    
+    while (i != curr_idx && packets_transferred < 64) {
+        struct virtq_used_elem hdr_used = tx_virtq.used->ring[i % tx_virtq.num];
+        assert(rx_virtq.desc[hdr_used.id].flags & VIRTQ_DESC_F_NEXT);
+        
+        struct virtq_desc pkt = tx_virtq.desc[tx_virtq.desc[hdr_used.id].next % tx_virtq.num];
+        uint64_t addr = pkt.addr;
+        
+        tx_extract_buffers[packets_transferred] = (net_buff_desc_t){ addr, 0 };
+        
+        // Free the descriptors  
+        int err = ialloc_free(&tx_ialloc_desc, hdr_used.id);
+        assert(!err);
+        err = ialloc_free(&tx_ialloc_desc, tx_virtq.desc[hdr_used.id].next);
+        assert(!err);
+        
+        tx_last_desc_idx -= 2;
+        assert(tx_last_desc_idx >= 0);
+        i++;
+        packets_transferred++;
+    }
+    tx_last_seen_used += packets_transferred;
+    
+    return (buffer_extract_result_t){ packets_transferred, (uintptr_t)tx_extract_buffers };
+}
+#endif
+
+#ifndef PANCAKE_DRIVER
 static inline bool virtio_avail_full_rx(struct virtq *virtq)
 {
     return rx_last_desc_idx >= rx_virtq.num;
@@ -305,6 +483,7 @@ static void handle_irq()
         LOG_DRIVER_ERR("ETH|ERROR: unexpected change in configuration %u\n", irq_status);
     }
 }
+#endif
 
 static void eth_setup(void)
 {
@@ -398,8 +577,10 @@ static void eth_setup(void)
 
     assert(virtq_size + tx_headers_size + rx_headers_size <= HW_RING_SIZE);
 
+#ifndef PANCAKE_DRIVER
     rx_provide();
     tx_provide();
+#endif
 
     // Setup RX queue first
     assert(regs->QueueNumMax >= RX_COUNT);
@@ -457,11 +638,70 @@ void init(void)
     net_queue_init(&tx_queue, config.virt_tx.free_queue.vaddr, config.virt_tx.active_queue.vaddr,
                    config.virt_tx.num_buffers);
 
-    eth_setup();
+#ifdef PANCAKE_DRIVER
+    init_pancake_mem();
 
-    sddf_irq_ack(device_resources.irqs[0].id);
+    /* init_pancake_data */
+    uintptr_t *pnk_mem = (uintptr_t *) cml_heap;
+
+    /* Store constant info in Pancake memory */
+    pnk_mem[0] = (uintptr_t) regs;                      // virtio_mmio_regs_t * (VIRTIO_REGS_BASE)
+    pnk_mem[1] = device_resources.irqs[0].id;
+    pnk_mem[2] = config.virt_rx.id;
+    pnk_mem[3] = config.virt_tx.id;
+
+    /* Network queue handles */
+    pnk_mem[4] = (uintptr_t) rx_queue.free;
+    pnk_mem[5] = (uintptr_t) rx_queue.active;
+    pnk_mem[6] = rx_queue.capacity;
+    pnk_mem[7] = (uintptr_t) tx_queue.free;
+    pnk_mem[8] = (uintptr_t) tx_queue.active;
+    pnk_mem[9] = tx_queue.capacity;
+
+    /* VirtIO specific state */
+    pnk_mem[10] = (uintptr_t) regs;                     // virtio_mmio_regs_t * (duplicate for compatibility)
+    pnk_mem[11] = (uintptr_t) &rx_virtq;                // struct virtq *
+    pnk_mem[12] = (uintptr_t) &tx_virtq;                // struct virtq *
+    pnk_mem[13] = (uintptr_t) &rx_last_seen_used;       // uint16_t *
+    pnk_mem[14] = (uintptr_t) &tx_last_seen_used;       // uint16_t *
+    // Debug: Show initial descriptor counts
+    sddf_dprintf("DEBUG: rx_last_desc_idx=%d, tx_last_desc_idx=%d\n", rx_last_desc_idx, tx_last_desc_idx);
+    
+    pnk_mem[15] = (uintptr_t) &rx_last_desc_idx;        // int *
+    pnk_mem[16] = (uintptr_t) &tx_last_desc_idx;        // int *
+    
+    // CRITICAL: Reset descriptor indices to 0 before Pancake takes over
+    rx_last_desc_idx = 0;
+    tx_last_desc_idx = 0;
+    pnk_mem[17] = (uintptr_t) &rx_ialloc_desc;          // ialloc_t *
+    pnk_mem[18] = (uintptr_t) &tx_ialloc_desc;          // ialloc_t *
+    pnk_mem[19] = virtio_net_rx_headers_paddr;          // paddr for RX headers
+    pnk_mem[20] = virtio_net_tx_headers_paddr;          // paddr for TX headers
+    pnk_mem[21] = 0;                                    // initialized_buffers = false
+    
+    // Hardware buffer addresses for VirtIO setup
+    pnk_mem[22] = hw_ring_buffer_vaddr;
+    pnk_mem[23] = hw_ring_buffer_paddr;
+    pnk_mem[24] = 0;                                    // virtio_net_tx_headers_vaddr (calculated in main)
+
+    cml_main();
+    
+    // Debug: About to populate initial buffers from C context
+    sddf_dprintf("DEBUG: Initial buffer population from C\n");
+    
+    // After Pancake device setup, populate initial buffers from C context
+    extern void rx_provide(void);
+    extern void tx_provide(void);
+    rx_provide();
+    tx_provide();
+#else
+    eth_setup();
+#endif
 }
 
+#ifdef PANCAKE_DRIVER
+extern void notified(sddf_channel ch);
+#else
 void notified(sddf_channel ch)
 {
     if (ch == device_resources.irqs[0].id) {
@@ -475,3 +715,4 @@ void notified(sddf_channel ch)
         LOG_DRIVER_ERR("received notification on unexpected channel %u\n", ch);
     }
 }
+#endif

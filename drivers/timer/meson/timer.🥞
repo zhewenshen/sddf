@@ -8,7 +8,8 @@
 #define TIMER_E_OFFSET  72
 #define TIMER_E_HI_OFFSET 76
 
-#define TIMEOUT_INVALID 9223372036854775807  // UINT64_MAX - causes Pancake comparison bug???
+// UINT64_MAX - causes Pancake comparison bug???
+#define TIMEOUT_INVALID 9223372036854775807
 // #define TIMEOUT_INVALID 9999999999999999
 
 fun get_ticks() {

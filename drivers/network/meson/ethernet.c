@@ -35,21 +35,69 @@ struct descriptor {
 };
 
 typedef struct {
+#ifdef PANCAKE_DRIVER
+    /* to avoid bit-shift operations, we try to use word size variables when possible in Pancake */
+    uint64_t tail; /* index to insert at */
+    uint64_t head; /* index to remove from */
+    uint64_t capacity; /* capacity of the ring */
+#else
     uint32_t tail; /* index to insert at */
     uint32_t head; /* index to remove from */
     uint32_t capacity; /* capacity of the ring */
+#endif
     volatile struct descriptor *descr; /* buffer descriptor array */
 } hw_ring_t;
 
+#ifdef PANCAKE_DRIVER
+hw_ring_t *rx;
+hw_ring_t *tx;
+
+net_queue_handle_t *rx_queue;
+net_queue_handle_t *tx_queue;
+#else
 hw_ring_t rx;
 hw_ring_t tx;
 
 net_queue_handle_t rx_queue;
 net_queue_handle_t tx_queue;
+#endif
 
 volatile struct eth_mac_regs *eth_mac;
 volatile struct eth_dma_regs *eth_dma;
 
+#ifdef PANCAKE_DRIVER
+static char cml_memory[1024*8];
+extern void *cml_heap;
+extern void *cml_stack;
+extern void *cml_stackend;
+
+extern void cml_main(void);
+
+void cml_exit(int arg) {
+    microkit_dbg_puts("ERROR! We should not be getting here\n");
+}
+
+void cml_err(int arg) {
+    if (arg == 3) {
+        microkit_dbg_puts("Memory not ready for entry. You may have not run the init code yet, or be trying to enter during an FFI call.\n");
+    }
+  cml_exit(arg);
+}
+
+void cml_clear() {
+    microkit_dbg_puts("Trying to clear cache\n");
+}
+
+void init_pancake_mem() {
+    unsigned long cml_heap_sz = 1024*4;
+    unsigned long cml_stack_sz = 1024*4;
+    cml_heap = cml_memory;
+    cml_stack = cml_heap + cml_heap_sz;
+    cml_stackend = cml_stack + cml_stack_sz;
+}
+#endif
+
+#ifndef PANCAKE_DRIVER
 static inline bool hw_ring_full(hw_ring_t *ring)
 {
     return ring->tail - ring->head == ring->capacity;
@@ -223,6 +271,7 @@ static void handle_irq()
         eth_dma->status &= e;
     }
 }
+#endif
 
 static void eth_setup(void)
 {
@@ -234,10 +283,17 @@ static void eth_setup(void)
     assert((device_resources.regions[1].io_addr & 0xFFFFFFFF) == device_resources.regions[1].io_addr);
     assert((device_resources.regions[2].io_addr & 0xFFFFFFFF) == device_resources.regions[2].io_addr);
 
+#ifdef PANCAKE_DRIVER
+    rx->descr = (volatile struct descriptor *)device_resources.regions[1].region.vaddr;
+    tx->descr = (volatile struct descriptor *)device_resources.regions[2].region.vaddr;
+    rx->capacity = RX_COUNT;
+    tx->capacity = TX_COUNT;
+#else
     rx.descr = (volatile struct descriptor *)device_resources.regions[1].region.vaddr;
     tx.descr = (volatile struct descriptor *)device_resources.regions[2].region.vaddr;
     rx.capacity = RX_COUNT;
     tx.capacity = TX_COUNT;
+#endif
 
     /* Perform reset */
     eth_dma->busmode |= DMAMAC_SWRST;
@@ -281,8 +337,40 @@ void init(void)
     assert(RX_COUNT * sizeof(struct descriptor) <= device_resources.regions[1].region.size);
     assert(TX_COUNT * sizeof(struct descriptor) <= device_resources.regions[2].region.size);
 
+#ifdef PANCAKE_DRIVER
+    init_pancake_mem();
+
+    /* init_pancake_data */
+    uintptr_t *pnk_mem = (uintptr_t *) cml_heap;
+
+    /* Store constant info in Pancake memory */
+    pnk_mem[1] = device_resources.irqs[0].id;
+    pnk_mem[2] = config.virt_rx.id;
+    pnk_mem[3] = config.virt_tx.id;
+
+    /* Allocate global structs in Pancake memory */
+    rx_queue = (net_queue_handle_t *) &pnk_mem[4];
+    tx_queue = (net_queue_handle_t *) &pnk_mem[7];
+    rx = (hw_ring_t *) &pnk_mem[10];
+    tx = (hw_ring_t *) &pnk_mem[10 + sizeof(hw_ring_t)/sizeof(uintptr_t)];
+#endif
+
     eth_setup();
 
+#ifdef PANCAKE_DRIVER
+    pnk_mem[0] = (uintptr_t) eth_mac;
+    pnk_mem[12] = rx->capacity;
+    pnk_mem[13] = (uintptr_t) rx->descr;
+    pnk_mem[16] = tx->capacity;
+    pnk_mem[17] = (uintptr_t) tx->descr;
+
+    net_queue_init(rx_queue, config.virt_rx.free_queue.vaddr, config.virt_rx.active_queue.vaddr,
+                   config.virt_rx.num_buffers);
+    net_queue_init(tx_queue, config.virt_tx.free_queue.vaddr, config.virt_tx.active_queue.vaddr,
+                   config.virt_tx.num_buffers);
+
+    cml_main();
+#else
     net_queue_init(&rx_queue, config.virt_rx.free_queue.vaddr, config.virt_rx.active_queue.vaddr,
                    config.virt_rx.num_buffers);
     net_queue_init(&tx_queue, config.virt_tx.free_queue.vaddr, config.virt_tx.active_queue.vaddr,
@@ -290,6 +378,7 @@ void init(void)
 
     rx_provide();
     tx_provide();
+#endif
 
     /* Enable IRQs */
     eth_dma->intenable |= DMA_INTR_MASK;
@@ -304,6 +393,9 @@ void init(void)
     microkit_irq_ack(device_resources.irqs[0].id);
 }
 
+#ifdef PANCAKE_DRIVER
+extern void notified(microkit_channel ch);
+#else
 void notified(microkit_channel ch)
 {
     if (ch == device_resources.irqs[0].id) {
@@ -317,3 +409,4 @@ void notified(microkit_channel ch)
         sddf_dprintf("ETH|LOG: received notification on unexpected channel %u\n", ch);
     }
 }
+#endif

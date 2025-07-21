@@ -1,0 +1,922 @@
+/*
+ * Copyright 2025, UNSW
+ * SPDX-License-Identifier: BSD-2-Clause
+ */
+
+/////////////////// Pancake driver memory layout
+// volatile virtio_mmio_regs_t *regs (follows standard convention)
+#define VIRTIO_REGS_BASE        pnk_mem(0)
+#define IRQ_CH  pnk_mem(1)
+#define RX_CH   pnk_mem(2)
+#define TX_CH   pnk_mem(3)
+
+/* Mirror `net_queue_handle_t` struct */
+#define NET_RX_FREE     pnk_mem(4)
+#define NET_RX_ACTIVE   pnk_mem(5)
+#define NET_RX_CAPACITY pnk_mem(6)
+#define NET_TX_FREE     pnk_mem(7)
+#define NET_TX_ACTIVE   pnk_mem(8)
+#define NET_TX_CAPACITY pnk_mem(9)
+
+/* VirtIO specific state - provided by C bootstrap */
+// struct virtq *rx_virtq
+#define RX_VIRTQ_BASE           pnk_mem(11)
+// struct virtq *tx_virtq
+#define TX_VIRTQ_BASE           pnk_mem(12)
+// uint16_t *rx_last_seen_used
+#define RX_LAST_SEEN_USED_PTR   pnk_mem(13)
+// uint16_t *tx_last_seen_used
+#define TX_LAST_SEEN_USED_PTR   pnk_mem(14)
+// int *rx_last_desc_idx
+#define RX_LAST_DESC_IDX_PTR    pnk_mem(15)
+// int *tx_last_desc_idx
+#define TX_LAST_DESC_IDX_PTR    pnk_mem(16)
+// ialloc_t *rx_ialloc_desc
+#define RX_IALLOC_PTR           pnk_mem(17)
+// ialloc_t *tx_ialloc_desc
+#define TX_IALLOC_PTR           pnk_mem(18)
+// uintptr_t virtio_net_rx_headers_paddr
+#define VIRTIO_NET_RX_HEADERS_PADDR pnk_mem(19)
+// uintptr_t virtio_net_tx_headers_paddr
+#define VIRTIO_NET_TX_HEADERS_PADDR pnk_mem(20)
+// bool initialized_buffers - use memory slot for state tracking
+#define INITIALIZED_BUFFERS pnk_mem(21)
+// Hardware buffer region addresses
+#define HW_RING_BUFFER_VADDR pnk_mem(22)
+#define HW_RING_BUFFER_PADDR pnk_mem(23)
+// uintptr_t virtio_net_tx_headers_vaddr (calculated in main)
+#define VIRTIO_NET_TX_HEADERS_VADDR pnk_mem(24)
+
+/////////////////// VirtIO Constants (converted to decimal for Pancake)
+#define VIRTIO_NET_RX_QUEUE     0
+#define VIRTIO_NET_TX_QUEUE     1
+#define VIRTIO_MMIO_IRQ_VQUEUE  1
+#define VIRTIO_MMIO_IRQ_CONFIG  2
+#define VIRTQ_DESC_F_NEXT       1
+#define VIRTQ_DESC_F_WRITE      2
+#define NET_BUFFER_SIZE         2048
+#define VIRTIO_NET_HDR_SIZE     10
+
+// VirtIO device setup constants  
+#define RX_COUNT                512
+#define TX_COUNT                512
+#define HW_RING_SIZE            65536
+
+// VirtIO device status bits
+#define VIRTIO_DEVICE_STATUS_ACKNOWLEDGE    1
+#define VIRTIO_DEVICE_STATUS_DRIVER         2
+#define VIRTIO_DEVICE_STATUS_DRIVER_OK      4
+#define VIRTIO_DEVICE_STATUS_FEATURES_OK    8
+
+// VirtIO device/driver features
+#define VIRTIO_NET_F_MAC        32
+#define VIRTIO_F_VERSION_1      4294967296
+
+// VirtIO device ID
+#define VIRTIO_DEVICE_ID_NET    1
+#define VIRTIO_VERSION          2
+
+/////////////////// VirtIO Register Offsets (from virtio_mmio_regs_t)
+// MagicValue  
+#define MAGIC_VALUE_OFFSET      0
+// Version
+#define VERSION_OFFSET          4
+// DeviceID
+#define DEVICE_ID_OFFSET        8
+// DeviceFeatures
+#define DEVICE_FEATURES_OFFSET  16
+// DeviceFeaturesSel
+#define DEVICE_FEATURES_SEL_OFFSET 20
+// DriverFeatures
+#define DRIVER_FEATURES_OFFSET  32
+// DriverFeaturesSel  
+#define DRIVER_FEATURES_SEL_OFFSET 36
+// QueueSel
+#define QUEUE_SEL_OFFSET        48
+// QueueNumMax
+#define QUEUE_NUM_MAX_OFFSET    52
+// QueueNum
+#define QUEUE_NUM_OFFSET        56
+// QueueReady
+#define QUEUE_READY_OFFSET      68
+// QueueNotify
+#define QUEUE_NOTIFY_OFFSET     80
+// InterruptStatus
+#define INTERRUPT_STATUS_OFFSET 96
+// InterruptACK
+#define INTERRUPT_ACK_OFFSET    100
+// Status
+#define STATUS_OFFSET           112
+// QueueDescLow
+#define QUEUE_DESC_LOW_OFFSET   128
+// QueueDescHigh  
+#define QUEUE_DESC_HIGH_OFFSET  132
+// QueueDriverLow
+#define QUEUE_DRIVER_LOW_OFFSET 144
+// QueueDriverHigh
+#define QUEUE_DRIVER_HIGH_OFFSET 148
+// QueueDeviceLow
+#define QUEUE_DEVICE_LOW_OFFSET 160
+// QueueDeviceHigh
+#define QUEUE_DEVICE_HIGH_OFFSET 164
+// Config space offset
+#define CONFIG_OFFSET           256
+
+/////////////////// VirtIO Struct Offsets (struct virtq layout)
+// struct virtq { uint16_t num; struct virtq_desc *desc; struct virtq_avail *avail; struct virtq_used *used; }
+// uint16_t num
+#define VIRTQ_NUM_OFFSET        0
+// struct virtq_desc *desc
+#define VIRTQ_DESC_OFFSET       8
+// struct virtq_avail *avail
+#define VIRTQ_AVAIL_OFFSET      16
+// struct virtq_used *used
+#define VIRTQ_USED_OFFSET       24
+
+// struct virtq_desc { uint64_t addr; uint32_t len; uint16_t flags; uint16_t next; }
+// uint64_t addr
+#define VIRTQ_DESC_ADDR_OFFSET  0
+// uint32_t len
+#define VIRTQ_DESC_LEN_OFFSET   8
+// uint16_t flags
+#define VIRTQ_DESC_FLAGS_OFFSET 12
+// uint16_t next
+#define VIRTQ_DESC_NEXT_OFFSET  14
+// sizeof(struct virtq_desc)
+#define VIRTQ_DESC_SIZE         16
+
+// struct virtq_avail { uint16_t flags; uint16_t idx; uint16_t ring[]; }
+// uint16_t flags
+#define VIRTQ_AVAIL_FLAGS_OFFSET 0
+// uint16_t idx
+#define VIRTQ_AVAIL_IDX_OFFSET   2
+// uint16_t ring[]
+#define VIRTQ_AVAIL_RING_OFFSET  4
+
+// struct virtq_used { uint16_t flags; uint16_t idx; struct virtq_used_elem ring[]; }
+// uint16_t flags
+#define VIRTQ_USED_FLAGS_OFFSET  0
+// uint16_t idx
+#define VIRTQ_USED_IDX_OFFSET    2
+// struct virtq_used_elem ring[]
+#define VIRTQ_USED_RING_OFFSET   4
+
+// struct virtq_used_elem { uint32_t id; uint32_t len; }
+// uint32_t id
+#define VIRTQ_USED_ELEM_ID_OFFSET  0
+// uint32_t len
+#define VIRTQ_USED_ELEM_LEN_OFFSET 4
+// sizeof(struct virtq_used_elem)
+#define VIRTQ_USED_ELEM_SIZE       8
+
+// ialloc_t structure offsets (complete C struct layout)
+// uint32_t *idxlist
+#define IALLOC_IDXLIST_OFFSET   0
+// uint32_t head  
+#define IALLOC_HEAD_OFFSET      8
+// uint32_t tail
+#define IALLOC_TAIL_OFFSET      12
+// uint32_t num_free
+#define IALLOC_NUM_FREE_OFFSET  16
+// uint32_t offset
+#define IALLOC_OFFSET_OFFSET    20
+// uint32_t size
+#define IALLOC_SIZE_OFFSET      24
+
+/////////////////// Helper Functions for VirtIO Operations
+
+fun virtio_avail_full_rx()
+{
+  var rx_last_desc_idx_ptr = RX_LAST_DESC_IDX_PTR;
+  var rx_last_desc_idx = 0;
+  !ld32 rx_last_desc_idx, rx_last_desc_idx_ptr;
+  
+  var rx_virtq = RX_VIRTQ_BASE;
+  var virtq_num = 0;
+  !ld16 virtq_num, rx_virtq + VIRTQ_NUM_OFFSET;
+  
+  // Debug: Show the comparison values
+  @assert(0,460,rx_last_desc_idx,virtq_num);  // Compare desc_idx vs queue_size
+  
+  var full = (rx_last_desc_idx >= virtq_num);
+  return full;
+}
+
+fun virtio_avail_full_tx()
+{
+  var tx_last_desc_idx_ptr = TX_LAST_DESC_IDX_PTR;
+  var tx_last_desc_idx = 0;
+  !ld32 tx_last_desc_idx, tx_last_desc_idx_ptr;
+  
+  var tx_virtq = TX_VIRTQ_BASE;
+  var virtq_num = 0;
+  !ld16 virtq_num, tx_virtq + VIRTQ_NUM_OFFSET;
+  
+  var full = (tx_last_desc_idx >= virtq_num);
+  return full;
+}
+
+// Complete ialloc_alloc implementation matching C code
+fun ialloc_alloc(1 ialloc_ptr)
+{
+  var num_free_ptr = ialloc_ptr + IALLOC_NUM_FREE_OFFSET;
+  var num_free = 0;
+  !ld32 num_free, num_free_ptr;
+  
+  if (num_free == 0) {
+    return 4294967295;  // -1, allocation failed (ialloc_full)
+  }
+  
+  var head_ptr = ialloc_ptr + IALLOC_HEAD_OFFSET;
+  var offset_ptr = ialloc_ptr + IALLOC_OFFSET_OFFSET;
+  var idxlist_ptr = 0;
+  var head = 0;
+  var offset = 0;
+  
+  !ld32 head, head_ptr;
+  !ld32 offset, offset_ptr;
+  !ldw idxlist_ptr, ialloc_ptr + IALLOC_IDXLIST_OFFSET;
+  
+  var allocated_id = head + offset;  // *id = ia->head + ia->offset;
+  
+  // ia->head = ia->idxlist[ia->head];
+  var next_head = 0;
+  !ld32 next_head, idxlist_ptr + head * 4;
+  !st32 head_ptr, next_head;
+  
+  // ia->idxlist[*id - ia->offset] = -1;
+  !st32 idxlist_ptr + (allocated_id - offset) * 4, 4294967295;  // -1
+  
+  // ia->num_free--;
+  num_free = num_free - 1;
+  !st32 num_free_ptr, num_free;
+  
+  return allocated_id;
+}
+
+// Complete ialloc_free implementation matching C code
+fun ialloc_free(1 ialloc_ptr, 1 id)
+{
+  // Validation: if (id >= ia->size + ia->offset || id < ia->offset || !ialloc_in_use(ia, id))
+  var size_ptr = ialloc_ptr + IALLOC_SIZE_OFFSET;
+  var offset_ptr = ialloc_ptr + IALLOC_OFFSET_OFFSET;
+  var num_free_ptr = ialloc_ptr + IALLOC_NUM_FREE_OFFSET;
+  var size = 0;
+  var offset = 0;
+  var num_free = 0;
+  
+  !ld32 size, size_ptr;
+  !ld32 offset, offset_ptr;
+  !ld32 num_free, num_free_ptr;
+  
+  if (id >= (size + offset)) { return 4294967295; }  // -1, invalid
+  if (id < offset) { return 4294967295; }  // -1, invalid
+  
+  // Check if in use: ia->idxlist[id - ia->offset] == -1
+  var idxlist_ptr = 0;
+  !ldw idxlist_ptr, ialloc_ptr + IALLOC_IDXLIST_OFFSET;
+  var idx_val = 0;
+  !ld32 idx_val, idxlist_ptr + (id - offset) * 4;
+  if (idx_val != 4294967295) { return 4294967295; }  // not in use, error
+  
+  var tail_ptr = ialloc_ptr + IALLOC_TAIL_OFFSET;
+  var head_ptr = ialloc_ptr + IALLOC_HEAD_OFFSET;
+  
+  if (num_free == 0) {
+    // if (ialloc_full(ia)) - restore head and tail
+    var idx_no_offset = id - offset;
+    !st32 head_ptr, idx_no_offset;
+    !st32 tail_ptr, idx_no_offset;
+  } else {
+    // ia->idxlist[ia->tail] = id - ia->offset;
+    var tail = 0;
+    !ld32 tail, tail_ptr;
+    var idx_no_offset = id - offset;
+    !st32 idxlist_ptr + tail * 4, idx_no_offset;
+    !st32 tail_ptr, idx_no_offset;
+  }
+  
+  // ia->num_free++;
+  num_free = num_free + 1;
+  !st32 num_free_ptr, num_free;
+  
+  return 0;
+}
+
+/////////////////// Main Driver Functions
+
+// Main entry point called by cml_main() - includes complete VirtIO setup
+fun main() {
+  var regs_base = VIRTIO_REGS_BASE;
+  
+  // Debug: Check that we have a valid register base address
+  if (regs_base == 0) { @assert(0,9,0,0); }  // No register base
+  
+  // Do MMIO device init (section 4.2.3.1)
+  // Check magic value
+  var magic = 0;
+  !ld32 magic, regs_base + MAGIC_VALUE_OFFSET;
+  if (magic != 1953655158) {  // 0x74726976 = "virt" in decimal
+    // Magic value mismatch - debug by checking what we actually got
+    if (magic == 0) { @assert(0,1,0,0); }      // No device at address
+    // Pass the actual magic value we read in the assert for debugging
+    @assert(magic & 65535, 2, (magic >> 16) & 65535, 0);  // Wrong magic value with actual value
+  }
+  
+  // Debug: Magic value check passed
+  @assert(0,100,0,0);  // Magic OK
+  
+  // Check version  
+  var version = 0;
+  !ld32 version, regs_base + VERSION_OFFSET;
+  if (version != VIRTIO_VERSION) { @assert(0,3,version,0); }
+  
+  // Debug: Version check passed
+  @assert(0,101,0,0);  // Version OK
+  
+  // Check device ID
+  var device_id = 0;
+  !ld32 device_id, regs_base + DEVICE_ID_OFFSET;
+  if (device_id != VIRTIO_DEVICE_ID_NET) { @assert(0,4,device_id,0); }
+  
+  // Debug: Device ID check passed
+  @assert(0,102,0,0);  // Device ID OK
+  
+  // Do normal device initialisation (section 3.2)
+  // First reset the device
+  !st32 regs_base + STATUS_OFFSET, 0;
+  
+  // Set the ACKNOWLEDGE bit
+  !st32 regs_base + STATUS_OFFSET, VIRTIO_DEVICE_STATUS_ACKNOWLEDGE;
+  
+  // Set the DRIVER bit  
+  !st32 regs_base + STATUS_OFFSET, VIRTIO_DEVICE_STATUS_DRIVER;
+  
+  // Set driver features
+  !st32 regs_base + DRIVER_FEATURES_OFFSET, VIRTIO_NET_F_MAC;
+  !st32 regs_base + DRIVER_FEATURES_SEL_OFFSET, 1;
+  !st32 regs_base + DRIVER_FEATURES_OFFSET, 1;  // VIRTIO_F_VERSION_1 high bits
+  
+  !st32 regs_base + STATUS_OFFSET, VIRTIO_DEVICE_STATUS_FEATURES_OK;
+  
+  // Check that device accepted features
+  var status = 0;
+  !ld32 status, regs_base + STATUS_OFFSET;
+  if ((status & VIRTIO_DEVICE_STATUS_FEATURES_OK) == 0) { @assert(0,5,status,0); }
+  
+  // Debug: Features accepted
+  @assert(0,103,0,0);  // Features OK
+  
+  // Setup the virtqueues - calculate offsets using correct ALIGN(x, align) = ((x + align - 1) & ~(align - 1))
+  var rx_desc_off = 0;
+  var rx_avail_off = (rx_desc_off + 16 * RX_COUNT + 1) & 65534;  // ALIGN(n, 2) = (n + 1) & ~1
+  var rx_used_off = (rx_avail_off + 6 + 2 * RX_COUNT + 3) & 65532;  // ALIGN(n, 4) = (n + 3) & ~3
+  var tx_desc_off = (rx_used_off + 6 + 8 * RX_COUNT + 15) & 65520;  // ALIGN(n, 16) = (n + 15) & ~15
+  var tx_avail_off = (tx_desc_off + 16 * TX_COUNT + 1) & 65534;  // ALIGN(n, 2) = (n + 1) & ~1
+  var tx_used_off = (tx_avail_off + 6 + 2 * TX_COUNT + 3) & 65532;  // ALIGN(n, 4) = (n + 3) & ~3
+  var virtq_size = tx_used_off + 6 + 8 * TX_COUNT;
+  
+  var hw_vaddr = HW_RING_BUFFER_VADDR;
+  var hw_paddr = HW_RING_BUFFER_PADDR;
+  
+  // Setup RX virtqueue structure
+  var rx_virtq = RX_VIRTQ_BASE;
+  !st16 rx_virtq + VIRTQ_NUM_OFFSET, RX_COUNT;
+  !stw rx_virtq + VIRTQ_DESC_OFFSET, hw_vaddr + rx_desc_off;
+  !stw rx_virtq + VIRTQ_AVAIL_OFFSET, hw_vaddr + rx_avail_off;
+  !stw rx_virtq + VIRTQ_USED_OFFSET, hw_vaddr + rx_used_off;
+  
+  // Setup TX virtqueue structure  
+  var tx_virtq = TX_VIRTQ_BASE;
+  !st16 tx_virtq + VIRTQ_NUM_OFFSET, TX_COUNT;
+  !stw tx_virtq + VIRTQ_DESC_OFFSET, hw_vaddr + tx_desc_off;
+  !stw tx_virtq + VIRTQ_AVAIL_OFFSET, hw_vaddr + tx_avail_off;
+  !stw tx_virtq + VIRTQ_USED_OFFSET, hw_vaddr + tx_used_off;
+  
+  // Calculate TX header addresses
+  var tx_headers_size = 256 * VIRTIO_NET_HDR_SIZE;  // TX_COUNT/2 * sizeof(hdr)
+  var rx_headers_size = 256 * VIRTIO_NET_HDR_SIZE;  // RX_COUNT/2 * sizeof(hdr)
+  
+  // Store TX headers virtual address for use in tx_provide
+  var tx_headers_vaddr = hw_vaddr + virtq_size;
+  !st32 pnk_mem_ptr(24), tx_headers_vaddr;
+  
+  // Setup RX queue with device
+  !st32 regs_base + QUEUE_SEL_OFFSET, VIRTIO_NET_RX_QUEUE;
+  !st32 regs_base + QUEUE_NUM_OFFSET, RX_COUNT;
+  !st32 regs_base + QUEUE_DESC_LOW_OFFSET, (hw_paddr + rx_desc_off) & 4294967295;
+  !st32 regs_base + QUEUE_DESC_HIGH_OFFSET, (hw_paddr + rx_desc_off) >> 32;
+  !st32 regs_base + QUEUE_DRIVER_LOW_OFFSET, (hw_paddr + rx_avail_off) & 4294967295;
+  !st32 regs_base + QUEUE_DRIVER_HIGH_OFFSET, (hw_paddr + rx_avail_off) >> 32;
+  !st32 regs_base + QUEUE_DEVICE_LOW_OFFSET, (hw_paddr + rx_used_off) & 4294967295;
+  !st32 regs_base + QUEUE_DEVICE_HIGH_OFFSET, (hw_paddr + rx_used_off) >> 32;
+  !st32 regs_base + QUEUE_READY_OFFSET, 1;
+  
+  // Setup TX queue with device
+  !st32 regs_base + QUEUE_SEL_OFFSET, VIRTIO_NET_TX_QUEUE;
+  !st32 regs_base + QUEUE_NUM_OFFSET, TX_COUNT;
+  !st32 regs_base + QUEUE_DESC_LOW_OFFSET, (hw_paddr + tx_desc_off) & 4294967295;
+  !st32 regs_base + QUEUE_DESC_HIGH_OFFSET, (hw_paddr + tx_desc_off) >> 32;
+  !st32 regs_base + QUEUE_DRIVER_LOW_OFFSET, (hw_paddr + tx_avail_off) & 4294967295;
+  !st32 regs_base + QUEUE_DRIVER_HIGH_OFFSET, (hw_paddr + tx_avail_off) >> 32;
+  !st32 regs_base + QUEUE_DEVICE_LOW_OFFSET, (hw_paddr + tx_used_off) & 4294967295;
+  !st32 regs_base + QUEUE_DEVICE_HIGH_OFFSET, (hw_paddr + tx_used_off) >> 32;
+  !st32 regs_base + QUEUE_READY_OFFSET, 1;
+  
+  // Set MAC address in config space
+  var config_addr = regs_base + CONFIG_OFFSET;
+  !st8 config_addr + 0, 82;   // 0x52
+  !st8 config_addr + 1, 84;   // 0x54  
+  !st8 config_addr + 2, 1;    // 0x01
+  !st8 config_addr + 3, 0;    // 0x00
+  !st8 config_addr + 4, 0;    // 0x00
+  !st8 config_addr + 5, 7;    // 0x07
+  
+  // Set DRIVER_OK status bit
+  !st32 regs_base + STATUS_OFFSET, VIRTIO_DEVICE_STATUS_DRIVER_OK;
+  !st32 regs_base + INTERRUPT_ACK_OFFSET, VIRTIO_MMIO_IRQ_VQUEUE;
+  
+  // Debug: Device fully initialized
+  @assert(0,106,0,0);  // Device ready
+  
+  // Debug: Device ready, buffer population will happen via notifications
+  @assert(0,107,0,0);  // Device ready for notifications
+  
+  return 0;
+}
+
+// Initialize the VirtIO rings with buffers - called from C before cml_main()
+export fun init_virtio_buffers()
+{
+  rx_provide();
+  tx_provide();
+  // Mark as initialized
+  !st32 pnk_mem_ptr(21), 1;
+  return 0;
+}
+
+export fun rx_provide()
+{
+  // Debug: rx_provide called
+  @assert(0,450,0,0);  // rx_provide entry
+  
+  // Debug: Check queue state
+  var rx_free = NET_RX_FREE;
+  var rx_capacity = NET_RX_CAPACITY;
+  var 1 queue_empty = net_queue_empty(rx_free);
+  @assert(0,452,queue_empty,rx_capacity);  // Queue empty status and capacity
+  
+  var transferred = false;
+  var reprocess = true;
+
+  while (reprocess)
+  {
+    while (true)
+    {
+      var 1 avail_full = virtio_avail_full_rx();
+      if (avail_full) { @assert(0,453,0,0); break; }  // VirtQ full
+      var 1 queue_empty = net_queue_empty(rx_free);
+      if (queue_empty) { @assert(0,454,0,0); break; }  // sDDF empty
+
+      @assert(0,455,0,0);  // About to dequeue buffer
+
+      // Dequeue buffer from sDDF
+      var {1,1} buffer = net_dequeue(rx_free, rx_capacity);
+      var io_addr = buffer.0;
+      
+      @assert(0,456,io_addr & 65535,io_addr >> 16);  // Buffer address dequeued
+      
+      // Allocate descriptors for header and packet
+      var rx_ialloc = RX_IALLOC_PTR;
+      var 1 hdr_desc_idx = ialloc_alloc(rx_ialloc);
+      if (hdr_desc_idx == 4294967295) { @assert(0,457,0,0); break; }  // alloc failed
+      
+      var 1 pkt_desc_idx = ialloc_alloc(rx_ialloc);
+      if (pkt_desc_idx == 4294967295) {
+        @assert(0,458,0,0);  // second alloc failed
+        ialloc_free(rx_ialloc, hdr_desc_idx);
+        break;  // allocation failed
+      }
+      
+      @assert(0,459,hdr_desc_idx,pkt_desc_idx);  // Descriptors allocated
+      
+      // Get virtqueue structures
+      var rx_virtq = RX_VIRTQ_BASE;
+      var virtq_desc_ptr = 0;
+      var virtq_avail_ptr = 0;
+      !ldw virtq_desc_ptr, rx_virtq + VIRTQ_DESC_OFFSET;
+      !ldw virtq_avail_ptr, rx_virtq + VIRTQ_AVAIL_OFFSET;
+      
+      // Set up header descriptor
+      var hdr_desc_addr = virtq_desc_ptr + hdr_desc_idx * VIRTQ_DESC_SIZE;
+      var hdr_phys_addr = VIRTIO_NET_RX_HEADERS_PADDR + hdr_desc_idx * VIRTIO_NET_HDR_SIZE;
+      !stw hdr_desc_addr + VIRTQ_DESC_ADDR_OFFSET, hdr_phys_addr;
+      !st32 hdr_desc_addr + VIRTQ_DESC_LEN_OFFSET, VIRTIO_NET_HDR_SIZE;
+      !st16 hdr_desc_addr + VIRTQ_DESC_FLAGS_OFFSET, (VIRTQ_DESC_F_NEXT | VIRTQ_DESC_F_WRITE);
+      !st16 hdr_desc_addr + VIRTQ_DESC_NEXT_OFFSET, pkt_desc_idx;
+      
+      // Set up packet descriptor
+      var pkt_desc_addr = virtq_desc_ptr + pkt_desc_idx * VIRTQ_DESC_SIZE;
+      !stw pkt_desc_addr + VIRTQ_DESC_ADDR_OFFSET, io_addr;
+      !st32 pkt_desc_addr + VIRTQ_DESC_LEN_OFFSET, NET_BUFFER_SIZE;
+      !st16 pkt_desc_addr + VIRTQ_DESC_FLAGS_OFFSET, VIRTQ_DESC_F_WRITE;
+      
+      // Add to available ring
+      var avail_idx = 0;
+      !ld16 avail_idx, virtq_avail_ptr + VIRTQ_AVAIL_IDX_OFFSET;
+      var virtq_num = 0;
+      !ld16 virtq_num, rx_virtq + VIRTQ_NUM_OFFSET;
+      var ring_idx = avail_idx & (virtq_num - 1);
+      var ring_entry_addr = virtq_avail_ptr + VIRTQ_AVAIL_RING_OFFSET + ring_idx * 2;
+      !st16 ring_entry_addr, hdr_desc_idx;
+      
+      // Update available index
+      avail_idx = avail_idx + 1;
+      !st16 virtq_avail_ptr + VIRTQ_AVAIL_IDX_OFFSET, avail_idx;
+      
+      // Update our descriptor count
+      var rx_last_desc_idx_ptr = RX_LAST_DESC_IDX_PTR;
+      var rx_last_desc_idx = 0;
+      !ld32 rx_last_desc_idx, rx_last_desc_idx_ptr;
+      rx_last_desc_idx = rx_last_desc_idx + 2;
+      !st32 rx_last_desc_idx_ptr, rx_last_desc_idx;
+      
+      transferred = true;
+    }
+
+    net_request_signal(rx_free);
+    reprocess = false;
+
+    var 1 queue_empty = net_queue_empty(rx_free);
+    var 1 avail_full = virtio_avail_full_rx();
+    if ((!queue_empty) && (!avail_full)) {
+      net_cancel_signal(rx_free);
+      reprocess = true;
+    }
+  }
+
+  if (transferred) {
+    // Debug: RX buffers provided to device
+    @assert(0,451,0,0);  // RX buffers transferred
+    
+    // Notify device that we added more available buffers
+    var regs_base = VIRTIO_REGS_BASE;
+    var queue_notify_addr = regs_base + QUEUE_NOTIFY_OFFSET;
+    !st32 queue_notify_addr, VIRTIO_NET_RX_QUEUE;
+  }
+
+  return 0;
+}
+
+export fun rx_return()
+{
+  // Debug: RX return called
+  @assert(0,400,0,0);  // rx_return called
+  
+  var rx_active = NET_RX_ACTIVE;
+  var rx_capacity = NET_RX_CAPACITY;
+  var packets_transferred = 0;
+  
+  // Get virtqueue and tracking variables
+  var rx_virtq = RX_VIRTQ_BASE;
+  var rx_last_seen_used_ptr = RX_LAST_SEEN_USED_PTR;
+  var rx_last_desc_idx_ptr = RX_LAST_DESC_IDX_PTR;
+  var rx_ialloc = RX_IALLOC_PTR;
+  
+  var virtq_desc_ptr = 0;
+  var virtq_used_ptr = 0;
+  !ldw virtq_desc_ptr, rx_virtq + VIRTQ_DESC_OFFSET;
+  !ldw virtq_used_ptr, rx_virtq + VIRTQ_USED_OFFSET;
+  
+  var last_seen_used = 0;
+  var curr_used_idx = 0;
+  !ld16 last_seen_used, rx_last_seen_used_ptr;
+  !ld16 curr_used_idx, virtq_used_ptr + VIRTQ_USED_IDX_OFFSET;
+  
+  var i = last_seen_used;
+  while (i != curr_used_idx) {
+    var virtq_num = 0;
+    !ld16 virtq_num, rx_virtq + VIRTQ_NUM_OFFSET;
+    var ring_idx = i & (virtq_num - 1);
+    
+    // Get used ring entry
+    var used_elem_addr = virtq_used_ptr + VIRTQ_USED_RING_OFFSET + ring_idx * VIRTQ_USED_ELEM_SIZE;
+    var hdr_desc_id = 0;
+    var used_len = 0;
+    !ld32 hdr_desc_id, used_elem_addr + VIRTQ_USED_ELEM_ID_OFFSET;
+    !ld32 used_len, used_elem_addr + VIRTQ_USED_ELEM_LEN_OFFSET;
+    
+    // Get header descriptor and verify it has NEXT flag
+    var hdr_desc_addr = virtq_desc_ptr + hdr_desc_id * VIRTQ_DESC_SIZE;
+    var hdr_flags = 0;
+    var pkt_desc_id = 0;
+    !ld16 hdr_flags, hdr_desc_addr + VIRTQ_DESC_FLAGS_OFFSET;
+    !ld16 pkt_desc_id, hdr_desc_addr + VIRTQ_DESC_NEXT_OFFSET;
+    
+    // Get packet descriptor  
+    var pkt_desc_addr = virtq_desc_ptr + pkt_desc_id * VIRTQ_DESC_SIZE;
+    var pkt_addr = 0;
+    var pkt_len = 0;
+    !ldw pkt_addr, pkt_desc_addr + VIRTQ_DESC_ADDR_OFFSET;
+    !ld32 pkt_len, pkt_desc_addr + VIRTQ_DESC_LEN_OFFSET;
+    
+    // Enqueue to sDDF active queue
+    net_enqueue(rx_active, pkt_addr, pkt_len, rx_capacity);
+    
+    // Free descriptors
+    ialloc_free(rx_ialloc, hdr_desc_id);
+    ialloc_free(rx_ialloc, pkt_desc_id);
+    
+    // Update descriptor count
+    var rx_last_desc_idx = 0;
+    !ld32 rx_last_desc_idx, rx_last_desc_idx_ptr;
+    rx_last_desc_idx = rx_last_desc_idx - 2;
+    !st32 rx_last_desc_idx_ptr, rx_last_desc_idx;
+    
+    i = i + 1;
+    packets_transferred = packets_transferred + 1;
+  }
+  
+  // Update last seen used index
+  if (packets_transferred > 0) {
+    // Debug: RX packets processed
+    @assert(0,401,packets_transferred,0);  // RX packets count
+    
+    !st16 rx_last_seen_used_ptr, curr_used_idx;
+    
+    var 1 to_signal = net_require_signal(rx_active);
+    if (to_signal) {
+      net_cancel_signal(rx_active);
+      microkit_notify(RX_CH)
+    }
+  }
+
+  return 0;
+}
+
+export fun tx_provide()
+{
+  // Debug: tx_provide called
+  @assert(0,550,0,0);  // tx_provide entry
+  
+  // Debug: Check queue state
+  var tx_active = NET_TX_ACTIVE;
+  var tx_capacity = NET_TX_CAPACITY;
+  var 1 queue_empty = net_queue_empty(tx_active);
+  @assert(0,552,queue_empty,tx_capacity);  // Queue empty status and capacity
+  
+  var reprocess = true;
+  var packets_transferred = false;
+
+  while (reprocess)
+  {
+    while (true)
+    {
+      var 1 avail_full = virtio_avail_full_tx();
+      if (avail_full) { break; }
+      var 1 queue_empty = net_queue_empty(tx_active);
+      if (queue_empty) { break; }
+
+      // Dequeue buffer from sDDF
+      var {1,1} buffer = net_dequeue(tx_active, tx_capacity);
+      var io_addr = buffer.0;
+      var len = buffer.1;
+      
+      // Allocate descriptors for header and packet
+      var tx_ialloc = TX_IALLOC_PTR;
+      var 1 hdr_desc_idx = ialloc_alloc(tx_ialloc);
+      if (hdr_desc_idx == 4294967295) { break; }  // allocation failed
+      
+      var 1 pkt_desc_idx = ialloc_alloc(tx_ialloc);
+      if (pkt_desc_idx == 4294967295) {
+        ialloc_free(tx_ialloc, hdr_desc_idx);
+        break;  // allocation failed
+      }
+      
+      // Get virtqueue structures
+      var tx_virtq = TX_VIRTQ_BASE;
+      var virtq_desc_ptr = 0;
+      var virtq_avail_ptr = 0;
+      !ldw virtq_desc_ptr, tx_virtq + VIRTQ_DESC_OFFSET;
+      !ldw virtq_avail_ptr, tx_virtq + VIRTQ_AVAIL_OFFSET;
+      
+      // Initialize TX header to all zeros (virtio_net_hdr_t)
+      var tx_headers_vaddr = VIRTIO_NET_TX_HEADERS_VADDR;
+      var hdr_vaddr = tx_headers_vaddr + hdr_desc_idx * VIRTIO_NET_HDR_SIZE;
+      
+      // Zero out the TX header (virtio_net_hdr_t fields)
+      !st8 hdr_vaddr + 0, 0;    // flags
+      !st8 hdr_vaddr + 1, 0;    // gso_type (VIRTIO_NET_HDR_GSO_NONE)  
+      !st16 hdr_vaddr + 2, 0;   // hdr_len
+      !st16 hdr_vaddr + 4, 0;   // gso_size
+      !st16 hdr_vaddr + 6, 0;   // csum_start
+      !st16 hdr_vaddr + 8, 0;   // csum_offset
+      
+      // Set up header descriptor
+      var hdr_desc_addr = virtq_desc_ptr + hdr_desc_idx * VIRTQ_DESC_SIZE;
+      var hdr_phys_addr = VIRTIO_NET_TX_HEADERS_PADDR + hdr_desc_idx * VIRTIO_NET_HDR_SIZE;
+      !stw hdr_desc_addr + VIRTQ_DESC_ADDR_OFFSET, hdr_phys_addr;
+      !st32 hdr_desc_addr + VIRTQ_DESC_LEN_OFFSET, VIRTIO_NET_HDR_SIZE;
+      !st16 hdr_desc_addr + VIRTQ_DESC_FLAGS_OFFSET, VIRTQ_DESC_F_NEXT;
+      !st16 hdr_desc_addr + VIRTQ_DESC_NEXT_OFFSET, pkt_desc_idx;
+      
+      // Set up packet descriptor
+      var pkt_desc_addr = virtq_desc_ptr + pkt_desc_idx * VIRTQ_DESC_SIZE;
+      !stw pkt_desc_addr + VIRTQ_DESC_ADDR_OFFSET, io_addr;
+      !st32 pkt_desc_addr + VIRTQ_DESC_LEN_OFFSET, len;
+      !st16 pkt_desc_addr + VIRTQ_DESC_FLAGS_OFFSET, 0;  // No flags for TX packet desc
+      
+      // Add to available ring
+      var avail_idx = 0;
+      !ld16 avail_idx, virtq_avail_ptr + VIRTQ_AVAIL_IDX_OFFSET;
+      var virtq_num = 0;
+      !ld16 virtq_num, tx_virtq + VIRTQ_NUM_OFFSET;
+      var ring_idx = avail_idx & (virtq_num - 1);
+      var ring_entry_addr = virtq_avail_ptr + VIRTQ_AVAIL_RING_OFFSET + ring_idx * 2;
+      !st16 ring_entry_addr, hdr_desc_idx;
+      
+      // Update available index
+      avail_idx = avail_idx + 1;
+      !st16 virtq_avail_ptr + VIRTQ_AVAIL_IDX_OFFSET, avail_idx;
+      
+      // Update our descriptor count
+      var tx_last_desc_idx_ptr = TX_LAST_DESC_IDX_PTR;
+      var tx_last_desc_idx = 0;
+      !ld32 tx_last_desc_idx, tx_last_desc_idx_ptr;
+      tx_last_desc_idx = tx_last_desc_idx + 2;
+      !st32 tx_last_desc_idx_ptr, tx_last_desc_idx;
+      
+      packets_transferred = true;
+    }
+
+    net_request_signal(tx_active);
+    reprocess = false;
+
+    var 1 avail_full = virtio_avail_full_tx();
+    var 1 queue_empty = net_queue_empty(tx_active);
+    if ((!avail_full) && (!queue_empty)) {
+      net_cancel_signal(tx_active);
+      reprocess = true;
+    }
+  }
+
+  if (packets_transferred) {
+    // Debug: TX buffers provided to device
+    @assert(0,551,0,0);  // TX buffers transferred
+    
+    // Notify device that we added more buffers to transmit
+    var regs_base = VIRTIO_REGS_BASE;
+    var queue_notify_addr = regs_base + QUEUE_NOTIFY_OFFSET;
+    !st32 queue_notify_addr, VIRTIO_NET_TX_QUEUE;
+  }
+
+  return 0;
+}
+
+export fun tx_return()
+{
+  // Debug: TX return called
+  @assert(0,500,0,0);  // tx_return called
+  
+  var tx_free = NET_TX_FREE;
+  var tx_capacity = NET_TX_CAPACITY;
+  var packets_transferred = 0;
+  
+  // Get virtqueue and tracking variables
+  var tx_virtq = TX_VIRTQ_BASE;
+  var tx_last_seen_used_ptr = TX_LAST_SEEN_USED_PTR;
+  var tx_last_desc_idx_ptr = TX_LAST_DESC_IDX_PTR;
+  var tx_ialloc = TX_IALLOC_PTR;
+  
+  var virtq_desc_ptr = 0;
+  var virtq_used_ptr = 0;
+  !ldw virtq_desc_ptr, tx_virtq + VIRTQ_DESC_OFFSET;
+  !ldw virtq_used_ptr, tx_virtq + VIRTQ_USED_OFFSET;
+  
+  var last_seen_used = 0;
+  var curr_used_idx = 0;
+  !ld16 last_seen_used, tx_last_seen_used_ptr;
+  !ld16 curr_used_idx, virtq_used_ptr + VIRTQ_USED_IDX_OFFSET;
+  
+  var i = last_seen_used;
+  while (i != curr_used_idx) {
+    var virtq_num = 0;
+    !ld16 virtq_num, tx_virtq + VIRTQ_NUM_OFFSET;
+    var ring_idx = i & (virtq_num - 1);
+    
+    // Get used ring entry
+    var used_elem_addr = virtq_used_ptr + VIRTQ_USED_RING_OFFSET + ring_idx * VIRTQ_USED_ELEM_SIZE;
+    var hdr_desc_id = 0;
+    !ld32 hdr_desc_id, used_elem_addr + VIRTQ_USED_ELEM_ID_OFFSET;
+    
+    // Get header descriptor and packet descriptor
+    var hdr_desc_addr = virtq_desc_ptr + hdr_desc_id * VIRTQ_DESC_SIZE;
+    var pkt_desc_id = 0;
+    !ld16 pkt_desc_id, hdr_desc_addr + VIRTQ_DESC_NEXT_OFFSET;
+    
+    // Get packet address to return to free pool
+    var pkt_desc_addr = virtq_desc_ptr + pkt_desc_id * VIRTQ_DESC_SIZE;
+    var pkt_addr = 0;
+    !ldw pkt_addr, pkt_desc_addr + VIRTQ_DESC_ADDR_OFFSET;
+    
+    // Enqueue to sDDF free queue
+    net_enqueue(tx_free, pkt_addr, 0, tx_capacity);
+    
+    // Free descriptors
+    ialloc_free(tx_ialloc, hdr_desc_id);
+    ialloc_free(tx_ialloc, pkt_desc_id);
+    
+    // Update descriptor count
+    var tx_last_desc_idx = 0;
+    !ld32 tx_last_desc_idx, tx_last_desc_idx_ptr;
+    tx_last_desc_idx = tx_last_desc_idx - 2;
+    !st32 tx_last_desc_idx_ptr, tx_last_desc_idx;
+    
+    i = i + 1;
+    packets_transferred = packets_transferred + 1;
+  }
+  
+  // Update last seen used index
+  if (packets_transferred > 0) {
+    // Debug: TX packets processed  
+    @assert(0,501,packets_transferred,0);  // TX packets count
+    
+    !st16 tx_last_seen_used_ptr, curr_used_idx;
+    
+    var 1 to_signal = net_require_signal(tx_free);
+    if (to_signal) {
+      net_cancel_signal(tx_free);
+      microkit_notify(TX_CH)
+    }
+  }
+
+  return 0;
+}
+
+export fun handle_irq()
+{
+  // Debug: IRQ received
+  @assert(0,200,0,0);  // IRQ handler called
+  
+  var regs_base = VIRTIO_REGS_BASE;
+  var irq_status_addr = regs_base + INTERRUPT_STATUS_OFFSET;
+  var irq_ack_addr = regs_base + INTERRUPT_ACK_OFFSET;
+  
+  var irq_status = 0;
+  !ld32 irq_status, irq_status_addr;
+  
+  // Debug: Show IRQ status
+  @assert(0,201,irq_status,0);  // IRQ status value
+  
+  if (irq_status & VIRTIO_MMIO_IRQ_VQUEUE) {
+    // Debug: Processing VirtQ IRQ
+    @assert(0,202,0,0);  // VirtQ IRQ processing
+    
+    // ACK the interrupt first
+    !st32 irq_ack_addr, VIRTIO_MMIO_IRQ_VQUEUE;
+    
+    // Handle both TX and RX queues since we do not know which caused the interrupt
+    tx_return();
+    tx_provide();
+    rx_return();
+    
+    // Debug: VirtQ IRQ processed
+    @assert(0,203,0,0);  // VirtQ IRQ done
+  }
+  
+  if (irq_status & VIRTIO_MMIO_IRQ_CONFIG) {
+    // Unexpected configuration change - this is an error in our simple driver
+    @assert(0,6,0,0);
+  }
+  
+  return 0;
+}
+
+
+export fun notified(1 ch)
+{
+  // Debug: Show which channel notified us
+  @assert(0,300,ch,0);  // Notification channel
+  
+  var irq_ch = IRQ_CH;
+  var rx_ch = RX_CH;
+  var tx_ch = TX_CH;
+  
+  if (ch == irq_ch) {
+    @assert(0,301,0,0);  // IRQ channel notification
+    handle_irq();
+    microkit_deferred_irq_ack(ch)
+  }
+  if (ch == rx_ch) {
+    @assert(0,302,0,0);  // RX channel notification
+    rx_provide();
+  }
+  if (ch == tx_ch) {
+    @assert(0,303,0,0);  // TX channel notification
+    tx_provide();
+  }
+  if ((ch != irq_ch) && (ch != rx_ch) && (ch != tx_ch)) {
+    @assert(0,7,ch,0);  // Unknown channel with value
+  }
+  return 0;
+}

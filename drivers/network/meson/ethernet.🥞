@@ -1,0 +1,404 @@
+/*
+ * Copyright 2025, UNSW
+ * SPDX-License-Identifier: BSD-2-Clause
+ */
+
+/////////////////// Pancake driver memory layout
+#define IRQ_CH  pnk_mem(1)
+#define RX_CH   pnk_mem(2)
+#define TX_CH   pnk_mem(3)
+
+/* Mirror `net_queue_handle_t` struct in queue.h */
+/* Shared memory with virtualisers */
+#define NET_RX_FREE     pnk_mem(4)
+#define NET_RX_ACTIVE   pnk_mem(5)
+#define NET_RX_CAPACITY pnk_mem(6)
+#define NET_TX_FREE     pnk_mem(7)
+#define NET_TX_ACTIVE   pnk_mem(8)
+#define NET_TX_CAPACITY pnk_mem(9)
+
+/* Bookeeping for hardware rings */
+#define HW_RX_PTR       pnk_mem_ptr(10)
+#define HW_RX_TAIL_SLOT pnk_mem_ptr(10)
+#define HW_RX_HEAD_SLOT pnk_mem_ptr(11)
+#define HW_RX_TAIL      lds 1 HW_RX_TAIL_SLOT
+#define HW_RX_HEAD      lds 1 HW_RX_HEAD_SLOT
+#define HW_RX_CAPACITY  pnk_mem(12)
+#define HW_RX_DESCR     pnk_mem(13)
+
+#define HW_TX_PTR       pnk_mem_ptr(14)
+#define HW_TX_TAIL_SLOT pnk_mem_ptr(14)
+#define HW_TX_HEAD_SLOT pnk_mem_ptr(15)
+#define HW_TX_TAIL      lds 1 HW_TX_TAIL_SLOT
+#define HW_TX_HEAD      lds 1 HW_TX_HEAD_SLOT
+#define HW_TX_CAPACITY  pnk_mem(16)
+#define HW_TX_DESCR     pnk_mem(17)
+
+fun rx_hw_ring_empty() {
+  var tail = HW_RX_TAIL;
+  var head = HW_RX_HEAD;
+  var ret = (head == tail);
+  return ret;
+}
+
+fun tx_hw_ring_empty() {
+  var tail = HW_TX_TAIL;
+  var head = HW_TX_HEAD;
+  var ret = (head == tail);
+  return ret;
+}
+
+fun rx_hw_ring_full() {
+  var tail = HW_RX_TAIL;
+  var head = HW_RX_HEAD;
+  var ret = (tail - head) == HW_RX_CAPACITY;
+  return ret;
+}
+
+fun tx_hw_ring_full() {
+  var tail = HW_TX_TAIL;
+  var head = HW_TX_HEAD;
+  var ret = (tail - head) == HW_TX_CAPACITY;
+  return ret;
+}
+
+/////////////////// Meson Ethernet Device Helper Functions
+
+/* DMA Register offset from MAC base */
+#define DMA_REG_OFFSET              4096
+
+/* Device constants - converted to decimal */
+#define MAX_RX_FRAME_SZ             1536
+
+/* DMA Status register definitions */
+#define DMA_INTR_TXF                1
+#define DMA_INTR_RXF                64
+#define DMA_INTR_FBE                8192
+#define DMA_INTR_ABNORMAL           32768
+#define DMA_INTR_MASK               40897
+
+/* DMA Poll demand value */
+#define POLL_DATA                   4294967295
+
+/* Descriptor status bits */
+#define DESC_RXSTS_OWNBYDMA         2147483648
+#define DESC_RXSTS_ERROR            32768
+#define DESC_RXSTS_LENMSK           1073676288
+#define DESC_RXSTS_LENSHFT          16
+
+#define DESC_TXSTS_OWNBYDMA         2147483648
+
+/* Descriptor control bits */
+#define DESC_RXCTRL_SIZE1MASK       2047
+#define DESC_RXCTRL_SIZE1SHFT       0
+#define DESC_RXCTRL_RXRINGEND       33554432
+
+#define DESC_TXCTRL_SIZE1MASK       2047
+#define DESC_TXCTRL_SIZE1SHFT       0
+#define DESC_TXCTRL_TXLAST          1073741824
+#define DESC_TXCTRL_TXFIRST         536870912
+#define DESC_TXCTRL_TXINT           2147483648
+#define DESC_TXCTRL_TXRINGEND       33554432
+
+/* Register offsets from base */
+#define MAC_REG_BASE  pnk_mem(0)
+#define DMA_BASE      (MAC_REG_BASE + DMA_REG_OFFSET)
+
+/* DMA register offsets */
+#define DMA_STATUS_OFFSET           20
+#define DMA_RXPOLLDEMAND_OFFSET     8  
+#define DMA_TXPOLLDEMAND_OFFSET     4
+
+/////////////////// Hardware Helper Functions
+
+fun get_dma_status()
+{
+  var reg_addr = DMA_BASE + DMA_STATUS_OFFSET;
+  var status = 0;
+  !ld32 status, reg_addr;
+  return status;
+}
+
+fun set_dma_status(1 status)
+{
+  var reg_addr = DMA_BASE + DMA_STATUS_OFFSET;
+  var current = 0;
+  !ld32 current, reg_addr;
+  current = current & status;
+  !st32 reg_addr, current;
+  return 0;
+}
+
+fun set_rx_poll()
+{
+  var reg_addr = DMA_BASE + DMA_RXPOLLDEMAND_OFFSET;
+  !st32 reg_addr, POLL_DATA;
+  return 0;
+}
+
+fun set_tx_poll()
+{
+  var reg_addr = DMA_BASE + DMA_TXPOLLDEMAND_OFFSET;
+  !st32 reg_addr, POLL_DATA;
+  return 0;
+}
+
+fun rx_update_ring_slot(1 ring_addr, 1 idx, 1 phys)
+{
+  var descr_start = lds 1 ring_addr + 3 * @biw;
+  var descr = descr_start + idx * 16;
+  var cntl = (MAX_RX_FRAME_SZ << DESC_RXCTRL_SIZE1SHFT) & DESC_RXCTRL_SIZE1MASK;
+  if (idx + 1 == HW_RX_CAPACITY) {
+    cntl = cntl | DESC_RXCTRL_RXRINGEND;
+  }
+  
+  !st32 descr + 8, phys;
+  !st32 descr + 12, 0;
+  !st32 descr + 4, cntl;
+  THREAD_MEMORY_RELEASE()
+  !st32 descr, DESC_RXSTS_OWNBYDMA;
+  return 0;
+}
+
+fun tx_update_ring_slot(1 ring_addr, 1 idx, 1 phys, 1 len)
+{
+  var descr_start = lds 1 ring_addr + 3 * @biw;
+  var descr = descr_start + idx * 16;
+  var cntl = (len << DESC_TXCTRL_SIZE1SHFT) & DESC_TXCTRL_SIZE1MASK;
+  cntl = cntl | DESC_TXCTRL_TXLAST | DESC_TXCTRL_TXFIRST | DESC_TXCTRL_TXINT;
+  if (idx + 1 == HW_TX_CAPACITY) {
+    cntl = cntl | DESC_TXCTRL_TXRINGEND;
+  }
+  
+  !st32 descr + 8, phys;
+  !st32 descr + 12, 0;
+  !st32 descr + 4, cntl;
+  THREAD_MEMORY_RELEASE()
+  !st32 descr, DESC_TXSTS_OWNBYDMA;
+  return 0;
+}
+
+/////////////////// Main driver code
+
+fun main() {
+  rx_provide();
+  tx_provide();
+  return 0;
+}
+
+export fun notified(1 ch)
+{
+  if (ch == IRQ_CH) {
+    handle_irq();
+    microkit_deferred_irq_ack(ch)
+  }
+  if (ch == RX_CH) {
+    rx_provide();
+  }
+  if (ch == TX_CH) {
+    tx_provide();
+  }
+  if ((ch != IRQ_CH) && (ch != RX_CH) && (ch != TX_CH)) {
+    @assert(0,0,0,0);
+  }
+  return 0;
+}
+
+fun handle_irq() {
+  var 1 e = get_dma_status();
+  set_dma_status(e);
+
+  while (e & DMA_INTR_MASK)
+  {
+    if (e & DMA_INTR_TXF) {
+      tx_return();
+      tx_provide();
+    }
+    if (e & DMA_INTR_RXF) {
+      rx_return();
+    }
+    if (e & DMA_INTR_ABNORMAL) {
+      if (e & DMA_INTR_FBE) {
+        @assert(0,0,0,0);
+      }
+    }
+    e = get_dma_status();
+    set_dma_status(e);
+  }
+  return 0;
+}
+
+fun rx_provide()
+{
+  var reprocess = true;
+  var rx_free = NET_RX_FREE;
+  var rx_queue_cap = NET_RX_CAPACITY;
+  var rx_hw_cap = HW_RX_CAPACITY;
+
+  while (reprocess)
+  {
+    while (true)
+    {
+      var 1 full = rx_hw_ring_full();
+      if (full) { break; }
+      var 1 empty = net_queue_empty(rx_free);
+      if (empty) { break; }
+
+      var {1,1} buffer = net_dequeue(rx_free, rx_queue_cap);
+
+      var rx_tail = HW_RX_TAIL;
+      var idx = rx_tail & (rx_hw_cap - 1);
+
+      var io_addr = buffer.0;
+      rx_update_ring_slot(HW_RX_PTR, idx, io_addr);
+
+      st HW_RX_TAIL_SLOT, (rx_tail + 1);
+      set_rx_poll();
+    }
+
+    net_request_signal(rx_free);
+    reprocess = false;
+
+    var 1 empty = net_queue_empty(rx_free);
+    var 1 full = rx_hw_ring_full();
+    if ((!empty) && (!full)) {
+      net_cancel_signal(rx_free);
+      reprocess = true;
+    }
+  }
+  return 0;
+}
+
+fun tx_provide()
+{
+  var reprocess = true;
+  var tx_active = NET_TX_ACTIVE;
+  var tx_queue_cap = NET_TX_CAPACITY;
+  var tx_hw_cap = HW_TX_CAPACITY;
+
+  while (reprocess)
+  {
+    while (true)
+    {
+      var 1 full = tx_hw_ring_full();
+      if (full) { break; }
+      var 1 empty = net_queue_empty(tx_active);
+      if (empty) { break; }
+
+      var {1,1} buffer = net_dequeue(tx_active, tx_queue_cap);
+
+      var tx_tail = HW_TX_TAIL;
+      var idx = tx_tail & (tx_hw_cap - 1);
+
+      var io_addr = buffer.0;
+      var len = buffer.1;
+      tx_update_ring_slot(HW_TX_PTR, idx, io_addr, len);
+
+      st HW_TX_TAIL_SLOT, (tx_tail + 1);
+    }
+
+    net_request_signal(tx_active);
+    reprocess = false;
+
+    var 1 full = tx_hw_ring_full();
+    var 1 empty = net_queue_empty(tx_active);
+    if ((!empty) && (!full)) {
+      net_cancel_signal(tx_active);
+      reprocess = true;
+    }
+  }
+  set_tx_poll();
+  return 0;
+}
+
+fun rx_return()
+{
+  var rx_active = NET_RX_ACTIVE;
+  var rx_descr = HW_RX_DESCR;
+  var rx_queue_cap = NET_RX_CAPACITY;
+  var rx_hw_cap = HW_RX_CAPACITY;
+
+  var packets_transferred = false;
+
+  while (true)
+  {
+    var 1 empty = rx_hw_ring_empty();
+    if (empty) { break; }
+
+    var rx_head = HW_RX_HEAD;
+    var idx = rx_head & (rx_hw_cap - 1);
+
+    var dscr_addr = rx_descr + idx * 16;
+    var status = 0;
+    !ld32 status, dscr_addr;
+    if (status & DESC_RXSTS_OWNBYDMA) { break; }
+
+    THREAD_MEMORY_ACQUIRE()
+
+    if (status & DESC_RXSTS_ERROR) {
+      var rx_tail = HW_RX_TAIL;
+      var next_idx = rx_tail & (rx_hw_cap - 1);
+      var phys = 0;
+      !ld32 phys, dscr_addr + 8;
+      rx_update_ring_slot(HW_RX_PTR, next_idx, phys);
+      st HW_RX_TAIL_SLOT, (rx_tail + 1);
+      set_rx_poll();
+    } else {
+      var len = (status & DESC_RXSTS_LENMSK) >> DESC_RXSTS_LENSHFT;
+      var io_addr = 0;
+      !ld32 io_addr, dscr_addr + 8;
+      net_enqueue(rx_active, io_addr, len, rx_queue_cap);
+      packets_transferred = true;
+    }
+    st HW_RX_HEAD_SLOT, (rx_head + 1);
+  }
+
+  var 1 to_signal = net_require_signal(rx_active);
+  if (packets_transferred && to_signal) {
+    net_cancel_signal(rx_active);
+    microkit_notify(RX_CH)
+  }
+
+  return 0;
+}
+
+fun tx_return()
+{
+  var tx_free = NET_TX_FREE;
+  var tx_descr = HW_TX_DESCR;
+  var tx_queue_cap = NET_TX_CAPACITY;
+  var tx_hw_cap = HW_TX_CAPACITY;
+
+  var enqueued = false;
+
+  while (true)
+  {
+    var 1 empty = tx_hw_ring_empty();
+    if (empty) { break; }
+
+    var tx_head = HW_TX_HEAD;
+    var idx = tx_head & (tx_hw_cap - 1);
+
+    var dscr_addr = tx_descr + idx * 16;
+    var status = 0;
+    !ld32 status, dscr_addr;
+    if (status & DESC_TXSTS_OWNBYDMA) { break; }
+
+    THREAD_MEMORY_ACQUIRE()
+
+    var io_addr = 0;
+    !ld32 io_addr, dscr_addr + 8;
+    net_enqueue(tx_free, io_addr, 0, tx_queue_cap);
+
+    enqueued = true;
+    st HW_TX_HEAD_SLOT, (tx_head + 1);
+  }
+
+  var 1 to_signal = net_require_signal(tx_free);
+  if (enqueued && to_signal) {
+    net_cancel_signal(tx_free);
+    microkit_notify(TX_CH)
+  }
+
+  return 0;
+}

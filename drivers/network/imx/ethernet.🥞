@@ -1,0 +1,391 @@
+/*
+ * Copyright 2025, UNSW
+ * SPDX-License-Identifier: BSD-2-Clause
+ */
+
+/////////////////// Pancake driver memory layout
+#define IRQ_CH  pnk_mem(1)
+#define RX_CH   pnk_mem(2)
+#define TX_CH   pnk_mem(3)
+
+/* Mirror `net_queue_handle_t` struct in queue.h */
+/* Shared memory with virtualisers */
+#define NET_RX_FREE     pnk_mem(4)
+#define NET_RX_ACTIVE   pnk_mem(5)
+#define NET_RX_CAPACITY pnk_mem(6)
+#define NET_TX_FREE     pnk_mem(7)
+#define NET_TX_ACTIVE   pnk_mem(8)
+#define NET_TX_CAPACITY pnk_mem(9)
+
+/* Bookeeping for hardware rings */
+#define HW_RX_PTR       pnk_mem_ptr(10)
+#define HW_RX_TAIL_SLOT pnk_mem_ptr(10)
+#define HW_RX_HEAD_SLOT pnk_mem_ptr(11)
+#define HW_RX_TAIL      lds 1 HW_RX_TAIL_SLOT
+#define HW_RX_HEAD      lds 1 HW_RX_HEAD_SLOT
+#define HW_RX_CAPACITY  pnk_mem(12)
+#define HW_RX_DESCR     pnk_mem(13)
+
+#define HW_TX_PTR       pnk_mem_ptr(14)
+#define HW_TX_TAIL_SLOT pnk_mem_ptr(14)
+#define HW_TX_HEAD_SLOT pnk_mem_ptr(15)
+#define HW_TX_TAIL      lds 1 HW_TX_TAIL_SLOT
+#define HW_TX_HEAD      lds 1 HW_TX_HEAD_SLOT
+#define HW_TX_CAPACITY  pnk_mem(16)
+#define HW_TX_DESCR     pnk_mem(17)
+
+fun rx_hw_ring_empty() {
+  /@ unfold hardware_ring_rx() @/
+  var tail = HW_RX_TAIL;
+  var head = HW_RX_HEAD;
+  /@ fold hardware_ring_rx() @/
+
+  var ret = (head == tail);
+  return ret;
+}
+
+fun tx_hw_ring_empty() {
+  /@ unfold hardware_ring_tx() @/
+  var tail = HW_TX_TAIL;
+  var head = HW_TX_HEAD;
+  /@ fold hardware_ring_tx() @/
+
+  var ret = (head == tail);
+  return ret;
+}
+
+fun rx_hw_ring_full() {
+  var tail = HW_RX_TAIL;
+  var head = HW_RX_HEAD;
+
+  var ret = (tail - head) == HW_RX_CAPACITY;
+  return ret;
+}
+
+fun tx_hw_ring_full() {
+  /@ unfold hardware_ring_tx() @/
+  var tail = HW_TX_TAIL;
+  var head = HW_TX_HEAD;
+  /@ fold hardware_ring_tx() @/
+
+  var ret = (tail - head) == HW_TX_CAPACITY;
+  return ret;
+}
+
+/////////////////// Some device helper functions
+/* The reference manual used to acquire these values is:
+*
+* i.MX 8M Mini Applications Processor Reference Manual.
+* Document number: IMX8MMRM.
+* Rev. 3, 11/2020.
+*
+* The ethernet device is described in section 11.5.
+*/
+
+/* Device register offsets */
+#define EIR_OFFSET      4
+#define RDAR_OFFSET     16
+#define TDAR_OFFSET     20
+
+/* Device constants */
+#define RXD_EMPTY       (1 << 15)
+#define WRAP            (1 << 13)
+#define TXD_READY       (1 << 15)
+#define TXD_ADDCRC      (1 << 10)
+#define TXD_LAST        (1 << 11)
+#define RDAR_RDAR       (1 << 24)
+#define TDAR_TDAR       (1 << 24)
+
+#define NETIRQ_RXF      (1 << 25) /* Receive Frame Interrupt */
+#define NETIRQ_TXF      (1 << 27) /* Transmit Frame Interrupt */
+#define NETIRQ_EBERR    (1 << 22) /* Ethernet bus error */
+#define IRQ_MASK        (NETIRQ_RXF | NETIRQ_TXF | NETIRQ_EBERR)
+
+#define ETH_REG   pnk_mem(0)
+
+fun set_rdar()
+{
+  var reg_addr = ETH_REG + RDAR_OFFSET;
+  !st32 reg_addr, RDAR_RDAR;
+  return 0;
+}
+
+fun set_tdar()
+{
+  var reg_addr = ETH_REG + TDAR_OFFSET;
+  !st32 reg_addr, TDAR_TDAR;
+  return 0;
+}
+
+fun get_eir()
+{
+  var reg_addr = ETH_REG + EIR_OFFSET;
+  var eir = 0;
+  !ld32 eir, reg_addr;
+  eir = eir & IRQ_MASK;
+  return eir;
+}
+
+fun set_eir(1 eir)
+{
+  var reg_addr = ETH_REG + EIR_OFFSET;
+  !st32 reg_addr, eir;
+  return 0;
+}
+
+// todo: wait until later to add `stat` argument (export only takes 4 args)
+fun rx_update_ring_slot(1 ring_addr, 1 idx, 1 phys, 1 len)
+{
+  var descr_start = lds 1 ring_addr + 3 * @biw;
+  var descr = descr_start + idx * @biw;
+  var stat = RXD_EMPTY;
+  if (idx + 1 == HW_RX_CAPACITY) {
+    stat = stat | WRAP;
+  }
+  !st32 descr + 4, phys;
+  !st16 descr, len;
+  THREAD_MEMORY_RELEASE()
+  !st16 descr + 2, stat;
+  return 0;
+}
+
+
+fun tx_update_ring_slot(1 ring_addr, 1 idx, 1 phys, 1 len)
+{
+  var descr_start = lds 1 ring_addr + 3 * @biw;
+  var descr = descr_start + idx * @biw;
+  var stat = TXD_READY | TXD_ADDCRC | TXD_LAST;
+  if (idx + 1 == HW_TX_CAPACITY) {
+    stat = stat | WRAP;
+  }
+  !st32 descr + 4, phys;
+  !st16 descr, len;
+  THREAD_MEMORY_RELEASE()
+  !st16 descr + 2, stat;
+  return 0;
+}
+
+/////////////////// Main driver code
+
+fun main() {
+  rx_provide();
+  tx_provide();
+  return 0;
+}
+
+export fun notified(1 ch)
+{
+  if (ch == IRQ_CH) {
+    handle_irq();
+    microkit_deferred_irq_ack(ch)
+  }
+  if (ch == RX_CH) {
+    rx_provide();
+  }
+  if (ch == TX_CH) {
+    tx_provide();
+  }
+  if ((ch != IRQ_CH) && (ch != RX_CH) && (ch != TX_CH)) {
+    @assert(0,0,0,0);
+  }
+  return 0;
+}
+
+fun handle_irq() {
+  var 1 eir = get_eir();
+  set_eir(eir);
+
+  while (eir & IRQ_MASK)
+  {
+    if (eir & NETIRQ_TXF) {
+      tx_return();
+      tx_provide();
+    }
+    if (eir & NETIRQ_RXF) {
+      rx_return();
+      rx_provide();
+    }
+    if (eir & NETIRQ_EBERR) {
+      @assert(0,0,0,0);
+    }
+    eir = get_eir();
+    set_eir(eir);
+  }
+  return 0;
+}
+
+fun rx_provide()
+{
+  var reprocess = true;
+  var rx_free = NET_RX_FREE;
+  var rx_queue_cap = NET_RX_CAPACITY;
+  var rx_hw_cap = HW_RX_CAPACITY;
+
+  while (reprocess)
+  {
+    while (true)
+    {
+      var 1 full = rx_hw_ring_full();
+      if (full) { break; }
+      var 1 empty = net_queue_empty(rx_free);
+      if (empty) { break; }
+
+      var {1,1} buffer = net_dequeue(rx_free, rx_queue_cap);
+
+      var rx_tail = HW_RX_TAIL;
+      var idx = rx_tail & (rx_hw_cap - 1);
+
+      var io_addr = buffer.0;
+      rx_update_ring_slot(HW_RX_PTR, idx, io_addr, 0);
+
+      st HW_RX_TAIL_SLOT, (rx_tail + 1);
+      set_rdar();
+    }
+
+    var 1 full = rx_hw_ring_full();
+    if (!full) {
+      net_request_signal(rx_free);
+    } else {
+      net_cancel_signal(rx_free);
+    }
+    reprocess = false;
+
+    var 1 empty = net_queue_empty(rx_free);
+    if ((!empty) && (!full)) {
+      net_cancel_signal(rx_free);
+      reprocess = true;
+    }
+  }
+  return 0;
+}
+
+fun tx_provide()
+{
+  var reprocess = true;
+  var tx_active = NET_TX_ACTIVE;
+  var tx_queue_cap = NET_TX_CAPACITY;
+  var tx_hw_cap = HW_TX_CAPACITY;
+
+  while (reprocess)
+  {
+    while (true)
+    {
+      var 1 full = tx_hw_ring_full();
+      if (full) { break; }
+      var 1 empty = net_queue_empty(tx_active);
+      if (empty) { break; }
+
+      var {1,1} buffer = net_dequeue(tx_active, tx_queue_cap);
+
+      var tx_tail = HW_TX_TAIL;
+      var idx = tx_tail & (tx_hw_cap - 1);
+
+      var io_addr = buffer.0;
+      var len = buffer.1;
+      tx_update_ring_slot(HW_TX_PTR, idx, io_addr, len);
+
+      st HW_TX_TAIL_SLOT, (tx_tail + 1);
+      set_tdar();
+    }
+
+    net_request_signal(tx_active);
+    reprocess = false;
+
+    var 1 full = tx_hw_ring_full();
+    var 1 empty = net_queue_empty(tx_active);
+    if ((!empty) && (!full)) {
+      net_cancel_signal(tx_active);
+      reprocess = true;
+    }
+  }
+  return 0;
+}
+
+fun rx_return()
+{
+  var rx_active = NET_RX_ACTIVE;
+  var rx_descr = HW_RX_DESCR;
+  var rx_queue_cap = NET_RX_CAPACITY;
+  var rx_hw_cap = HW_RX_CAPACITY;
+
+  var packets_transferred = false;
+
+  while (true)
+  {
+    var 1 empty = rx_hw_ring_empty();
+    if (empty) { break; }
+
+    var rx_head = HW_RX_HEAD;
+    var idx = rx_head & (rx_hw_cap - 1);
+
+    var dscr_addr = rx_descr + idx * @biw;
+    var stat = 0;
+    !ld8 stat, dscr_addr + 3;
+    var avail = ((stat & (RXD_EMPTY >> 8)) == 0);
+    if (!avail) { break; }
+
+    THREAD_MEMORY_ACQUIRE()
+
+    // todo: use native pancake shared ld/st16
+    var len = 0;
+    !ld32 len, dscr_addr;
+    len = len & MAX_INT16;
+    var io_addr = 0;
+    !ld32 io_addr, dscr_addr + 4;
+
+    net_enqueue(rx_active, io_addr, len, rx_queue_cap);
+
+    packets_transferred = true;
+    st HW_RX_HEAD_SLOT, (rx_head + 1);
+  }
+
+  var 1 to_signal = net_require_signal(rx_active);
+  if (packets_transferred && to_signal) {
+    net_cancel_signal(rx_active);
+    microkit_notify(RX_CH)
+  }
+
+  return 0;
+}
+
+fun tx_return()
+{
+  var tx_free = NET_TX_FREE;
+  var tx_descr = HW_TX_DESCR;
+  var tx_queue_cap = NET_TX_CAPACITY;
+  var tx_hw_cap = HW_TX_CAPACITY;
+
+  var enqueued = false;
+
+  while (true)
+  {
+    var 1 empty = tx_hw_ring_empty();
+    if (empty) { break; }
+
+    var tx_head = HW_TX_HEAD;
+    var idx = tx_head & (tx_hw_cap - 1);
+
+    var dscr_addr = tx_descr + idx * @biw;
+    var stat = 0;
+    !ld8 stat, dscr_addr + 3;
+    var avail = ((stat & (TXD_READY >> 8)) == 0);
+    if (!avail) { break; }
+
+    THREAD_MEMORY_ACQUIRE()
+
+    var io_addr = 0;
+    !ld32 io_addr, dscr_addr + 4;
+    net_enqueue(tx_free, io_addr, 0, tx_queue_cap);
+
+    enqueued = true;
+    st HW_TX_HEAD_SLOT, (tx_head + 1);
+  }
+
+  var 1 to_signal = net_require_signal(tx_free);
+  if (enqueued && to_signal) {
+    net_cancel_signal(tx_free);
+    microkit_notify(TX_CH)
+  }
+
+  return 0;
+}

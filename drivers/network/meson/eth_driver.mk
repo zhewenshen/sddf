@@ -18,8 +18,27 @@ ${CHECK_NETDRV_FLAGS_MD5}:
 	-rm -f .netdrv_cflags-*
 	touch $@
 
+ifeq ($(PANCAKE_DRIVER),1)
+eth_driver.elf: ${BUILD_DIR}/ethernet_pnk.o meson/ethernet.o pancake_ffi.o
+	$(LD) $(LDFLAGS) $^ $(LIBS) -o $@
+
+ETHERNET_PNK = ${UTIL}/util.🥞 \
+		${SDDF}/include/sddf/network/queue.🥞 \
+		${ETHERNET_DRIVER_DIR}/ethernet.🥞
+
+${BUILD_DIR}/ethernet_pnk.S: $(ETHERNET_PNK)
+	cat $(ETHERNET_PNK) | cpp -P | $(CAKE_COMPILER) --target=arm8 --pancake --main_return=true > $@
+
+meson/ethernet.o: ${ETHERNET_DRIVER_DIR}/ethernet.c ${CHECK_NETDRV_FLAGS_MD5}
+	mkdir -p meson
+	${CC} -c ${CFLAGS} ${CFLAGS_network} -DPANCAKE_DRIVER -I ${ETHERNET_DRIVER_DIR} -o $@ $<
+
+${BUILD_DIR}/ethernet_pnk.o: ${BUILD_DIR}/ethernet_pnk.S
+	$(CC) -c -mcpu=$(CPU) $< -o $@
+else
 eth_driver.elf: network/meson/ethernet.o
 	$(LD) $(LDFLAGS) $< $(LIBS) -o $@
+endif
 
 network/meson/ethernet.o: ${ETHERNET_DRIVER_DIR}/ethernet.c ${CHECK_NETDRV_FLAGS_MD5}
 	mkdir -p network/meson
