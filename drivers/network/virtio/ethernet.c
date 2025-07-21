@@ -432,7 +432,7 @@ static void eth_setup(void)
     rx_provide();
     tx_provide();
 #else 
-    cml_main();
+    // @zhewen: check if the re-ordering is fine
 #endif
 
     // Setup RX queue first
@@ -524,11 +524,13 @@ void init(void)
     pnk_mem[18] = (uintptr_t) &tx_ialloc_desc;
     pnk_mem[19] = virtio_net_rx_headers_paddr;
     pnk_mem[20] = virtio_net_tx_headers_paddr;
-    pnk_mem[21] = 0; // FIXME: what is this slot for?
+    pnk_mem[21] = 0; // @zhewen: what is this slot for?
     
     pnk_mem[22] = hw_ring_buffer_vaddr;
     pnk_mem[23] = hw_ring_buffer_paddr;
     pnk_mem[24] = 0;
+    
+    cml_main();
 #endif
     eth_setup();
 }
