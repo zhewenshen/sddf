@@ -104,7 +104,6 @@
 #define IALLOC_OFFSET_OFFSET    20
 #define IALLOC_SIZE_OFFSET      24
 
-
 fun virtio_avail_full_rx()
 {
   var rx_last_desc_idx_ptr = RX_LAST_DESC_IDX_PTR;
@@ -114,7 +113,6 @@ fun virtio_avail_full_rx()
   var rx_virtq = RX_VIRTQ_BASE;
   var virtq_num = 0;
   !ld16 virtq_num, rx_virtq + VIRTQ_NUM_OFFSET;
-  
   
   var full = (rx_last_desc_idx >= virtq_num);
   return full;
@@ -212,7 +210,6 @@ fun ialloc_free(1 ialloc_ptr, 1 id)
   
   return 0;
 }
-
 
 fun main() 
 {
@@ -581,7 +578,7 @@ fun handle_irq()
     rx_return();
   }
   
-  if (irq_status & VIRTIO_MMIO_IRQ_CONFIG) {}
+  if (irq_status & VIRTIO_MMIO_IRQ_CONFIG) { /* TODO */ }
   
   return 0;
 }

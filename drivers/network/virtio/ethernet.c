@@ -520,8 +520,6 @@ void init(void)
     pnk_mem[15] = (uintptr_t) &rx_last_desc_idx;
     pnk_mem[16] = (uintptr_t) &tx_last_desc_idx;
     
-    rx_last_desc_idx = 0;
-    tx_last_desc_idx = 0;
     pnk_mem[17] = (uintptr_t) &rx_ialloc_desc;
     pnk_mem[18] = (uintptr_t) &tx_ialloc_desc;
     pnk_mem[19] = virtio_net_rx_headers_paddr;
