@@ -529,7 +529,7 @@ void init(void)
     pnk_mem[22] = hw_ring_buffer_vaddr;
     pnk_mem[23] = hw_ring_buffer_paddr;
     pnk_mem[24] = 0;
-    
+
     cml_main();
 #endif
     eth_setup();
