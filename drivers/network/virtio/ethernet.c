@@ -384,8 +384,7 @@ static void eth_setup(void)
     virtio_net_print_config(config);
 #endif
 
-    // Setup the virtqueues
-
+// Setup the virtqueues
     size_t rx_desc_off = 0;
     size_t rx_avail_off = ALIGN(rx_desc_off + (16 * RX_COUNT), 2);
     size_t rx_used_off = ALIGN(rx_avail_off + (6 + 2 * RX_COUNT), 4);
@@ -412,10 +411,18 @@ static void eth_setup(void)
     assert((uintptr_t)tx_virtq.avail % 2 == 0);
     assert((uintptr_t)tx_virtq.used % 4 == 0);
 
+
     /* Virtio TX headers will proceed the virtq structures. Then RX headers. */
     virtio_net_tx_headers_vaddr = hw_ring_buffer_vaddr + virtq_size;
     virtio_net_tx_headers_paddr = hw_ring_buffer_paddr + virtq_size;
+
+#ifndef PANCAKE_DRIVER
     virtio_net_tx_headers = (virtio_net_hdr_t *) virtio_net_tx_headers_vaddr;
+#else
+    uintptr_t *pnk_mem = (uintptr_t *) cml_heap;
+    pnk_mem[24] = virtio_net_tx_headers_vaddr;
+#endif
+
     size_t tx_headers_size = ((TX_COUNT / 2) * sizeof(virtio_net_hdr_t));
     virtio_net_rx_headers_paddr = virtio_net_tx_headers_paddr + tx_headers_size;
     size_t rx_headers_size = ((RX_COUNT / 2) * sizeof(virtio_net_hdr_t));
@@ -425,6 +432,8 @@ static void eth_setup(void)
 #ifndef PANCAKE_DRIVER
     rx_provide();
     tx_provide();
+#else 
+    cml_main();
 #endif
 
     // Setup RX queue first
@@ -525,13 +534,8 @@ void init(void)
     pnk_mem[22] = hw_ring_buffer_vaddr;
     pnk_mem[23] = hw_ring_buffer_paddr;
     pnk_mem[24] = 0;
-
-    cml_main();
-    eth_setup();
-    
-#else
-    eth_setup();
 #endif
+    eth_setup();
 }
 
 #ifdef PANCAKE_DRIVER
