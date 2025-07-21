@@ -476,7 +476,6 @@ fun rx_return()
     
     net_enqueue(rx_active, pkt_addr, pkt_len, rx_capacity);
     
-    
     ialloc_free(rx_ialloc, hdr_desc_id);
     ialloc_free(rx_ialloc, pkt_desc_id);
     
