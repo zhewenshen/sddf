@@ -217,6 +217,8 @@ fun ialloc_free(1 ialloc_ptr, 1 id)
 
 fun main() {
   var regs_base = VIRTIO_REGS_BASE;
+  
+  
   var magic = 0;
   !ld32 magic, regs_base + MAGIC_VALUE_OFFSET;
   if (magic != 1953655158) {
@@ -350,7 +352,7 @@ export fun rx_provide()
       }
       
       var 1 pkt_desc_idx = ialloc_alloc(rx_ialloc);
-      
+      // Assert allocation success like C code  
       if (pkt_desc_idx == -1) { 
         ialloc_free(rx_ialloc, hdr_desc_idx);
         break; 
@@ -372,26 +374,26 @@ export fun rx_provide()
       !st16 hdr_desc_addr + VIRTQ_DESC_FLAGS_OFFSET, (VIRTQ_DESC_F_NEXT | VIRTQ_DESC_F_WRITE);
       !st16 hdr_desc_addr + VIRTQ_DESC_NEXT_OFFSET, pkt_desc_idx;
       
-      
+      // Set up packet descriptor
       var pkt_desc_addr = virtq_desc_ptr + pkt_desc_idx * VIRTQ_DESC_SIZE;
       !stw pkt_desc_addr + VIRTQ_DESC_ADDR_OFFSET, io_addr;
       !st32 pkt_desc_addr + VIRTQ_DESC_LEN_OFFSET, NET_BUFFER_SIZE;
       !st16 pkt_desc_addr + VIRTQ_DESC_FLAGS_OFFSET, VIRTQ_DESC_F_WRITE;
       
-      
+      // Add to available ring - match C exactly: rx_virtq.avail->ring[rx_virtq.avail->idx % rx_virtq.num] = hdr_desc_idx;
       var avail_idx = 0;
       !ld16 avail_idx, virtq_avail_ptr + VIRTQ_AVAIL_IDX_OFFSET;
       var virtq_num = 0;
       !ld16 virtq_num, rx_virtq + VIRTQ_NUM_OFFSET;
-      var ring_idx = avail_idx & (virtq_num - 1);  
+      var ring_idx = avail_idx & (virtq_num - 1);  // equivalent to % for power of 2
       var ring_entry_addr = virtq_avail_ptr + VIRTQ_AVAIL_RING_OFFSET + ring_idx * 2;
       !st16 ring_entry_addr, hdr_desc_idx;
       
-      
+      // Update available index - match C exactly: rx_virtq.avail->idx++;
       avail_idx = avail_idx + 1;
       !st16 virtq_avail_ptr + VIRTQ_AVAIL_IDX_OFFSET, avail_idx;
       
-      
+      // Update our descriptor count
       var rx_last_desc_idx_ptr = RX_LAST_DESC_IDX_PTR;
       var rx_last_desc_idx = 0;
       !ld32 rx_last_desc_idx, rx_last_desc_idx_ptr;
@@ -414,8 +416,8 @@ export fun rx_provide()
 
   if (transferred) {
     
-    
-    THREAD_MEMORY_RELEASE()  
+    // Notify device that we added more available buffers
+    THREAD_MEMORY_RELEASE()  // Ensure all descriptor writes are visible
     var regs_base = VIRTIO_REGS_BASE;
     var queue_notify_addr = regs_base + QUEUE_NOTIFY_OFFSET;
     !st32 queue_notify_addr, VIRTIO_NET_RX_QUEUE;
@@ -450,7 +452,7 @@ export fun tx_provide()
       var {1,1} buffer = net_dequeue(tx_active, tx_capacity);
       var io_addr = buffer.0;
       var len = buffer.1;
-      
+      // Note: for TX, second element is length not error
       
       var tx_ialloc = TX_IALLOC_PTR;
       var 1 hdr_desc_idx = ialloc_alloc(tx_ialloc);
@@ -460,11 +462,11 @@ export fun tx_provide()
       
       var 1 pkt_desc_idx = ialloc_alloc(tx_ialloc);
       if (pkt_desc_idx == -1) { 
-        ialloc_free(tx_ialloc, hdr_desc_idx);  
+        ialloc_free(tx_ialloc, hdr_desc_idx);  // Free the header descriptor
         break; 
       }
       
-      
+      // Get virtqueue for bounds checking
       var tx_virtq = TX_VIRTQ_BASE;
       var virtq_num = 0;
       !ld16 virtq_num, tx_virtq + VIRTQ_NUM_OFFSET;
@@ -474,17 +476,17 @@ export fun tx_provide()
       !ldw virtq_desc_ptr, tx_virtq + VIRTQ_DESC_OFFSET;
       !ldw virtq_avail_ptr, tx_virtq + VIRTQ_AVAIL_OFFSET;
       
-      
+      // Initialize TX header to all zeros (virtio_net_hdr_t)
       var tx_headers_vaddr = VIRTIO_NET_TX_HEADERS_VADDR;
       var hdr_vaddr = tx_headers_vaddr + hdr_desc_idx * VIRTIO_NET_HDR_SIZE;
       
-      
-      !st8 hdr_vaddr + 0, 0;    
-      !st8 hdr_vaddr + 1, 0;    
-      !st16 hdr_vaddr + 2, 0;   
-      !st16 hdr_vaddr + 4, 0;   
-      !st16 hdr_vaddr + 6, 0;   
-      !st16 hdr_vaddr + 8, 0;   
+      // Zero out the TX header (virtio_net_hdr_t fields)
+      !st8 hdr_vaddr + 0, 0;    // flags
+      !st8 hdr_vaddr + 1, 0;    // gso_type (VIRTIO_NET_HDR_GSO_NONE)  
+      !st16 hdr_vaddr + 2, 0;   // hdr_len
+      !st16 hdr_vaddr + 4, 0;   // gso_size
+      !st16 hdr_vaddr + 6, 0;   // csum_start
+      !st16 hdr_vaddr + 8, 0;   // csum_offset
       
       var hdr_desc_addr = virtq_desc_ptr + hdr_desc_idx * VIRTQ_DESC_SIZE;
       var hdr_phys_addr = VIRTIO_NET_TX_HEADERS_PADDR + hdr_desc_idx * VIRTIO_NET_HDR_SIZE;
@@ -493,26 +495,26 @@ export fun tx_provide()
       !st16 hdr_desc_addr + VIRTQ_DESC_FLAGS_OFFSET, VIRTQ_DESC_F_NEXT;
       !st16 hdr_desc_addr + VIRTQ_DESC_NEXT_OFFSET, pkt_desc_idx;
       
-      
+      // Set up packet descriptor
       var pkt_desc_addr = virtq_desc_ptr + pkt_desc_idx * VIRTQ_DESC_SIZE;
       !stw pkt_desc_addr + VIRTQ_DESC_ADDR_OFFSET, io_addr;
       !st32 pkt_desc_addr + VIRTQ_DESC_LEN_OFFSET, len;
-      !st16 pkt_desc_addr + VIRTQ_DESC_FLAGS_OFFSET, 0;  
+      !st16 pkt_desc_addr + VIRTQ_DESC_FLAGS_OFFSET, 0;  // No flags for TX packet desc
       
-      
+      // Add to available ring - match C exactly: tx_virtq.avail->ring[tx_virtq.avail->idx % tx_virtq.num] = hdr_desc_idx;
       var avail_idx = 0;
       !ld16 avail_idx, virtq_avail_ptr + VIRTQ_AVAIL_IDX_OFFSET;
       var virtq_num = 0;
       !ld16 virtq_num, tx_virtq + VIRTQ_NUM_OFFSET;
-      var ring_idx = avail_idx & (virtq_num - 1);  
+      var ring_idx = avail_idx & (virtq_num - 1);  // equivalent to % for power of 2
       var ring_entry_addr = virtq_avail_ptr + VIRTQ_AVAIL_RING_OFFSET + ring_idx * 2;
       !st16 ring_entry_addr, hdr_desc_idx;
       
-      
+      // Update available index - match C exactly: tx_virtq.avail->idx++;
       avail_idx = avail_idx + 1;
       !st16 virtq_avail_ptr + VIRTQ_AVAIL_IDX_OFFSET, avail_idx;
       
-      
+      // Update our descriptor count
       var tx_last_desc_idx_ptr = TX_LAST_DESC_IDX_PTR;
       var tx_last_desc_idx = 0;
       !ld32 tx_last_desc_idx, tx_last_desc_idx_ptr;
@@ -535,8 +537,8 @@ export fun tx_provide()
 
   if (packets_transferred) {
     
-    
-    THREAD_MEMORY_RELEASE()  
+    // Notify device that we added more buffers to transmit
+    THREAD_MEMORY_RELEASE()  // Ensure all descriptor writes are visible
     var regs_base = VIRTIO_REGS_BASE;
     var queue_notify_addr = regs_base + QUEUE_NOTIFY_OFFSET;
     !st32 queue_notify_addr, VIRTIO_NET_TX_QUEUE;
@@ -557,11 +559,11 @@ export fun handle_irq()
   
   if (irq_status & VIRTIO_MMIO_IRQ_VQUEUE) {
     
-    
+    // ACK the interrupt first
     !st32 irq_ack_addr, VIRTIO_MMIO_IRQ_VQUEUE;
     
-    
-    
+    // Handle both TX and RX queues since we do not know which caused the interrupt
+    // Use Pancake versions to properly free descriptors from Pancake ialloc pools
     tx_return();
     tx_provide();
     rx_return();
@@ -583,30 +585,31 @@ export fun notified(1 ch)
   
   if (ch == irq_ch) {
   
-    
-    
+    // IRQ channel notification
+    // Use Pancake implementation
     handle_irq();
     microkit_deferred_irq_ack(ch)
   }
   if (ch == rx_ch) {
   
-    
-    
+    // RX channel notification
+    // Use Pancake implementation
     rx_provide();
   }
   if (ch == tx_ch) {
   
-    
-    
+    // TX channel notification
+    // Use Pancake implementation
     tx_provide();
   }
   if ((ch != irq_ch) && (ch != rx_ch) && (ch != tx_ch)) {
   
-    
+    // Unknown channel with value
   }
   return 0;
 }
 
+/////////////////// Clean implementations that match C exactly
 
 export fun rx_return()
 {
@@ -651,7 +654,7 @@ export fun rx_return()
     
     net_enqueue(rx_active, pkt_addr, pkt_len, rx_capacity);
     
-    
+    // Free descriptors
     ialloc_free(rx_ialloc, hdr_desc_id);
     ialloc_free(rx_ialloc, pkt_desc_id);
     
