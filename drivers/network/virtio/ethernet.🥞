@@ -324,7 +324,7 @@ export fun rx_provide()
   return 0;
 }
 
-export fun tx_provide()
+fun tx_provide()
 {
   var tx_active = NET_TX_ACTIVE;
   var tx_capacity = NET_TX_CAPACITY;
@@ -433,53 +433,7 @@ export fun tx_provide()
   return 0;
 }
 
-export fun handle_irq()
-{
-  var regs_base = VIRTIO_REGS_BASE;
-  var irq_status_addr = regs_base + INTERRUPT_STATUS_OFFSET;
-  var irq_ack_addr = regs_base + INTERRUPT_ACK_OFFSET;
-  
-  var irq_status = 0;
-  !ld32 irq_status, irq_status_addr;
-  
-  if (irq_status & VIRTIO_MMIO_IRQ_VQUEUE) {
-    !st32 irq_ack_addr, VIRTIO_MMIO_IRQ_VQUEUE;
-
-    tx_return();
-    tx_provide();
-    rx_return();
-  }
-  
-  if (irq_status & VIRTIO_MMIO_IRQ_CONFIG) {}
-  
-  return 0;
-}
-
-
-export fun notified(1 ch)
-{
-  var irq_ch = IRQ_CH;
-  var rx_ch = RX_CH;
-  var tx_ch = TX_CH;
-  
-  if (ch == irq_ch) {  
-    handle_irq();
-    microkit_deferred_irq_ack(ch)
-  }
-  if (ch == rx_ch) {
-    rx_provide();
-  }
-  if (ch == tx_ch) {
-    tx_provide();
-  }
-  if ((ch != irq_ch) && (ch != rx_ch) && (ch != tx_ch)) {
-    @assert(0,0,0,9999);    
-  }
-  return 0;
-}
-
-
-export fun rx_return()
+fun rx_return()
 {
   var rx_active = NET_RX_ACTIVE;
   var rx_capacity = NET_RX_CAPACITY;
@@ -547,7 +501,7 @@ export fun rx_return()
   return 0;
 }
 
-export fun tx_return()
+fun tx_return()
 {
   var tx_free = NET_TX_FREE;
   var tx_capacity = NET_TX_CAPACITY;
@@ -607,6 +561,50 @@ export fun tx_return()
       net_cancel_signal(tx_free);
       microkit_notify(TX_CH)
     }
+  }
+  return 0;
+}
+
+fun handle_irq()
+{
+  var regs_base = VIRTIO_REGS_BASE;
+  var irq_status_addr = regs_base + INTERRUPT_STATUS_OFFSET;
+  var irq_ack_addr = regs_base + INTERRUPT_ACK_OFFSET;
+  
+  var irq_status = 0;
+  !ld32 irq_status, irq_status_addr;
+  
+  if (irq_status & VIRTIO_MMIO_IRQ_VQUEUE) {
+    !st32 irq_ack_addr, VIRTIO_MMIO_IRQ_VQUEUE;
+
+    tx_return();
+    tx_provide();
+    rx_return();
+  }
+  
+  if (irq_status & VIRTIO_MMIO_IRQ_CONFIG) {}
+  
+  return 0;
+}
+
+export fun notified(1 ch)
+{
+  var irq_ch = IRQ_CH;
+  var rx_ch = RX_CH;
+  var tx_ch = TX_CH;
+  
+  if (ch == irq_ch) {  
+    handle_irq();
+    microkit_deferred_irq_ack(ch)
+  }
+  if (ch == rx_ch) {
+    rx_provide();
+  }
+  if (ch == tx_ch) {
+    tx_provide();
+  }
+  if ((ch != irq_ch) && (ch != rx_ch) && (ch != tx_ch)) {
+    @assert(0,0,0,9999);    
   }
   return 0;
 }
