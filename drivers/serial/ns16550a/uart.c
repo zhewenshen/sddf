@@ -351,7 +351,9 @@ void init(void)
 #endif
 }
 
-#ifndef PANCAKE_DRIVER
+#ifdef PANCAKE_DRIVER
+extern void notified(microkit_channel ch);
+#else
 void notified(microkit_channel ch)
 {
     if (ch == device_resources.irqs[0].id) {
@@ -366,7 +368,3 @@ void notified(microkit_channel ch)
     }
 }
 #endif /* !PANCAKE_DRIVER */
-
-#ifdef PANCAKE_DRIVER
-extern void notified(microkit_channel ch);
-#endif
