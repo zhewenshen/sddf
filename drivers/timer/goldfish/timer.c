@@ -11,6 +11,7 @@
 #include <sddf/resources/device.h>
 
 #define MAX_TIMEOUTS 6
+#define TIMEOUT_BASE 10
 
 /* taken from: https://github.com/torvalds/linux/blob/master/include/clocksource/timer-goldfish.h */
 typedef struct {
@@ -26,6 +27,31 @@ typedef struct {
 } goldfish_timer_regs_t;
 
 __attribute__((__section__(".device_resources"))) device_resources_t device_resources;
+
+#ifdef PANCAKE_DRIVER
+static char cml_memory[1024*20];
+extern void *cml_heap, *cml_stack, *cml_stackend;
+extern void cml_main(void);
+
+void init_pancake_mem() {
+    unsigned long cml_heap_sz = 1024*10;
+    unsigned long cml_stack_sz = 1024*10;
+    cml_heap = cml_memory;
+    cml_stack = cml_heap + cml_heap_sz;
+    cml_stackend = cml_stack + cml_stack_sz;
+}
+
+void cml_exit(int arg) {
+    microkit_dbg_puts("ERROR! We should not be getting here\n");
+}
+
+void cml_err(int arg, char* filename, char* funcname, int lineno) {
+    if (filename == NULL) {
+        microkit_dbg_puts("Memory not ready for entry. You may have not run the init code yet, or be trying to enter during an FFI call.\n");
+    }
+    cml_exit(arg);
+}
+#else
 static volatile goldfish_timer_regs_t *timer_regs;
 
 static inline uint64_t get_ticks_in_ns(void)
@@ -64,6 +90,12 @@ static void process_timeouts(uint64_t curr_time)
         set_timeout(next_timeout);
     }
 }
+#endif
+
+#ifdef PANCAKE_DRIVER
+extern uint64_t get_ticks_in_ns_pancake(void);
+extern void process_timeouts_pancake(uint64_t curr_time);
+#endif
 
 void init()
 {
@@ -71,27 +103,70 @@ void init()
     assert(device_resources.num_irqs == 1);
     assert(device_resources.num_regions == 1);
 
-    /* Ack any IRQs that were delivered before the driver started. */
     microkit_irq_ack(device_resources.irqs[0].id);
 
+#ifdef PANCAKE_DRIVER
+    init_pancake_mem();
+    
+    uintptr_t *pnk_mem = (uintptr_t *) cml_heap;
+    
+    pnk_mem[0] = device_resources.irqs[0].id;
+    pnk_mem[1] = (uintptr_t)device_resources.regions[0].region.vaddr;
+    
+    for (int i = 0; i < MAX_TIMEOUTS; i++) {
+        pnk_mem[TIMEOUT_BASE + i] = 9223372036854775807ULL;
+    }
+    
+    cml_main();
+#else
     timer_regs = (goldfish_timer_regs_t *)device_resources.regions[0].region.vaddr;
 
     for (int i = 0; i < MAX_TIMEOUTS; i++) {
         timeouts[i] = UINT64_MAX;
     }
+#endif
 }
 
+#ifdef PANCAKE_DRIVER
+extern void notified(microkit_channel ch);
+#else
 void notified(microkit_channel ch)
 {
     assert(ch == device_resources.irqs[0].id);
     microkit_deferred_irq_ack(ch);
 
-    /* Handled irq -> clear device interrupt */
     timer_regs->clear_interrupt = 1;
     uint64_t curr_time = get_ticks_in_ns();
     process_timeouts(curr_time);
 }
+#endif
 
+#ifdef PANCAKE_DRIVER
+seL4_MessageInfo_t protected(microkit_channel ch, microkit_msginfo msginfo)
+{
+    switch (microkit_msginfo_get_label(msginfo)) {
+    case SDDF_TIMER_GET_TIME: {
+        uint64_t time_ns = get_ticks_in_ns_pancake();
+        seL4_SetMR(0, time_ns);
+        return microkit_msginfo_new(0, 1);
+    }
+    case SDDF_TIMER_SET_TIMEOUT: {
+        uint64_t curr_time = get_ticks_in_ns_pancake();
+        uint64_t offset_us = seL4_GetMR(0);
+        uintptr_t *pnk_mem = (uintptr_t *) cml_heap;
+        pnk_mem[TIMEOUT_BASE + ch] = curr_time + offset_us;
+        process_timeouts_pancake(curr_time);
+        break;
+    }
+    default:
+        sddf_dprintf("TIMER DRIVER|LOG: Unknown request %lu to timer from channel %u\n",
+                     microkit_msginfo_get_label(msginfo), ch);
+        break;
+    }
+
+    return microkit_msginfo_new(0, 0);
+}
+#else
 seL4_MessageInfo_t protected(microkit_channel ch, microkit_msginfo msginfo)
 {
     switch (microkit_msginfo_get_label(msginfo)) {
@@ -115,3 +190,4 @@ seL4_MessageInfo_t protected(microkit_channel ch, microkit_msginfo msginfo)
 
     return microkit_msginfo_new(0, 0);
 }
+#endif

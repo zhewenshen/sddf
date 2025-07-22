@@ -1,0 +1,123 @@
+/*
+ * Copyright 2025, UNSW
+ * SPDX-License-Identifier: BSD-2-Clause
+ */
+
+#define IRQ_CH              pnk_mem(0)
+#define TIMER_REG_BASE      pnk_mem(1)
+
+#define TIMEOUT_BASE        10
+#define MAX_TIMEOUTS        6
+
+#define TIME_LOW_OFFSET     0
+#define TIME_HIGH_OFFSET    4
+#define ALARM_LOW_OFFSET    8
+#define ALARM_HIGH_OFFSET   12
+#define IRQ_ENABLED_OFFSET  16
+#define CLEAR_ALARM_OFFSET  20
+#define ALARM_STATUS_OFFSET 24
+#define CLEAR_INTERRUPT_OFFSET 28
+
+#define TIMEOUT_INVALID     9223372036854775807
+
+fun get_ticks_in_ns()
+{
+    var timer_base = TIMER_REG_BASE;
+    var time_low_addr = timer_base + TIME_LOW_OFFSET;
+    var time_high_addr = timer_base + TIME_HIGH_OFFSET;
+    
+    var time_low = 0;
+    !ld32 time_low, time_low_addr;
+    
+    var time_high = 0;
+    !ld32 time_high, time_high_addr;
+    
+    var time_ticks = (time_high * 4294967296) | time_low;
+    return time_ticks;
+}
+
+fun set_timeout(1 timeout)
+{
+    var timer_base = TIMER_REG_BASE;
+    var alarm_high_addr = timer_base + ALARM_HIGH_OFFSET;
+    var alarm_low_addr = timer_base + ALARM_LOW_OFFSET;
+    var irq_enabled_addr = timer_base + IRQ_ENABLED_OFFSET;
+    
+    var timeout_high = timeout >> 32;
+    var timeout_low = timeout & 4294967295;
+    
+    !st32 alarm_high_addr, timeout_high;
+    !st32 alarm_low_addr, timeout_low;
+    !st32 irq_enabled_addr, 1;
+    
+    return 0;
+}
+
+fun process_timeouts(1 curr_time)
+{
+    var i = 0;
+    while (i < MAX_TIMEOUTS) {
+        var timeout_addr = pnk_mem_ptr(TIMEOUT_BASE + i);
+        var timeout_val = 0;
+        !ldw timeout_val, timeout_addr;
+        
+        if (timeout_val != TIMEOUT_INVALID && timeout_val <= curr_time) {
+            microkit_notify(i)
+            !stw timeout_addr, TIMEOUT_INVALID;
+        }
+        
+        i = i + 1;
+    }
+    
+    var next_timeout = TIMEOUT_INVALID;
+    i = 0;
+    while (i < MAX_TIMEOUTS) {
+        var timeout_addr = pnk_mem_ptr(TIMEOUT_BASE + i);
+        var timeout_val = 0;
+        !ldw timeout_val, timeout_addr;
+        
+        if (timeout_val < next_timeout) {
+            next_timeout = timeout_val;
+        }
+        
+        i = i + 1;
+    }
+    
+    if (next_timeout != TIMEOUT_INVALID) {
+        set_timeout(next_timeout);
+    }
+    
+    return 0;
+}
+
+export fun get_ticks_in_ns_pancake()
+{
+    var 1 result = get_ticks_in_ns();
+    return result;
+}
+
+export fun process_timeouts_pancake(1 curr_time)
+{
+    process_timeouts(curr_time);
+    return 0;
+}
+
+export fun notified(1 ch)
+{
+    var irq_ch = IRQ_CH;
+    if (ch != irq_ch) {
+        microkit_deferred_irq_ack(ch)
+        return 0;
+    }
+    
+    microkit_deferred_irq_ack(ch)
+    
+    var timer_base = TIMER_REG_BASE;
+    var clear_interrupt_addr = timer_base + CLEAR_INTERRUPT_OFFSET;
+    !st32 clear_interrupt_addr, 1;
+    
+    var 1 curr_time = get_ticks_in_ns();
+    process_timeouts(curr_time);
+    
+    return 0;
+}
