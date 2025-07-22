@@ -8,7 +8,6 @@
 #include <sddf/timer/protocol.h>
 #include <sddf/util/util.h>
 #include <sddf/util/printf.h>
-#include <sddf/util/udivmodti4.h>
 #include <sddf/resources/device.h>
 
 #define MAX_TIMEOUTS 6
@@ -71,6 +70,10 @@ void init()
     assert(device_resources_check_magic(&device_resources));
     assert(device_resources.num_irqs == 1);
     assert(device_resources.num_regions == 1);
+
+    /* Ack any IRQs that were delivered before the driver started. */
+    microkit_irq_ack(device_resources.irqs[0].id);
+
     timer_regs = (goldfish_timer_regs_t *)device_resources.regions[0].region.vaddr;
 
     for (int i = 0; i < MAX_TIMEOUTS; i++) {

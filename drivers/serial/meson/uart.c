@@ -165,6 +165,9 @@ void init(void)
     rx_queue_handle = (serial_queue_handle_t *) &pnk_mem[4];
     tx_queue_handle = (serial_queue_handle_t *) &pnk_mem[7];
 
+    /* Ack any IRQs that were delivered before the driver started. */
+    microkit_irq_ack(device_resources.irqs[0].id);
+
     uart_setup();
 
     pnk_mem[0] = (volatile uintptr_t) uart_regs;

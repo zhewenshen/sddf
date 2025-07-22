@@ -64,6 +64,7 @@ to use, or modify the examples to add your board.
 
 If you are adding a driver for an *existing* device class, you'll need to add
 the following:
+
 * the configuration file
 * the driver code itself
 * integration into the build system
@@ -90,6 +91,7 @@ interrupt handling, register access, etc.
 
 To understand the how the driver should interact with the device there are a couple
 different avenues:
+
 * The technical reference manual for the SoC or device.
     * Unfortunately sometimes this either does not contain enough information to
       write a driver or is not publicly available.
@@ -97,6 +99,14 @@ different avenues:
 * U-Boot source code.
     * Note that U-Boot drivers are not interrupt driven while all sDDF drivers are.
 * Manufacturer provided SDKs or reference drivers.
+
+#### Code
+
+Below is a list of things that should be in each driver regardless of device class:
+
+* Each IRQ used by the driver must be acked during initialisation in-case there
+  were undelivered IRQs from the time the IRQ is registered with seL4 and the driver
+  starts.
 
 #### Finding the Linux or U-Boot driver
 

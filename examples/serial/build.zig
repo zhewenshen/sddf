@@ -17,6 +17,7 @@ const MicrokitBoard = enum {
     qemu_virt_aarch64,
     qemu_virt_riscv64,
     star64,
+    zcu102,
 };
 
 const Target = struct {
@@ -111,7 +112,7 @@ const targets = [_]Target{
             .cpu_model = .{ .explicit = &std.Target.riscv.cpu.baseline_rv64 },
             .os_tag = .freestanding,
             .abi = .none,
-        }
+        },
     },
     .{
         .board = MicrokitBoard.qemu_virt_riscv64,
@@ -120,7 +121,17 @@ const targets = [_]Target{
             .cpu_model = .{ .explicit = &std.Target.riscv.cpu.baseline_rv64 },
             .os_tag = .freestanding,
             .abi = .none,
-        }
+        },
+    },
+    .{
+        .board = MicrokitBoard.zcu102,
+        .zig_target = std.Target.Query{
+            .cpu_arch = .aarch64,
+            .cpu_model = .{ .explicit = &std.Target.aarch64.cpu.cortex_a53 },
+            .cpu_features_add = std.Target.aarch64.featureSet(&[_]std.Target.aarch64.Feature{.strict_align}),
+            .os_tag = .freestanding,
+            .abi = .none,
+        },
     },
 };
 
@@ -191,6 +202,7 @@ pub fn build(b: *std.Build) !void {
         .odroidc2, .odroidc4 => "meson",
         .maaxboard, .imx8mm_evk, .imx8mp_evk, .imx8mq_evk => "imx",
         .star64, .qemu_virt_riscv64, .cheshire => "ns16550a",
+        .zcu102 => "zynqmp",
     };
 
     const driver = sddf_dep.artifact(b.fmt("driver_serial_{s}.elf", .{driver_class}));
@@ -206,9 +218,11 @@ pub fn build(b: *std.Build) !void {
 
     const client = b.addExecutable(.{
         .name = "client.elf",
-        .target = target,
-        .optimize = optimize,
-        .strip = false,
+        .root_module = b.createModule(.{
+            .target = target,
+            .optimize = optimize,
+            .strip = false,
+        }),
     });
     const client1_install = b.addInstallArtifact(client, .{ .dest_sub_path = "client0.elf" });
     const client2_install = b.addInstallArtifact(client, .{ .dest_sub_path = "client1.elf" });
@@ -270,11 +284,13 @@ pub fn build(b: *std.Build) !void {
     microkit_tool_cmd.addFileArg(microkit_tool);
     microkit_tool_cmd.addArgs(&[_][]const u8{
         b.getInstallPath(.{ .custom = "meta_output" }, "serial.system"),
+        // zig fmt: off
         "--search-path", b.getInstallPath(.bin, ""),
         "--board", microkit_board,
         "--config", microkit_config,
         "-o", final_image_dest,
-        "-r", b.getInstallPath(.prefix, "./report.txt")
+        "-r", b.getInstallPath(.prefix, "./report.txt"),
+        // zig fmt: on
     });
     inline for (objcopys) |objcopy| {
         microkit_tool_cmd.step.dependOn(&objcopy.step);

@@ -51,6 +51,9 @@ else ifneq ($(filter $(strip $(MICROKIT_BOARD)),imx8mm_evk imx8mp_evk imx8mq_evk
 	CPU := cortex-a53
 else ifneq ($(filter $(strip $(MICROKIT_BOARD)),cheshire star64),)
 	DRIVER_DIR := ns16550a
+else ifeq ($(strip $(MICROKIT_BOARD)), zcu102)
+	DRIVER_DIR := zynqmp
+	CPU := cortex-a53
 else
 $(error Unsupported MICROKIT_BOARD given)
 endif
@@ -88,7 +91,7 @@ CFLAGS += -I$(BOARD_DIR)/include \
 	-I${SDDF}/include/microkit \
 	$(CFLAGS_ARCH)
 
-CHECK_FLAGS_BOARD_MD5:=.board_cflags-$(shell echo -- ${CFLAGS} ${MICROKIT_SDK} ${MICROKIT_BOARD} ${MICROKIT_CONFIG} | shasum | sed 's/ *-//')
+CHECK_FLAGS_BOARD_MD5 := .board_cflags-$(shell echo -- ${CFLAGS} ${MICROKIT_SDK} ${MICROKIT_BOARD} ${MICROKIT_CONFIG} | shasum | sed 's/ *-//')
 
 ${CHECK_FLAGS_BOARD_MD5}:
 	-rm -f .board_cflags-*

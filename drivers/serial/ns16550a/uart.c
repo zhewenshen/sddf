@@ -42,7 +42,7 @@ volatile uintptr_t uart_base;
 
 static inline bool tx_fifo_not_full(void)
 {
-#if UART_DW_APB_SHADOW_REGISTERS
+#if UART_DW_APB_REGISTERS
     /**
      * On DesignWare APB-derived 16550a-like IPs, they provide a TFNF bit in
      * the UART Status Register (USR).
@@ -193,6 +193,9 @@ void init(void)
     assert(device_resources.num_irqs == 1);
     assert(device_resources.num_regions == 1);
 
+    /* Ack any IRQs that were delivered before the driver started. */
+    microkit_irq_ack(device_resources.irqs[0].id);
+
     uart_base = (uintptr_t)device_resources.regions[0].region.vaddr;
 
     /* Ensure that the FIFO's are empty */
@@ -229,7 +232,7 @@ void init(void)
 
     serial_queue_init(&tx_queue_handle, config.tx.queue.vaddr, config.tx.data.size, config.tx.data.vaddr);
 
-#if UART_DW_APB_SHADOW_REGISTERS
+#if UART_DW_APB_REGISTERS
     /* Clear the USR busy bit
      * This must be done after enabling IRQs
      * https://github.com/torvalds/linux/blob/v6.14/drivers/tty/serial/8250/8250_dw.c#L304-L306
