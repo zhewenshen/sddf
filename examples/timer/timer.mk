@@ -57,6 +57,7 @@ else ifeq ($(strip $(MICROKIT_BOARD)), qemu_virt_riscv64)
 	QEMU_ARCH_ARGS := -machine virt -kernel $(IMAGE_FILE)
 else ifeq ($(strip $(MICROKIT_BOARD)), star64)
 	TIMER_DRIVER_DIR := jh7110
+	CPU := u74
 else ifneq ($(filter $(strip $(MICROKIT_BOARD)),imx8mm_evk imx8mp_evk imx8mq_evk maaxboard),)
 	TIMER_DRIVER_DIR := imx
 	CPU := cortex-a53

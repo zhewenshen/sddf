@@ -1,0 +1,190 @@
+/*
+ * Copyright 2025, UNSW
+ * SPDX-License-Identifier: BSD-2-Clause
+ */
+
+#define COUNTER_IRQ_CH      pnk_mem(0)
+#define TIMEOUT_IRQ_CH      pnk_mem(1)
+#define COUNTER_REG_BASE    pnk_mem(2)
+#define TIMEOUT_REG_BASE    pnk_mem(3)
+#define COUNTER_ELAPSES     pnk_mem(4)
+#define TIMEOUT_ELAPSES     pnk_mem(5)
+#define CLIENT_CH_START     pnk_mem(6)
+
+#define TIMEOUT_BASE        10
+#define MAX_TIMEOUTS        6
+
+#define INTSTATUS_OFFSET    0
+#define CTRL_OFFSET         4
+#define LOAD_OFFSET         8
+#define ENABLE_OFFSET       16
+#define RELOAD_OFFSET       20
+#define VALUE_OFFSET        24
+#define INTCLR_OFFSET       32
+#define INTMASK_OFFSET      36
+
+#define STARFIVE_TIMER_MAX_TICKS        4294967295
+#define STARFIVE_TIMER_MODE_CONTINUOUS  0
+#define STARFIVE_TIMER_MODE_SINGLE      1
+#define STARFIVE_TIMER_DISABLED         0
+#define STARFIVE_TIMER_ENABLED          1
+#define STARFIVE_TIMER_INTERRUPT_UNMASKED 0
+#define STARFIVE_TIMER_INTERRUPT_MASKED   1
+#define STARFIVE_TIMER_INTCLR_BUSY      2
+
+#define STARFIVE_TIMER_TICKS_PER_SECOND 24000000
+
+#define NS_IN_S             1000000000
+
+#define TIMEOUT_INVALID     9223372036854775807
+
+fun get_ticks_in_ns()
+{
+    var counter_base = COUNTER_REG_BASE;
+    var value_addr = counter_base + VALUE_OFFSET;
+    var intclr_addr = counter_base + INTCLR_OFFSET;
+    var counter_elapses = COUNTER_ELAPSES;
+    
+    var timer_value = 0;
+    !ld32 timer_value, value_addr;
+    var value_l = STARFIVE_TIMER_MAX_TICKS - timer_value;
+    var value_h = counter_elapses;
+    
+    var intclr_val = 0;
+    !ld32 intclr_val, intclr_addr;
+    if (intclr_val == 1) {
+        value_h = value_h + 1;
+        !ld32 timer_value, value_addr;
+        value_l = STARFIVE_TIMER_MAX_TICKS - timer_value;
+    }
+    
+    var value_ticks = (value_h * 4294967296) | value_l;
+    var value_ns = value_ticks * 42;
+    
+    return value_ns;
+}
+
+fun wait_intclr_ready(1 intclr_addr)
+{
+    var intclr_val = 0;
+    !ld32 intclr_val, intclr_addr;
+    while (intclr_val & STARFIVE_TIMER_INTCLR_BUSY) {
+        !ld32 intclr_val, intclr_addr;
+    }
+    return 0;
+}
+
+fun process_timeouts(1 curr_time)
+{
+    var i = 0;
+    while (i < MAX_TIMEOUTS) {
+        var timeout_addr = pnk_mem_ptr(TIMEOUT_BASE + i);
+        var timeout_val = 0;
+        !ldw timeout_val, timeout_addr;
+        
+        if (timeout_val != TIMEOUT_INVALID && timeout_val <= curr_time) {
+            var client_ch_start = CLIENT_CH_START;
+            var client_ch = client_ch_start + i;
+            microkit_notify(client_ch)
+            !stw timeout_addr, TIMEOUT_INVALID;
+        }
+        
+        i = i + 1;
+    }
+    
+    var next_timeout = TIMEOUT_INVALID;
+    i = 0;
+    while (i < MAX_TIMEOUTS) {
+        var timeout_addr = pnk_mem_ptr(TIMEOUT_BASE + i);
+        var timeout_val = 0;
+        !ldw timeout_val, timeout_addr;
+        
+        if (timeout_val < next_timeout) {
+            next_timeout = timeout_val;
+        }
+        
+        i = i + 1;
+    }
+    
+    if (next_timeout != TIMEOUT_INVALID) {
+        var ns = next_timeout - curr_time;
+        var timeout_base = TIMEOUT_REG_BASE;
+        
+        // Disable timeout timer
+        var enable_addr = timeout_base + ENABLE_OFFSET;
+        !st32 enable_addr, STARFIVE_TIMER_DISABLED;
+        
+        // Reset timeout elapses
+        var timeout_elapses_addr = pnk_mem_ptr(5);
+        !stw timeout_elapses_addr, 0;
+        
+        // Set single shot mode
+        var ctrl_addr = timeout_base + CTRL_OFFSET;
+        !st32 ctrl_addr, STARFIVE_TIMER_MODE_SINGLE;
+        
+        var num_ticks = ns >> 6;
+        
+        if (num_ticks <= STARFIVE_TIMER_MAX_TICKS) {
+            var load_addr = timeout_base + LOAD_OFFSET;
+            !st32 load_addr, num_ticks;
+            !st32 enable_addr, STARFIVE_TIMER_ENABLED;
+        }
+    }
+    
+    return 0;
+}
+
+export fun get_ticks_in_ns_pancake()
+{
+    var 1 result = get_ticks_in_ns();
+    return result;
+}
+
+export fun process_timeouts_pancake(1 curr_time)
+{
+    process_timeouts(curr_time);
+    return 0;
+}
+
+export fun notified(1 ch)
+{
+    var counter_irq = COUNTER_IRQ_CH;
+    var timeout_irq = TIMEOUT_IRQ_CH;
+    
+    var 1 curr_time = get_ticks_in_ns();
+    
+    if (ch == counter_irq) {
+        var counter_elapses = COUNTER_ELAPSES;
+        counter_elapses = counter_elapses + 1;
+        var counter_elapses_addr = pnk_mem_ptr(4);
+        !stw counter_elapses_addr, counter_elapses;
+        
+        var counter_base = COUNTER_REG_BASE;
+        var intclr_addr = counter_base + INTCLR_OFFSET;
+        wait_intclr_ready(intclr_addr);
+        !st32 intclr_addr, 1;
+        
+        microkit_deferred_irq_ack(ch)
+        return 0;
+    }
+    
+    if (ch == timeout_irq) {
+        var timeout_elapses = TIMEOUT_ELAPSES;
+        timeout_elapses = timeout_elapses + 1;
+        var timeout_elapses_addr = pnk_mem_ptr(5);
+        !stw timeout_elapses_addr, timeout_elapses;
+        
+        var timeout_base = TIMEOUT_REG_BASE;
+        var intclr_addr = timeout_base + INTCLR_OFFSET;
+        wait_intclr_ready(intclr_addr);
+        !st32 intclr_addr, 1;
+        
+        process_timeouts(curr_time);
+        
+        microkit_deferred_irq_ack(ch)
+        return 0;
+    }
+    
+    microkit_deferred_irq_ack(ch)
+    return 0;
+}
