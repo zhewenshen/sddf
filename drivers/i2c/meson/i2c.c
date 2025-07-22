@@ -154,6 +154,7 @@ extern void *cml_stack;
 extern void *cml_stackend;
 
 extern void cml_main(void);
+extern void notified(microkit_channel ch);
 
 void cml_exit(int arg) {
     microkit_dbg_puts("ERROR! We should not be getting here\n");
@@ -544,6 +545,28 @@ void init(void)
     i2c_setup();
     queue_handle = i2c_queue_init(config.virt.req_queue.vaddr, config.virt.resp_queue.vaddr);
 
+#ifdef PANCAKE_DRIVER
+    init_pancake_mem();
+    uintptr_t *pnk_mem = (uintptr_t *) cml_heap;
+    
+    pnk_mem[0] = (uintptr_t) regs;
+    pnk_mem[1] = device_resources.irqs[0].id;
+    pnk_mem[2] = device_resources.irqs[1].id;
+    pnk_mem[3] = config.virt.id;
+    pnk_mem[4] = (uintptr_t) queue_handle.request;
+    pnk_mem[5] = (uintptr_t) queue_handle.response;
+    pnk_mem[6] = (uintptr_t) config.virt.data.vaddr;
+    pnk_mem[7] = 0;  // curr_data
+    pnk_mem[8] = 0;  // curr_request_len
+    pnk_mem[9] = 0;  // curr_response_len
+    pnk_mem[10] = 0; // remaining
+    pnk_mem[11] = 0; // notified
+    pnk_mem[12] = 0; // rw_remaining
+    pnk_mem[13] = 0; // data_direction
+    pnk_mem[14] = 0; // curr_addr
+    
+    cml_main();
+#else
     // Set up driver state
     i2c_ifState.curr_data = NULL;
     i2c_ifState.curr_request_len = 0;
@@ -551,8 +574,10 @@ void init(void)
     i2c_ifState.remaining = 0;
     i2c_ifState.notified = 0;
     i2c_ifState.addr = 0;
+#endif
 }
 
+#ifndef PANCAKE_DRIVER
 static inline void handle_request(void)
 {
     LOG_DRIVER("handling request\n");
@@ -707,7 +732,11 @@ static void handle_response(void)
         handle_request();
     }
 }
+#endif
 
+#ifdef PANCAKE_DRIVER
+extern void notified(microkit_channel ch);
+#else
 void notified(microkit_channel ch)
 {
     if (ch == config.virt.id) {
@@ -723,3 +752,4 @@ void notified(microkit_channel ch)
         LOG_DRIVER_ERR("unexpected notification on channel %d\n", ch);
     }
 }
+#endif
