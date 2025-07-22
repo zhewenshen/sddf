@@ -1,0 +1,130 @@
+/*
+ * Copyright 2025, UNSW
+ * SPDX-License-Identifier: BSD-2-Clause
+ */
+
+#define NUM_QUEUE_ENTRIES 32
+
+#define RESPONSE_ERR 0
+#define RESPONSE_ERR_TOKEN 1
+#define RESPONSE_DATA_OFFSET 2
+
+#define I2C_ERR_OK 0
+#define I2C_ERR_TIMEOUT 1
+#define I2C_ERR_NACK 2
+#define I2C_ERR_NOREAD 3
+#define I2C_ERR_OTHER 3
+
+fun i2c_queue_empty(1 queue_ptr)
+{
+  var tail = 0;
+  var head = 0;
+  !ld32 tail, queue_ptr;
+  !ld32 head, queue_ptr + 4;
+  
+  var diff = tail - head;
+  var empty = (diff == 0);
+  return empty;
+}
+
+fun i2c_queue_full(1 queue_ptr)
+{
+  var tail = 0;
+  var head = 0;
+  !ld32 tail, queue_ptr;
+  !ld32 head, queue_ptr + 4;
+  
+  var diff = tail - head + 1;
+  var full = (diff == NUM_QUEUE_ENTRIES);
+  return full;
+}
+
+fun i2c_queue_length(1 queue_ptr)
+{
+  var tail = 0;
+  var head = 0;
+  !ld32 tail, queue_ptr;
+  !ld32 head, queue_ptr + 4;
+  
+  var length = tail - head;
+  return length;
+}
+
+fun i2c_enqueue(1 queue_ptr, 1 bus_address, 1 offset, 1 len)
+{
+  var 1 is_full = i2c_queue_full(queue_ptr);
+  if (is_full) {
+    return -1;
+  }
+  
+  var tail = 0;
+  !ld32 tail, queue_ptr;
+  
+  var index = tail & (NUM_QUEUE_ENTRIES - 1);
+  
+  var entry_base = queue_ptr + 8 + index * 24;
+  
+  !stw entry_base, offset;
+  !st32 entry_base + 8, len;
+  !stw entry_base + 16, bus_address;
+  
+  THREAD_MEMORY_RELEASE()
+  
+  tail = tail + 1;
+  !st32 queue_ptr, tail;
+  
+  return 0;
+}
+
+fun i2c_dequeue(1 queue_ptr)
+{
+  var 1 is_empty = i2c_queue_empty(queue_ptr);
+  if (is_empty) {
+    return <-1, 0, 0, 0>;
+  }
+  
+  var head = 0;
+  !ld32 head, queue_ptr + 4;
+  
+  var index = head & (NUM_QUEUE_ENTRIES - 1);
+  
+  var entry_base = queue_ptr + 8 + index * 24;
+  
+  var offset = 0;
+  var len = 0;
+  var bus_address = 0;
+  !ldw offset, entry_base;
+  !ld32 len, entry_base + 8;
+  !ldw bus_address, entry_base + 16;
+  
+  THREAD_MEMORY_RELEASE()
+  
+  head = head + 1;
+  !st32 queue_ptr + 4, head;
+  
+  return <0, bus_address, offset, len>;
+}
+
+fun i2c_enqueue_request(1 req_queue_ptr, 1 bus_address, 1 offset, 1 len)
+{
+  var 1 result = i2c_enqueue(req_queue_ptr, bus_address, offset, len);
+  return result;
+}
+
+fun i2c_enqueue_response(1 resp_queue_ptr, 1 bus_address, 1 offset, 1 len)
+{
+  var 1 result = i2c_enqueue(resp_queue_ptr, bus_address, offset, len);
+  return result;
+}
+
+fun i2c_dequeue_request(1 req_queue_ptr)
+{
+  var {1,1,1,1} result = i2c_dequeue(req_queue_ptr);
+  return result;
+}
+
+fun i2c_dequeue_response(1 resp_queue_ptr)
+{
+  var {1,1,1,1} result = i2c_dequeue(resp_queue_ptr);
+  return result;
+}
