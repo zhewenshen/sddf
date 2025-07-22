@@ -25,16 +25,44 @@
 __attribute__((__section__(".serial_driver_config"))) serial_driver_config_t config;
 __attribute__((__section__(".device_resources"))) device_resources_t device_resources;
 
-bool waiting_for_tx_to_finish = false;
+#ifdef PANCAKE_DRIVER
+serial_queue_handle_t *rx_queue_handle;
+serial_queue_handle_t *tx_queue_handle;
+static char cml_memory[1024*20];
+extern void *cml_heap, *cml_stack, *cml_stackend;
+extern void cml_main(void);
 
+void init_pancake_mem() {
+    unsigned long cml_heap_sz = 1024*10;
+    unsigned long cml_stack_sz = 1024*10;
+    cml_heap = cml_memory;
+    cml_stack = cml_heap + cml_heap_sz;
+    cml_stackend = cml_stack + cml_stack_sz;
+}
+
+void cml_exit(int arg) {
+    for(;;);
+}
+
+void cml_err(int arg) {
+    for(;;);
+}
+
+void cml_clear() {
+    // Do nothing
+}
+#else
+bool waiting_for_tx_to_finish = false;
 serial_queue_handle_t rx_queue_handle;
 serial_queue_handle_t tx_queue_handle;
+#endif
 
 /* UART device registers */
 volatile uintptr_t uart_base;
 
 #define REG_PTR(off)     ((volatile uint32_t *)(uart_base + off))
 
+#ifndef PANCAKE_DRIVER
 static void tx_provide(void)
 {
     if (waiting_for_tx_to_finish) {
@@ -133,6 +161,72 @@ static void handle_irq(void)
         rx_return();
     }
 }
+
+static void uart_setup(void)
+{
+    /* Wait for any previous UART access to complete before we reset the serial device. */
+    tx_fifo_drain_wait();
+
+    /* Compute the correct clock dividers to set the baud rate. */
+    uint16_t cd;
+    uint8_t bdiv;
+    compute_clk_divs(ZYNQMP_UART_REF_CLOCK_RATE, config.default_baud, &cd, &bdiv);
+
+    /* Disable TX and RX before the UART registers can be reprogrammed (page 589).
+     * First clear the enable bit then set the disabled bit.
+     */
+    uint32_t cr = *REG_PTR(ZYNQMP_UART_CR);
+    cr &= ~((uint32_t)(BIT(ZYNQMP_UART_CR_TX_EN_SHIFT) | BIT(ZYNQMP_UART_CR_RX_EN_SHIFT)));
+    cr |= ZYNQMP_UART_CR_TX_DIS | ZYNQMP_UART_CR_RX_DIS;
+    *REG_PTR(ZYNQMP_UART_CR) = cr;
+
+    /* Clear the mode register to make sure the device is operating in normal mode
+     * and the clock isn't divided by 8 */
+    *REG_PTR(ZYNQMP_UART_MR) = 0;
+
+    /* Set the baud rate by programming the clock dividers */
+    *REG_PTR(ZYNQMP_UART_BAUDDIV) = bdiv;
+    *REG_PTR(ZYNQMP_UART_BAUDGEN) = cd;
+
+    /* Reset TX and RX and wait for the reset to complete. */
+    *REG_PTR(ZYNQMP_UART_CR) |= ZYNQMP_UART_CR_TX_RST | ZYNQMP_UART_CR_RX_RST;
+    while (*REG_PTR(ZYNQMP_UART_CR) & (ZYNQMP_UART_CR_TX_RST | ZYNQMP_UART_CR_RX_RST));
+
+    /* Clear the TX and RX disable bit. */
+    cr = *REG_PTR(ZYNQMP_UART_CR);
+    cr &= ~((uint32_t)(BIT(ZYNQMP_UART_CR_TX_DIS_SHIFT) | BIT(ZYNQMP_UART_CR_RX_DIS_SHIFT)));
+
+    /* Enable TX and RX. */
+    cr |= ZYNQMP_UART_CR_TX_EN | ZYNQMP_UART_CR_RX_EN;
+    *REG_PTR(ZYNQMP_UART_CR) = cr;
+
+    /* Select 8 bytes character length. */
+    uint32_t mr = *REG_PTR(ZYNQMP_UART_MR);
+    mr &= ~((BIT(0) | BIT(1)) << ZYNQMP_UART_MR_CHARLEN_SHIFT);
+
+    /* No parity checks */
+    mr |= ZYNQMP_UART_MR_PARITY_NONE;
+
+    /* One stop bit to detect on RX and to generate on TX */
+    mr &= ~((BIT(0) | BIT(1)) << ZYNQMP_UART_MR_STOPMODE_SHIFT);
+
+    /* Put the UART device in normal operating mode */
+    mr &= ~((BIT(0) | BIT(1)) << ZYNQMP_UART_MR_CHMODE_SHIFT);
+    *REG_PTR(ZYNQMP_UART_MR) = mr;
+
+    /* Turn off all the interrupts, then only turn on the ones we need. */
+    *REG_PTR(ZYNQMP_UART_IDR) = ZYNQMP_UART_IXR_MASK;
+    *REG_PTR(ZYNQMP_UART_ISR) = ZYNQMP_UART_IXR_MASK;
+
+    if (config.rx_enabled) {
+        /* Set the watermark to raise an interrupt for every received byte. */
+        *REG_PTR(ZYNQMP_UART_RXWM) = 1;
+
+        /* Enable IRQ on every bytes received. */
+        *REG_PTR(ZYNQMP_UART_IER) = ZYNQMP_UART_IXR_RXOVR;
+    }
+}
+#endif /* !PANCAKE_DRIVER */
 
 static void compute_clk_divs(uint64_t clock_hz, uint64_t baudrate, uint16_t *cd, uint8_t *bdiv)
 {
@@ -261,6 +355,10 @@ static void uart_setup(void)
     }
 }
 
+#ifdef PANCAKE_DRIVER
+extern void notified(microkit_channel ch);
+#endif
+
 void init(void)
 {
     assert(serial_config_check_magic(&config));
@@ -272,14 +370,45 @@ void init(void)
     microkit_irq_ack(device_resources.irqs[0].id);
 
     uart_base = (uintptr_t)device_resources.regions[0].region.vaddr;
+
+#ifdef PANCAKE_DRIVER
+    init_pancake_mem();
+    uintptr_t *pnk_mem = (uintptr_t *) cml_heap;
+    
+    pnk_mem[1] = device_resources.irqs[0].id;
+    pnk_mem[2] = config.rx.id;
+    pnk_mem[3] = config.tx.id;
+    pnk_mem[1024] = config.rx_enabled;
+    pnk_mem[1025] = 0;
+    
+    rx_queue_handle = (serial_queue_handle_t *) &pnk_mem[4];
+    tx_queue_handle = (serial_queue_handle_t *) &pnk_mem[7];
+    
+    pnk_mem[0] = uart_base;
+    
+    if (uart_base == 0) {
+        microkit_dbg_puts("ERROR: uart_base is 0!\n");
+        for(;;);
+    }
+    
+    uart_setup();
+    
+    if (config.rx_enabled) {
+        serial_queue_init(rx_queue_handle, config.rx.queue.vaddr, config.rx.data.size, config.rx.data.vaddr);
+    }
+    serial_queue_init(tx_queue_handle, config.tx.queue.vaddr, config.tx.data.size, config.tx.data.vaddr);
+    cml_main();
+#else
     uart_setup();
 
     if (config.rx_enabled) {
         serial_queue_init(&rx_queue_handle, config.rx.queue.vaddr, config.rx.data.size, config.rx.data.vaddr);
     }
     serial_queue_init(&tx_queue_handle, config.tx.queue.vaddr, config.tx.data.size, config.tx.data.vaddr);
+#endif
 }
 
+#ifndef PANCAKE_DRIVER
 void notified(microkit_channel ch)
 {
     if (ch == device_resources.irqs[0].id) {
@@ -293,3 +422,4 @@ void notified(microkit_channel ch)
         sddf_dprintf("UART|LOG: received notification on unexpected channel: %u\n", ch);
     }
 }
+#endif
