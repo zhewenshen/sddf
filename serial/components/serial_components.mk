@@ -17,13 +17,24 @@ CFLAGS_serial := -I ${SDDF}/include
 
 CHECK_SERIAL_FLAGS_MD5:=.serial_cflags-$(shell echo -- ${CFLAGS} ${CFLAGS_serial} | shasum | sed 's/ *-//')
 
+# Detect compiler type for consistent flag usage
+CC_IS_CLANG := $(shell $(CC) --version 2>/dev/null | grep -q clang && echo 1 || echo 0)
+
 ARCH := ${shell grep 'CONFIG_SEL4_ARCH  ' $(BOARD_DIR)/include/kernel/gen_config.h | cut -d' ' -f4}
 ifeq ($(ARCH),aarch64)
     PANCAKE_TARGET := arm8
-    CLANG_TARGET_FLAGS := -target aarch64-none-elf $(if $(CPU),-mcpu=$(CPU))
+    ifeq ($(CC_IS_CLANG),1)
+        ASM_FLAGS := -target aarch64-none-elf $(if $(CPU),-mcpu=$(CPU))
+    else
+        ASM_FLAGS := $(if $(CPU),-mcpu=$(CPU))
+    endif
 else ifeq ($(ARCH),riscv64)
     PANCAKE_TARGET := riscv
-    CLANG_TARGET_FLAGS := -target riscv64-none-elf -march=rv64imafdc
+    ifeq ($(CC_IS_CLANG),1)
+        ASM_FLAGS := -target riscv64-none-elf -march=rv64imafdc
+    else
+        ASM_FLAGS := -march=rv64imafdc -mabi=lp64d
+    endif
 endif
 
 ${CHECK_SERIAL_FLAGS_MD5}:
@@ -51,7 +62,7 @@ serial_virt_tx.elf: serial/components/virt_tx_pnk.o serial/components/serial_vir
 	$(LD) $(LDFLAGS) $^ $(LIBS) -o $@
 
 serial/components/virt_%_pnk.o: serial/components/virt_%_pnk.S
-	$(CC) $(CLANG_TARGET_FLAGS) -c $< -o $@
+	$(CC) $(ASM_FLAGS) -c $< -o $@
 
 serial/components/virt_rx_pnk.S: $(VIRT_RX_PNK) | serial/components
 	cat $(VIRT_RX_PNK) | cpp -P | $(CAKE_COMPILER) --target=$(PANCAKE_TARGET) --pancake --main_return=true > $@

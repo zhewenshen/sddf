@@ -15,6 +15,31 @@
 
 #include "ethernet.h"
 
+#ifdef PANCAKE_DRIVER
+static char cml_memory[1024*20];
+extern void *cml_heap, *cml_stack, *cml_stackend;
+extern void cml_main(void);
+
+void cml_exit(int arg) {
+    microkit_dbg_puts("ERROR! We should not be getting here\n");
+}
+
+void cml_err(int arg) {
+    if (arg == 3) {
+        microkit_dbg_puts("Memory not ready for entry. You may have not run the init code yet, or be trying to enter during an FFI call.\n");
+    }
+    cml_exit(arg);
+}
+
+void init_pancake_mem() {
+    unsigned long cml_heap_sz = 1024*10;
+    unsigned long cml_stack_sz = 1024*10;
+    cml_heap = cml_memory;
+    cml_stack = cml_heap + cml_heap_sz;
+    cml_stackend = cml_stack + cml_stack_sz;
+}
+#endif
+
 __attribute__((__section__(".device_resources"))) device_resources_t device_resources;
 
 __attribute__((__section__(".net_driver_config"))) net_driver_config_t config;
@@ -53,6 +78,8 @@ net_queue_handle_t rx_queue;
 net_queue_handle_t tx_queue;
 
 uintptr_t eth_regs;
+
+#ifndef PANCAKE_DRIVER
 
 static inline bool hw_ring_full(hw_ring_t *ring)
 {
@@ -249,6 +276,8 @@ static void handle_irq()
 #error "Unknown platform to handle MAC address for"
 #endif
 
+#endif // !PANCAKE_DRIVER
+
 static void eth_init()
 {
 #if USE_MAC_ADDR_REGS
@@ -367,9 +396,11 @@ static void eth_init()
     // Enable interrupts.
     *DMA_REG(DMA_CH0_INTERRUPT_EN) = DMA_INTR_NORMAL;
 
+#ifndef PANCAKE_DRIVER
     // Populate the rx and tx hardware rings.
     rx_provide();
     tx_provide();
+#endif
 
     // Start DMA and MAC
     *DMA_REG(DMA_CH0_TX_CONTROL) |= DMA_CH0_TX_CONTROL_ST;
@@ -449,11 +480,51 @@ void init(void)
                    config.virt_rx.num_buffers);
     net_queue_init(&tx_queue, config.virt_tx.free_queue.vaddr, config.virt_tx.active_queue.vaddr,
                    config.virt_tx.num_buffers);
+
+#ifdef PANCAKE_DRIVER
+    init_pancake_mem();
+    
+    uintptr_t *pnk_mem = (uintptr_t *) cml_heap;
+    
+    pnk_mem[1] = device_resources.irqs[0].id;
+    pnk_mem[2] = config.virt_rx.id;
+    pnk_mem[3] = config.virt_tx.id;
+
+    pnk_mem[4] = (uintptr_t) rx_queue.free;
+    pnk_mem[5] = (uintptr_t) rx_queue.active;
+    pnk_mem[6] = rx_queue.capacity;
+    pnk_mem[7] = (uintptr_t) tx_queue.free;
+    pnk_mem[8] = (uintptr_t) tx_queue.active;
+    pnk_mem[9] = tx_queue.capacity;
+    
+    pnk_mem[10] = 0;
+    pnk_mem[11] = 0;
+    pnk_mem[12] = rx.capacity;
+    pnk_mem[13] = (uintptr_t) rx.descr;
+    pnk_mem[14] = 0;
+    pnk_mem[15] = 0;
+    pnk_mem[16] = tx.capacity;
+    pnk_mem[17] = (uintptr_t) tx.descr;
+    pnk_mem[18] = rx_desc_base;
+    pnk_mem[19] = tx_desc_base;
+    pnk_mem[20] = (uintptr_t) &rx.descr_mdata[0];
+    pnk_mem[21] = (uintptr_t) &tx.descr_mdata[0];
+#endif
+
     eth_setup();
+
+#ifdef PANCAKE_DRIVER
+    pnk_mem[0] = (uintptr_t) eth_regs;
+    
+    cml_main();
+#endif
 
     microkit_irq_ack(device_resources.irqs[0].id);
 }
 
+#ifdef PANCAKE_DRIVER
+extern void notified(microkit_channel ch);
+#else
 void notified(microkit_channel ch)
 {
     if (ch == device_resources.irqs[0].id) {
@@ -467,3 +538,4 @@ void notified(microkit_channel ch)
         sddf_dprintf("ETH|LOG: received notification on unexpected channel %u\n", ch);
     }
 }
+#endif

@@ -13,15 +13,22 @@
 
 TIMER_DIR := $(dir $(lastword $(MAKEFILE_LIST)))
 
-# Set up clang target flags if using clang
-ifeq ($(CC),clang)
-    ifeq ($(ARCH),riscv64)
-        CLANG_TARGET_FLAGS := -target riscv64-none-elf
+# Detect compiler type for consistent flag usage
+CC_IS_CLANG := $(shell $(CC) --version 2>/dev/null | grep -q clang && echo 1 || echo 0)
+
+# Set up architecture-specific assembly flags
+ifeq ($(ARCH),riscv64)
+    ifeq ($(CC_IS_CLANG),1)
+        ASM_FLAGS := -target riscv64-none-elf -march=rv64imafdc
     else
-        CLANG_TARGET_FLAGS := -target aarch64-none-elf
+        ASM_FLAGS := -march=rv64imafdc -mabi=lp64d
     endif
 else
-    CLANG_TARGET_FLAGS :=
+    ifeq ($(CC_IS_CLANG),1)
+        ASM_FLAGS := -target aarch64-none-elf $(if $(CPU),-mcpu=$(CPU))
+    else
+        ASM_FLAGS := $(if $(CPU),-mcpu=$(CPU))
+    endif
 endif
 
 ifeq ($(PANCAKE_DRIVER),1)
@@ -35,13 +42,8 @@ timer_driver.elf: timer/timer_pnk.o timer/timer.o pancake_ffi.o
 timer/timer.o: ${TIMER_DIR}/timer.c ${CHECK_FLAGS_BOARD_MD5} |timer
 	${CC} ${CFLAGS} -DPANCAKE_DRIVER -o $@ -c $<
 
-ifeq ($(ARCH),riscv64)
 timer/timer_pnk.o: timer/timer_pnk.S
-	$(CC) $(CLANG_TARGET_FLAGS) -march=rv64imafdc -c $< -o $@
-else
-timer/timer_pnk.o: timer/timer_pnk.S
-	$(CC) $(CLANG_TARGET_FLAGS) -c -mcpu=$(CPU) $< -o $@
-endif
+	$(CC) $(ASM_FLAGS) -c $< -o $@
 
 ifeq ($(ARCH),riscv64)
 timer/timer_pnk.S: $(TIMER_PNK) | timer
