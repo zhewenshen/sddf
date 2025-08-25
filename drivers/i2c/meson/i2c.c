@@ -550,7 +550,7 @@ void init(void)
     i2c_setup();
     queue_handle = i2c_queue_init(config.virt.req_queue.vaddr, config.virt.resp_queue.vaddr);
 
-#ifdef PANCAKE_DRIVER
+#ifdef PANCAKE_I2C
     init_pancake_mem();
     uintptr_t *pnk_mem = (uintptr_t *) cml_heap;
     
@@ -582,7 +582,7 @@ void init(void)
 #endif
 }
 
-#ifndef PANCAKE_DRIVER
+#ifndef PANCAKE_I2C
 static inline void handle_request(void)
 {
     LOG_DRIVER("handling request\n");
@@ -739,7 +739,7 @@ static void handle_response(void)
 }
 #endif
 
-#ifdef PANCAKE_DRIVER
+#ifdef PANCAKE_I2C
 extern void notified(microkit_channel ch);
 #else
 void notified(microkit_channel ch)

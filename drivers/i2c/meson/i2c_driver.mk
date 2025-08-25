@@ -13,7 +13,7 @@
 
 I2C_DRIVER_DIR := $(dir $(lastword $(MAKEFILE_LIST)))
 
-ifeq ($(PANCAKE_DRIVER),1)
+ifeq ($(PANCAKE_I2C),1)
 i2c_driver.elf: i2c/i2c_pnk.o i2c/i2c_driver.o pancake_ffi.o
 	$(LD) $(LDFLAGS) $^ $(LIBS) -o $@
 
@@ -27,7 +27,7 @@ i2c/i2c_pnk.S: $(I2C_PNK) |i2c
 i2c/i2c_pnk.o: i2c/i2c_pnk.S
 	$(CC) -c -mcpu=$(CPU) $< -o $@
 
-i2c/i2c_driver.o: CFLAGS+=-I${I2C_DRIVER_DIR} -DI2C_BUS_NUM=${I2C_BUS_NUM} -DPANCAKE_DRIVER
+i2c/i2c_driver.o: CFLAGS+=-I${I2C_DRIVER_DIR} -DI2C_BUS_NUM=${I2C_BUS_NUM} -DPANCAKE_I2C
 i2c/i2c_driver.o: ${I2C_DRIVER_DIR}/i2c.c |i2c
 	${CC} ${CFLAGS} -c -o $@ $<
 else
