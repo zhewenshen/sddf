@@ -15,7 +15,7 @@
 #error "ARM generic timer is not exported by seL4"
 #endif
 
-#ifndef PANCAKE_DRIVER
+#ifndef PANCAKE_TIMER
 static uint64_t timer_freq;
 #endif
 
@@ -42,7 +42,7 @@ static uint64_t timer_freq;
 /* frequency of the timer */
 #define CNTFRQ "cntfrq_el0"
 
-#ifdef PANCAKE_DRIVER
+#ifdef PANCAKE_TIMER
 static char cml_memory[1024*20];
 extern void *cml_heap, *cml_stack, *cml_stackend;
 extern void cml_main(void);
@@ -155,7 +155,7 @@ static inline void generic_timer_disable(void)
     generic_timer_or_ctrl(~GENERIC_TIMER_ENABLE);
 }
 
-#ifndef PANCAKE_DRIVER
+#ifndef PANCAKE_TIMER
 static inline uint64_t get_ticks(void)
 {
     uint64_t time;
@@ -225,7 +225,7 @@ static void process_timeouts(uint64_t curr_time)
 }
 #endif
 
-#ifdef PANCAKE_DRIVER
+#ifdef PANCAKE_TIMER
 extern uint64_t get_ticks_in_ns(void);
 extern void process_timeouts(uint64_t curr_time);
 #endif
@@ -238,7 +238,7 @@ void init()
 
     sddf_irq_ack(device_resources.irqs[0].id);
 
-#ifdef PANCAKE_DRIVER
+#ifdef PANCAKE_TIMER
     init_pancake_mem();
     
     uintptr_t *pnk_mem = (uintptr_t *) cml_heap;
@@ -266,7 +266,7 @@ void init()
 #endif
 }
 
-#ifdef PANCAKE_DRIVER
+#ifdef PANCAKE_TIMER
 extern void notified(sddf_channel ch);
 #else
 void notified(sddf_channel ch)
@@ -280,7 +280,7 @@ void notified(sddf_channel ch)
 }
 #endif
 
-#ifdef PANCAKE_DRIVER
+#ifdef PANCAKE_TIMER
 seL4_MessageInfo_t protected(sddf_channel ch, seL4_MessageInfo_t msginfo)
 {
     switch (seL4_MessageInfo_get_label(msginfo)) {

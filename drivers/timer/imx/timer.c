@@ -18,7 +18,7 @@
 #include <sddf/util/printf.h>
 #include <sddf/timer/protocol.h>
 
-#ifdef PANCAKE_DRIVER
+#ifdef PANCAKE_TIMER
 // Pancake runtime support
 static char cml_memory[1024*20];
 extern void *cml_heap;
@@ -69,7 +69,7 @@ void init_pancake_mem() {
 
 __attribute__((__section__(".device_resources"))) device_resources_t device_resources;
 
-#ifndef PANCAKE_DRIVER
+#ifndef PANCAKE_TIMER
 static volatile uint32_t *gpt;
 static uint32_t overflow_count;
 static uint64_t timeouts[MAX_TIMEOUTS];
@@ -79,7 +79,7 @@ static uint32_t overflow_count;
 static uint64_t timeouts[MAX_TIMEOUTS];
 #endif
 
-#ifndef PANCAKE_DRIVER
+#ifndef PANCAKE_TIMER
 static uint64_t get_ticks(void)
 {
     uint64_t overflow = overflow_count;
@@ -95,7 +95,7 @@ static uint64_t get_ticks(void)
 }
 #endif
 
-#ifndef PANCAKE_DRIVER
+#ifndef PANCAKE_TIMER
 static void process_timeouts(uint64_t curr_time)
 {
     for (int i = 0; i < MAX_TIMEOUTS; i++) {
@@ -148,7 +148,7 @@ static void process_timeouts(uint64_t curr_time)
 }
 #endif
 
-#ifndef PANCAKE_DRIVER
+#ifndef PANCAKE_TIMER
 void notified(microkit_channel ch)
 {
     if (ch != device_resources.irqs[0].id) {
@@ -181,7 +181,7 @@ seL4_MessageInfo_t protected(microkit_channel ch, microkit_msginfo msginfo)
 {
     switch (microkit_msginfo_get_label(msginfo)) {
     case SDDF_TIMER_GET_TIME: {
-#ifndef PANCAKE_DRIVER
+#ifndef PANCAKE_TIMER
         uint64_t time_ns = (get_ticks() / (uint64_t)GPT_FREQ) * NS_IN_US;
 #else
         // In Pancake mode, we need to call Pancake get_ticks through memory or use C version
@@ -200,7 +200,7 @@ seL4_MessageInfo_t protected(microkit_channel ch, microkit_msginfo msginfo)
         return microkit_msginfo_new(0, 1);
     }
     case SDDF_TIMER_SET_TIMEOUT: {
-#ifndef PANCAKE_DRIVER
+#ifndef PANCAKE_TIMER
         uint64_t curr_time = get_ticks();
         uint64_t offset_ticks = (seL4_GetMR(0) / NS_IN_US) * (uint64_t)GPT_FREQ;
         timeouts[ch] = curr_time + offset_ticks;
@@ -275,7 +275,7 @@ void init(void)
 
     gpt[PR] = 1; // prescaler.
 
-#ifdef PANCAKE_DRIVER
+#ifdef PANCAKE_TIMER
     // Initialize Pancake runtime and memory layout
     init_pancake_mem();
     

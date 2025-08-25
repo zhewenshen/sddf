@@ -36,7 +36,7 @@
 
 #define NS_IN_S             1000000000
 
-#define TIMEOUT_INVALID     9223372036854775807
+#define TIMEOUT_INVALID     18446744073709551615
 
 fun get_ticks_in_ns()
 {
@@ -82,7 +82,7 @@ fun process_timeouts(1 curr_time)
         var timeout_val = 0;
         !ldw timeout_val, timeout_addr;
         
-        if (timeout_val != TIMEOUT_INVALID && timeout_val <= curr_time) {
+        if (timeout_val != TIMEOUT_INVALID && timeout_val <=+ curr_time) {
             var client_ch_start = CLIENT_CH_START;
             var client_ch = client_ch_start + i;
             microkit_notify(client_ch)
@@ -99,7 +99,7 @@ fun process_timeouts(1 curr_time)
         var timeout_val = 0;
         !ldw timeout_val, timeout_addr;
         
-        if (timeout_val < next_timeout) {
+        if (timeout_val <+ next_timeout) {
             next_timeout = timeout_val;
         }
         
@@ -124,7 +124,7 @@ fun process_timeouts(1 curr_time)
         
         var num_ticks = ns >> 6;
         
-        if (num_ticks <= STARFIVE_TIMER_MAX_TICKS) {
+        if (num_ticks <=+ STARFIVE_TIMER_MAX_TICKS) {
             var load_addr = timeout_base + LOAD_OFFSET;
             !st32 load_addr, num_ticks;
             !st32 enable_addr, STARFIVE_TIMER_ENABLED;

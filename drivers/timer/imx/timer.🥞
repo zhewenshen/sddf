@@ -29,8 +29,8 @@
 // GPT Frequency (in MHz)
 #define GPT_FREQ            12
 
-// Timeout invalid value (UINT64_MAX equivalent)
-#define TIMEOUT_INVALID     9223372036854775807
+// Timeout invalid value (UINT64_MAX)
+#define TIMEOUT_INVALID     18446744073709551615
 
 fun get_ticks()
 {
@@ -73,7 +73,7 @@ fun process_timeouts(1 curr_time)
         var timeout_val = 0;
         !ldw timeout_val, timeout_addr;
         
-        if (timeout_val <= curr_time) {
+        if (timeout_val <=+ curr_time) {
             microkit_notify(i)
             !stw timeout_addr, TIMEOUT_INVALID;
         }
@@ -88,7 +88,7 @@ fun process_timeouts(1 curr_time)
         var timeout_val = 0;
         !ldw timeout_val, timeout_addr;
         
-        if (timeout_val < next_timeout) {
+        if (timeout_val <+ next_timeout) {
             next_timeout = timeout_val;
         }
         

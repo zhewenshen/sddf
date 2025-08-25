@@ -77,7 +77,7 @@ uint32_t timeout_timer_elapses = 0;
 /* Right now, we only service a single timeout per client.
  * This timeout array indicates when a timeout should occur,
  * indexed by client ID. */
-#ifdef PANCAKE_DRIVER
+#ifdef PANCAKE_TIMER
 static char cml_memory[1024*20];
 extern void *cml_heap, *cml_stack, *cml_stackend;
 extern void cml_main(void);
@@ -163,7 +163,7 @@ static void process_timeouts(uint64_t curr_time)
 }
 #endif
 
-#ifdef PANCAKE_DRIVER
+#ifdef PANCAKE_TIMER
 extern void notified(microkit_channel ch);
 #else
 void notified(microkit_channel ch)
@@ -198,7 +198,7 @@ void notified(microkit_channel ch)
 }
 #endif
 
-#ifdef PANCAKE_DRIVER
+#ifdef PANCAKE_TIMER
 extern uint64_t get_ticks_in_ns_pancake(void);
 extern void process_timeouts_pancake(uint64_t curr_time);
 
@@ -263,7 +263,7 @@ void init(void)
         microkit_irq_ack(device_resources.irqs[i].id);
     }
 
-#ifdef PANCAKE_DRIVER
+#ifdef PANCAKE_TIMER
     init_pancake_mem();
     
     uintptr_t *pnk_mem = (uintptr_t *) cml_heap;

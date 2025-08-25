@@ -28,7 +28,7 @@ typedef struct {
 
 __attribute__((__section__(".device_resources"))) device_resources_t device_resources;
 
-#ifdef PANCAKE_DRIVER
+#ifdef PANCAKE_TIMER
 static char cml_memory[1024*20];
 extern void *cml_heap, *cml_stack, *cml_stackend;
 extern void cml_main(void);
@@ -92,7 +92,7 @@ static void process_timeouts(uint64_t curr_time)
 }
 #endif
 
-#ifdef PANCAKE_DRIVER
+#ifdef PANCAKE_TIMER
 extern uint64_t get_ticks_in_ns_pancake(void);
 extern void process_timeouts_pancake(uint64_t curr_time);
 #endif
@@ -105,7 +105,7 @@ void init()
 
     microkit_irq_ack(device_resources.irqs[0].id);
 
-#ifdef PANCAKE_DRIVER
+#ifdef PANCAKE_TIMER
     init_pancake_mem();
     
     uintptr_t *pnk_mem = (uintptr_t *) cml_heap;
@@ -127,7 +127,7 @@ void init()
 #endif
 }
 
-#ifdef PANCAKE_DRIVER
+#ifdef PANCAKE_TIMER
 extern void notified(microkit_channel ch);
 #else
 void notified(microkit_channel ch)
@@ -141,7 +141,7 @@ void notified(microkit_channel ch)
 }
 #endif
 
-#ifdef PANCAKE_DRIVER
+#ifdef PANCAKE_TIMER
 seL4_MessageInfo_t protected(microkit_channel ch, microkit_msginfo msginfo)
 {
     switch (microkit_msginfo_get_label(msginfo)) {
