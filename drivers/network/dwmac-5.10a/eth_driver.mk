@@ -18,7 +18,7 @@ ${CHECK_NETDRV_FLAGS_MD5}:
 	-rm -f .netdrv_cflags-*
 	touch $@
 
-ifeq ($(PANCAKE_DRIVER),1)
+ifeq ($(PANCAKE_NETWORK),1)
 # Detect compiler type for consistent flag usage
 CC_IS_CLANG := $(shell $(CC) --version 2>/dev/null | grep -q clang && echo 1 || echo 0)
 
@@ -53,7 +53,7 @@ ${BUILD_DIR}/ethernet_pnk.S: $(ETHERNET_PNK)
 
 dwmac/ethernet.o: ${ETHERNET_DRIVER_DIR}ethernet.c ${CHECK_NETDRV_FLAGS_MD5}
 	mkdir -p dwmac
-	${CC} -c ${CFLAGS} ${CFLAGS_network} -DPANCAKE_DRIVER -I ${ETHERNET_DRIVER_DIR} -o $@ $<
+	${CC} -c ${CFLAGS} ${CFLAGS_network} -DPANCAKE_NETWORK -I ${ETHERNET_DRIVER_DIR} -o $@ $<
 
 ${BUILD_DIR}/ethernet_pnk.o: ${BUILD_DIR}/ethernet_pnk.S
 	$(CC) -c $(ASM_FLAGS) $< -o $@

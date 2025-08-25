@@ -17,7 +17,7 @@ ${CHECK_NETDRV_FLAGS_MD5}:
 	-rm -f .netdrv_cflags-*
 	touch $@
 
-ifeq ($(PANCAKE_DRIVER),1)
+ifeq ($(PANCAKE_NETWORK),1)
 eth_driver.elf: ${BUILD_DIR}/ethernet_pnk.o imx/ethernet.o pancake_ffi.o
 	$(LD) $(LDFLAGS) $^ $(LIBS) -o $@
 
@@ -30,7 +30,7 @@ ${BUILD_DIR}/ethernet_pnk.S: $(ETHERNET_PNK)
 
 imx/ethernet.o: ${ETHERNET_DRIVER_DIR}/ethernet.c ${CHECK_NETDRV_FLAGS_MD5}
 	mkdir -p imx
-	${CC} -c ${CFLAGS} ${CFLAGS_network} -DPANCAKE_DRIVER -I ${ETHERNET_DRIVER_DIR} -o $@ $<
+	${CC} -c ${CFLAGS} ${CFLAGS_network} -DPANCAKE_NETWORK -I ${ETHERNET_DRIVER_DIR} -o $@ $<
 
 ${BUILD_DIR}/ethernet_pnk.o: ${BUILD_DIR}/ethernet_pnk.S
 	$(CC) -c -mcpu=$(CPU) $< -o $@

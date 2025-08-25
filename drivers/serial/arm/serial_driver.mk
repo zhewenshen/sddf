@@ -9,6 +9,15 @@
 SERIAL_DRIVER_DIR := $(dir $(lastword $(MAKEFILE_LIST)))
 
 ifeq ($(PANCAKE_SERIAL),1)
+
+CC_IS_CLANG := $(shell $(CC) --version 2>/dev/null | grep -q clang && echo 1 || echo 0)
+
+ifeq ($(CC_IS_CLANG),1)
+    TARGET_FLAG := -target aarch64-none-elf
+else
+    TARGET_FLAG :=
+endif
+
 serial_driver.elf: serial_pnk.o serial/arm/serial_driver.o pancake_ffi.o
 	$(LD) $(LDFLAGS) $^ $(LIBS) -o $@
 
@@ -17,7 +26,7 @@ DRIVER_PNK = ${UTIL}/util.🥞 \
 	${SERIAL_DRIVER_DIR}/uart.🥞
 
 serial_pnk.o: serial_pnk.S
-	$(CC) -c -mcpu=$(CPU) -target aarch64-none-elf $< -o $@
+	$(CC) -c -mcpu=$(CPU) $(TARGET_FLAG) $< -o $@
 
 serial_pnk.S: $(DRIVER_PNK)
 	cat $(DRIVER_PNK) | cpp -P | $(CAKE_COMPILER) --target=arm8 --pancake --main_return=true > $@

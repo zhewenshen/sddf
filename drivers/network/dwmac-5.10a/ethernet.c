@@ -15,7 +15,7 @@
 
 #include "ethernet.h"
 
-#ifdef PANCAKE_DRIVER
+#ifdef PANCAKE_NETWORK
 static char cml_memory[1024*20];
 extern void *cml_heap, *cml_stack, *cml_stackend;
 extern void cml_main(void);
@@ -79,7 +79,7 @@ net_queue_handle_t tx_queue;
 
 uintptr_t eth_regs;
 
-#ifndef PANCAKE_DRIVER
+#ifndef PANCAKE_NETWORK
 
 static inline bool hw_ring_full(hw_ring_t *ring)
 {
@@ -276,7 +276,7 @@ static void handle_irq()
 #error "Unknown platform to handle MAC address for"
 #endif
 
-#endif // !PANCAKE_DRIVER
+#endif // !PANCAKE_NETWORK
 
 static void eth_init()
 {
@@ -396,7 +396,7 @@ static void eth_init()
     // Enable interrupts.
     *DMA_REG(DMA_CH0_INTERRUPT_EN) = DMA_INTR_NORMAL;
 
-#ifndef PANCAKE_DRIVER
+#ifndef PANCAKE_NETWORK
     // Populate the rx and tx hardware rings.
     rx_provide();
     tx_provide();
@@ -481,7 +481,7 @@ void init(void)
     net_queue_init(&tx_queue, config.virt_tx.free_queue.vaddr, config.virt_tx.active_queue.vaddr,
                    config.virt_tx.num_buffers);
 
-#ifdef PANCAKE_DRIVER
+#ifdef PANCAKE_NETWORK
     init_pancake_mem();
     
     uintptr_t *pnk_mem = (uintptr_t *) cml_heap;
@@ -513,7 +513,7 @@ void init(void)
 
     eth_setup();
 
-#ifdef PANCAKE_DRIVER
+#ifdef PANCAKE_NETWORK
     pnk_mem[0] = (uintptr_t) eth_regs;
     
     cml_main();
@@ -522,7 +522,7 @@ void init(void)
     microkit_irq_ack(device_resources.irqs[0].id);
 }
 
-#ifdef PANCAKE_DRIVER
+#ifdef PANCAKE_NETWORK
 extern void notified(microkit_channel ch);
 #else
 void notified(microkit_channel ch)

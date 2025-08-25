@@ -80,7 +80,7 @@ uint32_t tx_descriptors[TX_COUNT];
 int rx_last_desc_idx = 0;
 int tx_last_desc_idx = 0;
 
-#ifdef PANCAKE_DRIVER
+#ifdef PANCAKE_NETWORK
 static char cml_memory[1024*20];
 extern void *cml_heap;
 extern void *cml_stack;
@@ -112,7 +112,7 @@ void init_pancake_mem() {
 }
 #endif
 
-#ifndef PANCAKE_DRIVER
+#ifndef PANCAKE_NETWORK
 static inline bool virtio_avail_full_rx(struct virtq *virtq)
 {
     return rx_last_desc_idx >= rx_virtq.num;
@@ -415,7 +415,7 @@ static void eth_setup(void)
     virtio_net_tx_headers_vaddr = hw_ring_buffer_vaddr + virtq_size;
     virtio_net_tx_headers_paddr = hw_ring_buffer_paddr + virtq_size;
 
-#ifndef PANCAKE_DRIVER
+#ifndef PANCAKE_NETWORK
     virtio_net_tx_headers = (virtio_net_hdr_t *) virtio_net_tx_headers_vaddr;
 #else
     uintptr_t *pnk_mem = (uintptr_t *) cml_heap;
@@ -428,7 +428,7 @@ static void eth_setup(void)
 
     assert(virtq_size + tx_headers_size + rx_headers_size <= HW_RING_SIZE);
 
-#ifndef PANCAKE_DRIVER
+#ifndef PANCAKE_NETWORK
     rx_provide();
     tx_provide();
 #else 
@@ -491,7 +491,7 @@ void init(void)
     net_queue_init(&tx_queue, config.virt_tx.free_queue.vaddr, config.virt_tx.active_queue.vaddr,
                    config.virt_tx.num_buffers);
 
-#ifdef PANCAKE_DRIVER
+#ifdef PANCAKE_NETWORK
     init_pancake_mem();
 
     /* init_pancake_data */
@@ -535,7 +535,7 @@ void init(void)
     eth_setup();
 }
 
-#ifdef PANCAKE_DRIVER
+#ifdef PANCAKE_NETWORK
 extern void notified(sddf_channel ch);
 #else
 void notified(sddf_channel ch)
