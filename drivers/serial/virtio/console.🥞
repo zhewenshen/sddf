@@ -3,26 +3,20 @@
  * SPDX-License-Identifier: BSD-2-Clause
  */
 
-/////////////////// Pancake driver memory layout
 #define IRQ_CH  pnk_mem(1)
 #define RX_CH   pnk_mem(2)  
 #define TX_CH   pnk_mem(3)
 
-/* Mirror `serial_queue_handle_t` struct */
-/* RX Queue Handle */
 #define SERIAL_RX_QUEUE     pnk_mem(4)
 #define SERIAL_RX_CAPACITY  pnk_mem(5)
 #define SERIAL_RX_DATA      pnk_mem(6)
 
-/* TX Queue Handle */
 #define SERIAL_TX_QUEUE     pnk_mem(7)
 #define SERIAL_TX_CAPACITY  pnk_mem(8)
 #define SERIAL_TX_DATA      pnk_mem(9)
 
-/* VirtIO MMIO register base */
 #define VIRTIO_REG_BASE     pnk_mem(0)
 
-/* VirtIO memory regions */
 #define HW_RING_BUFFER_VADDR  pnk_mem(10)
 #define HW_RING_BUFFER_PADDR  pnk_mem(11)
 #define VIRTIO_RX_CHAR_VADDR  pnk_mem(12)
@@ -30,32 +24,33 @@
 #define VIRTIO_TX_CHAR_VADDR  pnk_mem(14)
 #define VIRTIO_TX_CHAR_PADDR  pnk_mem(15)
 
-/* VirtIO queue state */
 #define RX_LAST_SEEN_USED   pnk_mem(16)
 #define TX_LAST_SEEN_USED   pnk_mem(17)
 #define RX_LAST_DESC_IDX    pnk_mem(18)
 #define TX_LAST_DESC_IDX    pnk_mem(19)
 
-/* RX VirtQ structure offsets in ring buffer */
 #define RX_VIRTQ_DESC_OFF   pnk_mem(20)
 #define RX_VIRTQ_AVAIL_OFF  pnk_mem(21)
 #define RX_VIRTQ_USED_OFF   pnk_mem(22)
 
-/* TX VirtQ structure offsets in ring buffer */
 #define TX_VIRTQ_DESC_OFF   pnk_mem(23)
 #define TX_VIRTQ_AVAIL_OFF  pnk_mem(24)
 #define TX_VIRTQ_USED_OFF   pnk_mem(25)
 
-/* Allocator state (simplified) */
-#define RX_DESC_ALLOC_HEAD  pnk_mem(30)
-#define TX_DESC_ALLOC_HEAD  pnk_mem(31)
-#define RX_CHAR_ALLOC_HEAD  pnk_mem(32)
-#define TX_CHAR_ALLOC_HEAD  pnk_mem(33)
+#define RX_DESC_IALLOC_PTR  pnk_mem(30)
+#define TX_DESC_IALLOC_PTR  pnk_mem(31)
+#define RX_CHAR_IALLOC_PTR  pnk_mem(32)
+#define TX_CHAR_IALLOC_PTR  pnk_mem(33)
 
 #define RX_ENABLED          pnk_mem(1024)
 
-/////////////////// VirtIO Hardware Constants
-/* VirtIO MMIO register offsets */
+#define IALLOC_IDXLIST_OFFSET   0
+#define IALLOC_HEAD_OFFSET      8
+#define IALLOC_TAIL_OFFSET      12
+#define IALLOC_NUM_FREE_OFFSET  16
+#define IALLOC_OFFSET_OFFSET    20
+#define IALLOC_SIZE_OFFSET      24
+
 #define VIRTIO_REG_MAGIC             0
 #define VIRTIO_REG_VERSION           4
 #define VIRTIO_REG_DEVICE_ID         8
@@ -79,27 +74,21 @@
 #define VIRTIO_REG_QUEUE_DEVICE_LOW  160
 #define VIRTIO_REG_QUEUE_DEVICE_HIGH 164
 
-/* VirtIO constants */
 #define RX_COUNT                     512
 #define TX_COUNT                     512
 #define VIRTIO_SERIAL_RX_QUEUE       0
 #define VIRTIO_SERIAL_TX_QUEUE       1
 
-/* VirtIO status bits */
 #define VIRTIO_DEVICE_STATUS_ACKNOWLEDGE  1
 #define VIRTIO_DEVICE_STATUS_DRIVER       2
 #define VIRTIO_DEVICE_STATUS_FEATURES_OK  8
 #define VIRTIO_DEVICE_STATUS_DRIVER_OK    4
 
-/* VirtIO interrupt bits */
 #define VIRTIO_MMIO_IRQ_VQUEUE       1
 #define VIRTIO_MMIO_IRQ_CONFIG       2
 
-/* VirtQ descriptor flags */
 #define VIRTQ_DESC_F_NEXT            1
 #define VIRTQ_DESC_F_WRITE           2
-
-/////////////////// Hardware Helper Functions
 
 fun virtio_read_reg(1 offset)
 {
@@ -116,77 +105,140 @@ fun virtio_write_reg(1 offset, 1 value)
   return 0;
 }
 
-/////////////////// Simple Allocator Functions
+fun ialloc_alloc(1 ialloc_ptr)
+{
+  var num_free_ptr = ialloc_ptr + IALLOC_NUM_FREE_OFFSET;
+  var num_free = 0;
+  !ld32 num_free, num_free_ptr;
+  
+  if (num_free == 0) {
+    return 4294967295;
+  }
+  
+  var head_ptr = ialloc_ptr + IALLOC_HEAD_OFFSET;
+  var offset_ptr = ialloc_ptr + IALLOC_OFFSET_OFFSET;
+  var idxlist_ptr = 0;
+  var head = 0;
+  var offset = 0;
+  
+  !ld32 head, head_ptr;
+  !ld32 offset, offset_ptr;
+  !ldw idxlist_ptr, ialloc_ptr + IALLOC_IDXLIST_OFFSET;
+  
+  var allocated_id = head + offset;
+  
+  var next_head = 0;
+  !ld32 next_head, idxlist_ptr + head * 4;
+  !st32 head_ptr, next_head;
+  
+  !st32 idxlist_ptr + (allocated_id - offset) * 4, 4294967295;
+  
+  num_free = num_free - 1;
+  !st32 num_free_ptr, num_free;
+  
+  return allocated_id;
+}
+
+fun ialloc_free(1 ialloc_ptr, 1 id)
+{
+  var size_ptr = ialloc_ptr + IALLOC_SIZE_OFFSET;
+  var offset_ptr = ialloc_ptr + IALLOC_OFFSET_OFFSET;
+  var num_free_ptr = ialloc_ptr + IALLOC_NUM_FREE_OFFSET;
+  var size = 0;
+  var offset = 0;
+  var num_free = 0;
+  
+  !ld32 size, size_ptr;
+  !ld32 offset, offset_ptr;
+  !ld32 num_free, num_free_ptr;
+  
+  if (id >= (size + offset)) { return -1; }
+  if (id < offset) { return -1; }
+  
+  var idxlist_ptr = 0;
+  !ldw idxlist_ptr, ialloc_ptr + IALLOC_IDXLIST_OFFSET;
+  var idx_val = 0;
+  !ld32 idx_val, idxlist_ptr + (id - offset) * 4;
+  if (idx_val != 4294967295) {
+    return -1; 
+  }
+  
+  var tail_ptr = ialloc_ptr + IALLOC_TAIL_OFFSET;
+  var head_ptr = ialloc_ptr + IALLOC_HEAD_OFFSET;
+  
+  if (num_free == 0) {
+    var idx_no_offset = id - offset;
+    !st32 head_ptr, idx_no_offset;
+    !st32 tail_ptr, idx_no_offset;
+  } else {
+    var tail = 0;
+    !ld32 tail, tail_ptr;
+    var idx_no_offset = id - offset;
+    !st32 idxlist_ptr + tail * 4, idx_no_offset;
+    !st32 tail_ptr, idx_no_offset;
+  }
+  
+  num_free = num_free + 1;
+  !st32 num_free_ptr, num_free;
+  
+  return 0;
+}
 
 fun alloc_rx_desc()
 {
-  var head = RX_DESC_ALLOC_HEAD;
-  if (head >= RX_COUNT) {
-    return 4294967295;
-  }
-  var new_head = head + 1;
-  var head_addr = pnk_mem_ptr(30);
-  !st32 head_addr, new_head;
-  return head;
+  var rx_desc_ialloc = RX_DESC_IALLOC_PTR;
+  var 1 idx = ialloc_alloc(rx_desc_ialloc);
+  return idx;
 }
 
 fun free_rx_desc(1 idx)
 {
+  var rx_desc_ialloc = RX_DESC_IALLOC_PTR;
+  ialloc_free(rx_desc_ialloc, idx);
   return 0;
 }
 
 fun alloc_tx_desc()
 {
-  var head = TX_DESC_ALLOC_HEAD;
-  if (head >= TX_COUNT) {
-    return 4294967295;
-  }
-  var new_head = head + 1;
-  var head_addr = pnk_mem_ptr(31);
-  !st32 head_addr, new_head;
-  return head;
+  var tx_desc_ialloc = TX_DESC_IALLOC_PTR;
+  var 1 idx = ialloc_alloc(tx_desc_ialloc);
+  return idx;
 }
 
 fun free_tx_desc(1 idx)
 {
+  var tx_desc_ialloc = TX_DESC_IALLOC_PTR;
+  ialloc_free(tx_desc_ialloc, idx);
   return 0;
 }
 
 fun alloc_rx_char()
 {
-  var head = RX_CHAR_ALLOC_HEAD;
-  if (head >= RX_COUNT) {
-    return 4294967295;
-  }
-  var new_head = head + 1;
-  var head_addr = pnk_mem_ptr(32);
-  !st32 head_addr, new_head;
-  return head;
+  var rx_char_ialloc = RX_CHAR_IALLOC_PTR;
+  var 1 idx = ialloc_alloc(rx_char_ialloc);
+  return idx;
 }
 
 fun free_rx_char(1 idx)
 {
+  var rx_char_ialloc = RX_CHAR_IALLOC_PTR;
+  ialloc_free(rx_char_ialloc, idx);
   return 0;
 }
 
 fun alloc_tx_char()
 {
-  var head = TX_CHAR_ALLOC_HEAD;
-  if (head >= TX_COUNT) {
-    return 4294967295;
-  }
-  var new_head = head + 1;
-  var head_addr = pnk_mem_ptr(33);
-  !st32 head_addr, new_head;
-  return head;
+  var tx_char_ialloc = TX_CHAR_IALLOC_PTR;
+  var 1 idx = ialloc_alloc(tx_char_ialloc);
+  return idx;
 }
 
 fun free_tx_char(1 idx)
 {
+  var tx_char_ialloc = TX_CHAR_IALLOC_PTR;
+  ialloc_free(tx_char_ialloc, idx);
   return 0;
 }
-
-/////////////////// VirtIO Queue Helper Functions
 
 fun virtio_avail_full_rx()
 {
@@ -253,8 +305,6 @@ fun read_virtq_used_ring_id(1 base_addr, 1 idx)
   !ld32 id, ring_addr;
   return id;
 }
-
-/////////////////// Main Driver Functions
 
 export fun tx_provide()
 {
@@ -537,8 +587,6 @@ export fun console_setup()
 
   return 0;
 }
-
-/////////////////// Main Entry Points
 
 export fun notified(1 ch)
 {

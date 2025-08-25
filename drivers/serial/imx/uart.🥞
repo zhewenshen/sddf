@@ -3,29 +3,22 @@
  * SPDX-License-Identifier: BSD-2-Clause
  */
 
-/////////////////// Pancake driver memory layout
 #define IRQ_CH  pnk_mem(1)
 #define RX_CH   pnk_mem(2)  
 #define TX_CH   pnk_mem(3)
 
-/* Mirror `serial_queue_handle_t` struct */
-/* RX Queue Handle */
 #define SERIAL_RX_QUEUE     pnk_mem(4)
 #define SERIAL_RX_CAPACITY  pnk_mem(5)
 #define SERIAL_RX_DATA      pnk_mem(6)
 
-/* TX Queue Handle */
 #define SERIAL_TX_QUEUE     pnk_mem(7)
 #define SERIAL_TX_CAPACITY  pnk_mem(8)
 #define SERIAL_TX_DATA      pnk_mem(9)
 
-/* UART register base */
 #define UART_REG_BASE       pnk_mem(0)
 
 #define RX_ENABLED          pnk_mem(1024)
 
-/////////////////// IMX UART Hardware Constants
-/* Register offsets - based on imx_uart_regs structure */
 #define RXD_OFFSET          0
 #define TXD_OFFSET          64
 #define CR1_OFFSET          128
@@ -43,27 +36,22 @@
 #define ONEMS_OFFSET        176
 #define TS_OFFSET           180
 
-/* Control Register 1 bits */
 #define UART_CR1_UART_EN            1
 #define UART_CR1_RX_READY_INT       512
 #define UART_CR1_TX_READY_INT       8192
 
-/* Control Register 2 bits */
 #define UART_CR2_TX_EN              4
 #define UART_CR2_RX_EN              2
 
-/* Status Register 1 bits */
 #define UART_SR1_RX_RDY             512
 #define UART_SR1_TX_RDY             8192
 #define UART_SR1_FRM_ERR            1024
 #define UART_SR1_PARITY_ERR         32768
 #define UART_SR1_ABNORMAL           33792
 
-/* Test Register bits */
 #define UART_TST_TX_FIFO_FULL       16
 #define UART_TST_RX_FIFO_EMPTY      32
 
-/////////////////// Hardware Helper Functions
 
 fun uart_read_rxd()
 {
@@ -118,7 +106,6 @@ fun uart_read_ts()
   return ts;
 }
 
-/////////////////// Main Driver Functions
 
 export fun tx_provide()
 {
@@ -132,32 +119,26 @@ export fun tx_provide()
     var 1 ts = uart_read_ts();
     if (ts & UART_TST_TX_FIFO_FULL) { break; }
 
-    // Try to dequeue a character
     var 1 is_empty = serial_queue_is_empty(tx_queue);
     if (is_empty) { break; }
 
-    // Dequeue and send character to UART
     var 1 c = serial_queue_dequeue_char(tx_queue, tx_capacity, tx_data);
     uart_write_txd(c);
     transferred = true;
   }
 
-  // Handle TX interrupt enable/disable
   var 1 ts = uart_read_ts();
   var 1 cr1 = uart_read_cr1();
   var 1 is_empty = serial_queue_is_empty(tx_queue);
   
   if ((ts & UART_TST_TX_FIFO_FULL) && (!is_empty)) {
-    // TX FIFO full and data remaining - enable interrupt
     cr1 = cr1 | UART_CR1_TX_READY_INT;
     uart_write_cr1(cr1);
   } else {
-    // No data or FIFO not full - disable interrupt  
     cr1 = cr1 & 4294959103;
     uart_write_cr1(cr1);
   }
 
-  // Check if need to signal consumer
   var 1 requires_signal = serial_queue_require_signal(tx_queue);
   if (transferred && requires_signal) {
     serial_queue_cancel_signal(tx_queue);
@@ -177,7 +158,6 @@ fun rx_return()
 
   while (reprocess)
   {
-    // Read characters while UART has data and queue has space
     while (true)
     {
       var 1 ts = uart_read_ts();
@@ -186,19 +166,16 @@ fun rx_return()
       var 1 is_full = serial_queue_is_full(rx_queue, rx_capacity);
       if (is_full) { break; }
 
-      // Read character from UART and enqueue
       var 1 rxd = uart_read_rxd();
       var c = rxd & 255;
       serial_queue_enqueue_char(rx_queue, rx_capacity, rx_data, c);
       enqueued = true;
     }
 
-    // Handle interrupt control when queue full
     var 1 ts = uart_read_ts();
     var 1 is_full = serial_queue_is_full(rx_queue, rx_capacity);
     
     if ((!(ts & UART_TST_RX_FIFO_EMPTY)) && is_full) {
-      // UART has data but queue full - disable RX interrupt and request signal
       var 1 cr1 = uart_read_cr1();
       cr1 = cr1 & 4294966783;
       uart_write_cr1(cr1);
@@ -207,7 +184,6 @@ fun rx_return()
     
     reprocess = false;
 
-    // Check if we can re-enable interrupts
     if ((!(ts & UART_TST_RX_FIFO_EMPTY)) && (!is_full)) {
       serial_queue_cancel_signal(rx_queue);
       var 1 cr1 = uart_read_cr1();
@@ -232,17 +208,14 @@ fun handle_irq()
   while ((uart_sr1 & UART_SR1_ABNORMAL) || (uart_sr1 & UART_SR1_RX_RDY) ||
          ((uart_cr1 & UART_CR1_TX_READY_INT) && (uart_sr1 & UART_SR1_TX_RDY)))
   {
-    // Handle RX if enabled and data available
     if (RX_ENABLED && (uart_sr1 & UART_SR1_RX_RDY)) {
       rx_return();
     }
 
-    // Handle TX if interrupt enabled and ready
     if ((uart_cr1 & UART_CR1_TX_READY_INT) && (uart_sr1 & UART_SR1_TX_RDY)) {
       tx_provide();
     }
 
-    // Handle errors
     if (uart_sr1 & UART_SR1_ABNORMAL) {
       uart_write_sr1(UART_SR1_ABNORMAL);
     }
@@ -254,7 +227,6 @@ fun handle_irq()
   return 0;
 }
 
-/////////////////// Main Entry Points
 
 export fun notified(1 ch)
 {

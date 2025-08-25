@@ -27,12 +27,12 @@
 __attribute__((__section__(".device_resources"))) device_resources_t device_resources;
 __attribute__((__section__(".serial_driver_config"))) serial_driver_config_t config;
 
-#ifdef PANCAKE_DRIVER
+#ifdef PANCAKE_SERIAL
 /* Queues for communicating with the virtualizers */
 serial_queue_handle_t *rx_queue_handle;
 serial_queue_handle_t *tx_queue_handle;
 
-static char cml_memory[1024*20];
+static char cml_memory[1024*40];  // Increased for ialloc structures
 extern void *cml_heap;
 extern void *cml_stack;
 extern void *cml_stackend;
@@ -82,7 +82,7 @@ serial_queue_handle_t tx_queue_handle;
 #define VIRTIO_SERIAL_RX_QUEUE 0
 #define VIRTIO_SERIAL_TX_QUEUE 1
 
-#ifndef PANCAKE_DRIVER
+#ifndef PANCAKE_SERIAL
 serial_queue_t *rx_queue;
 serial_queue_t *tx_queue;
 
@@ -123,7 +123,7 @@ int tx_last_desc_idx = 0;
 
 volatile virtio_mmio_regs_t *uart_regs;
 
-#ifndef PANCAKE_DRIVER
+#ifndef PANCAKE_SERIAL
 static inline bool virtio_avail_full_rx(struct virtq *virtq)
 {
     return rx_last_desc_idx >= rx_virtq.num;
@@ -437,7 +437,7 @@ void init()
 
     uart_regs = (volatile virtio_mmio_regs_t *)device_resources.regions[0].region.vaddr;
 
-#ifdef PANCAKE_DRIVER
+#ifdef PANCAKE_SERIAL
     init_pancake_mem();
 
     uintptr_t *pnk_mem = (uintptr_t *) cml_heap;
@@ -480,11 +480,33 @@ void init()
     pnk_mem[24] = tx_avail_off;  // TX_VIRTQ_AVAIL_OFF
     pnk_mem[25] = tx_used_off;   // TX_VIRTQ_USED_OFF
 
-    // Initialize allocator state (simplified - just use counters)
-    pnk_mem[30] = 0; // RX_DESC_ALLOC_HEAD
-    pnk_mem[31] = 0; // TX_DESC_ALLOC_HEAD
-    pnk_mem[32] = 0; // RX_CHAR_ALLOC_HEAD
-    pnk_mem[33] = 0; // TX_CHAR_ALLOC_HEAD
+    // Initialize allocator state (full ialloc implementation)
+    // Each ialloc needs: idxlist array + ialloc structure
+    // Place these after the main pancake memory (starting at offset 2048)
+    
+    // RX Descriptor allocator
+    uint32_t *rx_desc_idxlist = (uint32_t *)&cml_memory[2048];
+    ialloc_t *rx_desc_ialloc = (ialloc_t *)&cml_memory[2048 + RX_COUNT * 4];
+    ialloc_init(rx_desc_ialloc, rx_desc_idxlist, RX_COUNT);
+    pnk_mem[30] = (uintptr_t)rx_desc_ialloc; // RX_DESC_IALLOC_PTR
+    
+    // TX Descriptor allocator  
+    uint32_t *tx_desc_idxlist = (uint32_t *)&cml_memory[4096];
+    ialloc_t *tx_desc_ialloc = (ialloc_t *)&cml_memory[4096 + TX_COUNT * 4];
+    ialloc_init(tx_desc_ialloc, tx_desc_idxlist, TX_COUNT);
+    pnk_mem[31] = (uintptr_t)tx_desc_ialloc; // TX_DESC_IALLOC_PTR
+    
+    // RX Character allocator
+    uint32_t *rx_char_idxlist = (uint32_t *)&cml_memory[6144];
+    ialloc_t *rx_char_ialloc = (ialloc_t *)&cml_memory[6144 + RX_COUNT * 4];
+    ialloc_init(rx_char_ialloc, rx_char_idxlist, RX_COUNT);
+    pnk_mem[32] = (uintptr_t)rx_char_ialloc; // RX_CHAR_IALLOC_PTR
+    
+    // TX Character allocator
+    uint32_t *tx_char_idxlist = (uint32_t *)&cml_memory[8192];
+    ialloc_t *tx_char_ialloc = (ialloc_t *)&cml_memory[8192 + TX_COUNT * 4];
+    ialloc_init(tx_char_ialloc, tx_char_idxlist, TX_COUNT);
+    pnk_mem[33] = (uintptr_t)tx_char_ialloc; // TX_CHAR_IALLOC_PTR
 
     // Set up queue handles
     rx_queue_handle = (serial_queue_handle_t *) &pnk_mem[4];
@@ -526,7 +548,7 @@ void init()
 #endif
 }
 
-#ifndef PANCAKE_DRIVER
+#ifndef PANCAKE_SERIAL
 void notified(sddf_channel ch)
 {
     if (ch == device_resources.irqs[0].id) {

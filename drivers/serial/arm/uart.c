@@ -15,7 +15,7 @@ __attribute__((__section__(".serial_driver_config"))) serial_driver_config_t con
 
 __attribute__((__section__(".device_resources"))) device_resources_t device_resources;
 
-#ifdef PANCAKE_DRIVER
+#ifdef PANCAKE_SERIAL
 serial_queue_handle_t *rx_queue_handle;
 serial_queue_handle_t *tx_queue_handle;
 static char cml_memory[1024*20];
@@ -48,7 +48,7 @@ serial_queue_handle_t tx_queue_handle;
 
 volatile pl011_uart_regs_t *uart_regs;
 
-#ifndef PANCAKE_DRIVER
+#ifndef PANCAKE_SERIAL
 /*
  * BaudDivInt + BaudDivFrac/64 = (RefFreq/ (16 x BaudRate))
  */
@@ -178,7 +178,7 @@ static void uart_setup(void)
         uart_regs->tcr |= PL011_CR_RX_EN;
     }
 }
-#endif /* !PANCAKE_DRIVER */
+#endif /* !PANCAKE_SERIAL */
 
 /*
  * BaudDivInt + BaudDivFrac/64 = (RefFreq/ (16 x BaudRate))
@@ -244,7 +244,7 @@ static void uart_setup(void)
     }
 }
 
-#ifdef PANCAKE_DRIVER
+#ifdef PANCAKE_SERIAL
 extern void notified(microkit_channel ch);
 #endif
 
@@ -260,7 +260,7 @@ void init(void)
 
     uart_regs = device_resources.regions[0].region.vaddr;
 
-#ifdef PANCAKE_DRIVER
+#ifdef PANCAKE_SERIAL
     init_pancake_mem();
     uintptr_t *pnk_mem = (uintptr_t *) cml_heap;
     
@@ -291,7 +291,7 @@ void init(void)
 #endif
 }
 
-#ifndef PANCAKE_DRIVER
+#ifndef PANCAKE_SERIAL
 void notified(microkit_channel ch)
 {
     if (ch == device_resources.irqs[0].id) {

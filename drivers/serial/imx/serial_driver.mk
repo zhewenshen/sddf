@@ -10,7 +10,7 @@
 SERIAL_DRIVER_DIR := $(dir $(lastword $(MAKEFILE_LIST)))
 SERIAL_QUEUE_INCLUDE := ${SDDF}/include/sddf/serial
 
-ifdef PANCAKE_DRIVER
+ifdef PANCAKE_SERIAL
 DRIVER_PNK = ${UTIL}/util.🥞 \
 	${SERIAL_QUEUE_INCLUDE}/queue.🥞 \
 	${SERIAL_DRIVER_DIR}/uart.🥞
@@ -37,9 +37,9 @@ serial_driver.elf: serial/imx/serial_driver.o
 	$(LD) $(LDFLAGS) $^ $(LIBS) -o $@
 endif
 
-ifdef PANCAKE_DRIVER
+ifdef PANCAKE_SERIAL
 serial/imx/serial_driver.o: ${SERIAL_DRIVER_DIR}/uart.c |serial/imx
-	$(CC) -c $(CFLAGS) -DPANCAKE_DRIVER -I${SERIAL_DRIVER_DIR}/include -o $@ $<
+	$(CC) -c $(CFLAGS) -DPANCAKE_SERIAL -I${SERIAL_DRIVER_DIR}/include -o $@ $<
 else
 serial/imx/serial_driver.o: ${SERIAL_DRIVER_DIR}/uart.c |serial/imx
 	$(CC) -c $(CFLAGS) -I${SERIAL_DRIVER_DIR}/include -o $@ $<

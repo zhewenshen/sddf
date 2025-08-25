@@ -8,7 +8,7 @@
 
 SERIAL_DRIVER_DIR := $(dir $(lastword $(MAKEFILE_LIST)))
 
-ifeq ($(PANCAKE_DRIVER),1)
+ifeq ($(PANCAKE_SERIAL),1)
 # Architecture-specific settings
 ARCH := ${shell grep 'CONFIG_SEL4_ARCH  ' $(BOARD_DIR)/include/kernel/gen_config.h | cut -d' ' -f4}
 # Detect compiler type
@@ -44,7 +44,7 @@ serial_pnk.S: $(DRIVER_PNK)
 	cat $(DRIVER_PNK) | cpp -P | $(CAKE_COMPILER) --target=$(PANCAKE_TARGET) --pancake --main_return=true > $@
 
 serial/ns16550a/serial_driver.o: ${SERIAL_DRIVER_DIR}/uart.c |serial/ns16550a
-	$(CC) -c $(CFLAGS) -DPANCAKE_DRIVER -I${SERIAL_DRIVER_DIR}/include -o $@ $<
+	$(CC) -c $(CFLAGS) -DPANCAKE_SERIAL -I${SERIAL_DRIVER_DIR}/include -o $@ $<
 else
 serial_driver.elf: serial/ns16550a/serial_driver.o
 	$(LD) $(LDFLAGS) $< $(LIBS) -o $@

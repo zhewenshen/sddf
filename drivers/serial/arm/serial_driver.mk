@@ -8,7 +8,7 @@
 
 SERIAL_DRIVER_DIR := $(dir $(lastword $(MAKEFILE_LIST)))
 
-ifeq ($(PANCAKE_DRIVER),1)
+ifeq ($(PANCAKE_SERIAL),1)
 serial_driver.elf: serial_pnk.o serial/arm/serial_driver.o pancake_ffi.o
 	$(LD) $(LDFLAGS) $^ $(LIBS) -o $@
 
@@ -23,7 +23,7 @@ serial_pnk.S: $(DRIVER_PNK)
 	cat $(DRIVER_PNK) | cpp -P | $(CAKE_COMPILER) --target=arm8 --pancake --main_return=true > $@
 
 serial/arm/serial_driver.o: ${SERIAL_DRIVER_DIR}/uart.c |serial/arm
-	$(CC) -c $(CFLAGS) -DPANCAKE_DRIVER -I${SERIAL_DRIVER_DIR}/include -o $@ $<
+	$(CC) -c $(CFLAGS) -DPANCAKE_SERIAL -I${SERIAL_DRIVER_DIR}/include -o $@ $<
 else
 serial_driver.elf: serial/arm/serial_driver.o
 	$(LD) $(LDFLAGS) $< $(LIBS) -o $@

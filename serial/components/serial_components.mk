@@ -46,7 +46,7 @@ ${SERIAL_COMPONENT_OBJ}: ${CHECK_SERIAL_FLAGS_MD5}
 
 SERIAL_QUEUE_INCLUDE := ${SDDF}/include/sddf/serial
 
-ifeq ($(PANCAKE_VIRT),1)
+ifeq ($(PANCAKE_SERIAL),1)
 VIRT_RX_PNK = ${UTIL}/util.🥞 \
 	${SERIAL_QUEUE_INCLUDE}/queue.🥞 \
 	${SDDF}/serial/components/virt_rx.🥞
@@ -71,7 +71,7 @@ serial/components/virt_tx_pnk.S: $(VIRT_TX_PNK) | serial/components
 	cat $(VIRT_TX_PNK) | cpp -P | $(CAKE_COMPILER) --target=$(PANCAKE_TARGET) --pancake --main_return=true > $@
 
 serial/components/serial_virt_%.o: ${SDDF}/serial/components/virt_%.c
-	${CC} ${CFLAGS} ${CFLAGS_serial} -DPANCAKE_VIRT -o $@ -c $<
+	${CC} ${CFLAGS} ${CFLAGS_serial} -DPANCAKE_SERIAL -o $@ -c $<
 else
 serial_virt_rx.elf: serial/components/serial_virt_rx.o libsddf_util_debug.a
 	$(LD) $(LDFLAGS) $^ $(LIBS) -o $@

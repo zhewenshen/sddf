@@ -17,7 +17,7 @@ __attribute__((__section__(".serial_driver_config"))) serial_driver_config_t con
 
 __attribute__((__section__(".device_resources"))) device_resources_t device_resources;
 
-#ifdef PANCAKE_DRIVER
+#ifdef PANCAKE_SERIAL
 serial_queue_handle_t *rx_queue_handle;
 serial_queue_handle_t *tx_queue_handle;
 static char cml_memory[1024*20];
@@ -68,7 +68,7 @@ volatile uintptr_t uart_base;
 #error "unknown platform reg-io-width"
 #endif
 
-#ifndef PANCAKE_DRIVER
+#ifndef PANCAKE_SERIAL
 static inline bool tx_fifo_not_full(void)
 {
 #if UART_DW_APB_REGISTERS
@@ -194,7 +194,7 @@ static void handle_irq(void)
         tx_provide();
     }
 }
-#endif /* !PANCAKE_DRIVER */
+#endif /* !PANCAKE_SERIAL */
 
 static void set_baud(unsigned long baud)
 {
@@ -229,7 +229,7 @@ void init(void)
 
     uart_base = (uintptr_t)device_resources.regions[0].region.vaddr;
 
-#ifdef PANCAKE_DRIVER
+#ifdef PANCAKE_SERIAL
     init_pancake_mem();
     uintptr_t *pnk_mem = (uintptr_t *) cml_heap;
     
@@ -275,14 +275,14 @@ void init(void)
            -> TX enabled as needed by tx_provide(). */
         *REG_PTR(UART_IER) = UART_IER_ERBFI;
 
-#ifdef PANCAKE_DRIVER
+#ifdef PANCAKE_SERIAL
         serial_queue_init(rx_queue_handle, config.rx.queue.vaddr, config.rx.data.size, config.rx.data.vaddr);
 #else
         serial_queue_init(&rx_queue_handle, config.rx.queue.vaddr, config.rx.data.size, config.rx.data.vaddr);
 #endif
     }
 
-#ifdef PANCAKE_DRIVER
+#ifdef PANCAKE_SERIAL
     serial_queue_init(tx_queue_handle, config.tx.queue.vaddr, config.tx.data.size, config.tx.data.vaddr);
 #else
     serial_queue_init(&tx_queue_handle, config.tx.queue.vaddr, config.tx.data.size, config.tx.data.vaddr);
@@ -296,12 +296,12 @@ void init(void)
     (void)*REG_PTR(UART_USR);
 #endif
 
-#ifdef PANCAKE_DRIVER
+#ifdef PANCAKE_SERIAL
     cml_main();
 #endif
 }
 
-#ifdef PANCAKE_DRIVER
+#ifdef PANCAKE_SERIAL
 extern void notified(microkit_channel ch);
 #else
 void notified(microkit_channel ch)
@@ -317,4 +317,4 @@ void notified(microkit_channel ch)
         LOG_DRIVER_ERR("received notification on unexpected channel\n");
     }
 }
-#endif /* !PANCAKE_DRIVER */
+#endif /* !PANCAKE_SERIAL */

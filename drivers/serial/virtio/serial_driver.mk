@@ -12,7 +12,7 @@
 SERIAL_DRIVER_DIR := $(dir $(lastword $(MAKEFILE_LIST)))
 SERIAL_QUEUE_INCLUDE := ${SDDF}/include/sddf/serial
 
-ifdef PANCAKE_DRIVER
+ifdef PANCAKE_SERIAL
 DRIVER_PNK = ${UTIL}/util.🥞 \
 	${SERIAL_QUEUE_INCLUDE}/queue.🥞 \
 	${SERIAL_DRIVER_DIR}/console.🥞
@@ -35,7 +35,7 @@ serial_driver.elf: serial_pnk.o serial/virtio/serial_driver.o pancake_ffi.o
 	$(LD) $(LDFLAGS) $^ $(LIBS) -o $@
 
 serial/virtio/serial_driver.o: ${SERIAL_DRIVER_DIR}/console.c |serial/virtio
-	$(CC) -c $(CFLAGS) -DPANCAKE_DRIVER -I${SERIAL_DRIVER_DIR}/include -o $@ $<
+	$(CC) -c $(CFLAGS) -DPANCAKE_SERIAL -I${SERIAL_DRIVER_DIR}/include -o $@ $<
 
 else
 serial_driver.elf: serial/virtio/serial_driver.o libsddf_util_debug.a
