@@ -103,7 +103,7 @@ To get started:
 
 1. Build the CakeML compiler:
    ```sh
-   cd cake-16bit-x64-64.tar/cake-unverified-x64-64
+   cd cake-16bit-x64-64/cake-unverified-x64-64
    make -j$(nproc)
    ```
 
@@ -114,7 +114,7 @@ export SDDF_DIR=$PWD
 cd examples/echo_server
 make -j$(nproc) MICROKIT_BOARD=qemu_virt_aarch64 \
      MICROKIT_SDK=$SDDF_DIR/microkit-sdk-2.0.1 \
-     CAKE_COMPILER=$SDDF_DIR/cake-16bit-x64-64.tar/cake-unverified-x64-64/cake \
+     CAKE_COMPILER=$SDDF_DIR/cake-16bit-x64-64/cake-unverified-x64-64/cake \
      MICROKIT_CONFIG=debug \
      PANCAKE_NETWORK=1 \
      PANCAKE_SERIAL=1 \
