@@ -9,10 +9,10 @@
 #define MAX_INT8         255
 
 #define microkit_notify(channel)        \
-  @microkit_notify(0,channel,0,0);      \
+  @microkit_notify(0,channel,0,0);     \
 
 #define microkit_deferred_irq_ack(channel)      \
-  @microkit_deferred_irq_ack(0,channel,0,0);    \
+  @microkit_deferred_irq_ack(0,channel,0,0);   \
 
 #define sddf_notify(channel)    \
   @sddf_notify(0,channel,0,0);  \
@@ -25,6 +25,9 @@
 
 #define sddf_deferred_notify(channel)   \
   @sddf_deferred_notify(0,channel,0,0); \
+
+#define cache_clean(start, end)  \
+  @cache_clean(start,0,end,0);   \
 
 #define cache_clean_and_invalidate(start, end)  \
   @cache_clean_and_invalidate(start,0,end,0);   \
