@@ -47,11 +47,11 @@ ${SERIAL_COMPONENT_OBJ}: ${CHECK_SERIAL_FLAGS_MD5}
 SERIAL_QUEUE_INCLUDE := ${SDDF}/include/sddf/serial
 
 ifeq ($(PANCAKE_SERIAL),1)
-VIRT_RX_PNK = ${UTIL}/util.🥞 \
+SERIAL_VIRT_RX_PNK = ${UTIL}/util.🥞 \
 	${SERIAL_QUEUE_INCLUDE}/queue.🥞 \
 	${SDDF}/serial/components/virt_rx.🥞
 
-VIRT_TX_PNK = ${UTIL}/util.🥞 \
+SERIAL_VIRT_TX_PNK = ${UTIL}/util.🥞 \
 	${SERIAL_QUEUE_INCLUDE}/queue.🥞 \
 	${SDDF}/serial/components/virt_tx.🥞
 
@@ -64,11 +64,11 @@ serial_virt_tx.elf: serial/components/virt_tx_pnk.o serial/components/serial_vir
 serial/components/virt_%_pnk.o: serial/components/virt_%_pnk.S
 	$(CC) $(ASM_FLAGS) -c $< -o $@
 
-serial/components/virt_rx_pnk.S: $(VIRT_RX_PNK) | serial/components
-	cat $(VIRT_RX_PNK) | cpp -P | $(CAKE_COMPILER) --target=$(PANCAKE_TARGET) --pancake --main_return=true > $@
+serial/components/virt_rx_pnk.S: $(SERIAL_VIRT_RX_PNK) | serial/components
+	cat $(SERIAL_VIRT_RX_PNK) | cpp -P | $(CAKE_COMPILER) --target=$(PANCAKE_TARGET) --pancake --main_return=true > $@
 
-serial/components/virt_tx_pnk.S: $(VIRT_TX_PNK) | serial/components
-	cat $(VIRT_TX_PNK) | cpp -P | $(CAKE_COMPILER) --target=$(PANCAKE_TARGET) --pancake --main_return=true > $@
+serial/components/virt_tx_pnk.S: $(SERIAL_VIRT_TX_PNK) | serial/components
+	cat $(SERIAL_VIRT_TX_PNK) | cpp -P | $(CAKE_COMPILER) --target=$(PANCAKE_TARGET) --pancake --main_return=true > $@
 
 serial/components/serial_virt_%.o: ${SDDF}/serial/components/virt_%.c
 	${CC} ${CFLAGS} ${CFLAGS_serial} -DPANCAKE_SERIAL -o $@ -c $<
