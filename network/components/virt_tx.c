@@ -12,6 +12,47 @@
 
 __attribute__((__section__(".net_virt_tx_config"))) net_virt_tx_config_t config;
 
+#ifdef PANCAKE_NETWORK_VIRT
+// Memory layout for Pancake (must match .🥞 file)
+#define CONFIG_DRIVER_ID          0
+#define DRV_QUEUE_BASE           10
+#define CLI_QUEUE_BASE           30
+#define CLI_DATA_IO_BASE         100
+#define CLI_CONN_ID_BASE         150
+#define NUM_CLIENTS              200
+#define NOTIFY_CLIENTS_BASE      210
+
+static char cml_memory[1024*20];
+extern void *cml_heap;
+extern void *cml_stack;
+extern void *cml_stackend;
+
+extern void cml_main(void);
+
+void cml_exit(int arg) {
+    microkit_dbg_puts("ERROR! We should not be getting here\n");
+}
+
+void cml_err(int arg) {
+    if (arg == 3) {
+        microkit_dbg_puts("Memory not ready for entry. You may have not run the init code yet, or be trying to enter during an FFI call.\n");
+    }
+    cml_exit(arg);
+}
+
+void cml_clear() {
+    microkit_dbg_puts("Trying to clear cache\n");
+}
+
+void init_pancake_mem() {
+    unsigned long cml_heap_sz = 1024*10;
+    unsigned long cml_stack_sz = 1024*10;
+    cml_heap = cml_memory;
+    cml_stack = cml_heap + cml_heap_sz;
+    cml_stackend = cml_stack + cml_stack_sz;
+}
+#endif
+
 typedef struct state {
     net_queue_handle_t tx_queue_drv;
     net_queue_handle_t tx_queue_clients[SDDF_NET_MAX_CLIENTS];
@@ -112,15 +153,61 @@ void tx_return(void)
     }
 }
 
+#ifdef PANCAKE_NETWORK_VIRT
+extern void notified(sddf_channel ch);
+#else
 void notified(sddf_channel ch)
 {
     tx_return();
     tx_provide();
 }
+#endif
 
 void init(void)
 {
     assert(net_config_check_magic(&config));
+
+#ifdef PANCAKE_NETWORK_VIRT
+    init_pancake_mem();
+    
+    uintptr_t *pnk_mem = (uintptr_t *) cml_heap;
+    
+    // Store driver ID
+    pnk_mem[CONFIG_DRIVER_ID] = config.driver.id;
+    
+    // Store driver queue info
+    pnk_mem[DRV_QUEUE_BASE] = (uintptr_t)config.driver.free_queue.vaddr;
+    pnk_mem[DRV_QUEUE_BASE + 1] = (uintptr_t)config.driver.active_queue.vaddr;
+    pnk_mem[DRV_QUEUE_BASE + 2] = config.driver.num_buffers;
+    
+    // Store client queue info and data IO addresses
+    for (int i = 0; i < config.num_clients; i++) {
+        pnk_mem[CLI_QUEUE_BASE + i * 4] = (uintptr_t)config.clients[i].conn.free_queue.vaddr;
+        pnk_mem[CLI_QUEUE_BASE + i * 4 + 1] = (uintptr_t)config.clients[i].conn.active_queue.vaddr;
+        pnk_mem[CLI_QUEUE_BASE + i * 4 + 2] = config.clients[i].conn.num_buffers;
+        pnk_mem[CLI_QUEUE_BASE + i * 4 + 3] = (uintptr_t)config.clients[i].data.region.vaddr;
+        
+        pnk_mem[CLI_DATA_IO_BASE + i] = config.clients[i].data.io_addr;
+        pnk_mem[CLI_CONN_ID_BASE + i] = config.clients[i].conn.id;
+    }
+    
+    pnk_mem[NUM_CLIENTS] = config.num_clients;
+    
+    // Initialize notify flags
+    for (int i = 0; i < SDDF_NET_MAX_CLIENTS; i++) {
+        pnk_mem[NOTIFY_CLIENTS_BASE + i] = 0;
+    }
+    
+    net_queue_init(&state.tx_queue_drv, config.driver.free_queue.vaddr, config.driver.active_queue.vaddr,
+                   config.driver.num_buffers);
+    
+    for (int i = 0; i < config.num_clients; i++) {
+        net_queue_init(&state.tx_queue_clients[i], config.clients[i].conn.free_queue.vaddr,
+                       config.clients[i].conn.active_queue.vaddr, config.clients[i].conn.num_buffers);
+    }
+    
+    cml_main();
+#else
 
     /* Set up driver queues */
     net_queue_init(&state.tx_queue_drv, config.driver.free_queue.vaddr, config.driver.active_queue.vaddr,
@@ -132,4 +219,5 @@ void init(void)
     }
 
     tx_provide();
+#endif
 }
