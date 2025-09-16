@@ -4,6 +4,7 @@
 #include <sddf/util/util.h>
 #include <sddf/util/cache.h>
 #include <sddf/util/printf.h>
+#include <sddf/util/string.h>
 
 void ffiTHREAD_MEMORY_RELEASE(unsigned char *c, long clen, unsigned char *a, long alen) {
     THREAD_MEMORY_RELEASE();
@@ -26,6 +27,14 @@ void ffimicrokit_notify(unsigned char *c, long clen, unsigned char *a, long alen
 
 void ffimicrokit_deferred_irq_ack(unsigned char *c, long clen, unsigned char *a, long alen) {
     microkit_deferred_irq_ack(clen);
+}
+
+void ffimicrokit_irq_ack(unsigned char *c, long clen, unsigned char *a, long alen) {
+    sddf_irq_ack(clen);
+}
+
+void ffisddf_irq_ack(unsigned char *c, long clen, unsigned char *a, long alen) {
+    sddf_irq_ack(clen);
 }
 
 void ffisddf_notify(unsigned char *c, long clen, unsigned char *a, long alen) {
@@ -60,4 +69,19 @@ void ffild16(unsigned char *c, long clen, unsigned char *a, long alen) {
 void ffist16(unsigned char *c, long clen, unsigned char *a, long alen) {
     uint16_t x = (uint16_t) clen;
     ((uint16_t *) c)[0] = x;
+}
+
+void ffimemcpy(unsigned char *c, long clen, unsigned char *a, long alen) {
+    /* c = dest, clen = src, a = size */
+    sddf_memcpy((void *)c, (void *)clen, (size_t)a);
+}
+
+void ffidebug_print(unsigned char *c, long clen, unsigned char *a, long alen) {
+    /* clen = debug value to print, alen = context/location id */
+    sddf_dprintf("[DEBUG] Location %ld: Value = %ld (0x%lx)\n", alen, clen, clen);
+}
+
+void ffiseL4_SetMR(unsigned char *c, long clen, unsigned char *a, long alen) {
+    /* clen = register index, alen = value */
+    seL4_SetMR(clen, alen);
 }
