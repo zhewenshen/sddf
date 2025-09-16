@@ -47,6 +47,13 @@ static char cml_memory[1024*20];
 extern void *cml_heap, *cml_stack, *cml_stackend;
 extern void cml_main(void);
 
+// FFI function for seL4_GetMR - stores result in scratchpad slot 3
+void ffiseL4_GetMR_timer(unsigned char *c, long clen, unsigned char *a, long alen) {
+    uintptr_t *pnk_mem = (uintptr_t *) cml_heap;
+    seL4_Word value = sddf_get_mr(clen);
+    pnk_mem[3] = value; // Store in SCRATCHPAD slot
+}
+
 void init_pancake_mem() {
     unsigned long cml_heap_sz = 1024*10;
     unsigned long cml_stack_sz = 1024*10;
@@ -281,30 +288,8 @@ void notified(sddf_channel ch)
 #endif
 
 #ifdef PANCAKE_TIMER
-seL4_MessageInfo_t protected(sddf_channel ch, seL4_MessageInfo_t msginfo)
-{
-    switch (seL4_MessageInfo_get_label(msginfo)) {
-    case SDDF_TIMER_GET_TIME: {
-        uint64_t time_ns = get_ticks_in_ns();
-        sddf_set_mr(0, time_ns);
-        return seL4_MessageInfo_new(0, 0, 0, 1);
-    }
-    case SDDF_TIMER_SET_TIMEOUT: {
-        uint64_t curr_time = get_ticks_in_ns();
-        uint64_t offset_us = sddf_get_mr(0);
-        uintptr_t *pnk_mem = (uintptr_t *) cml_heap;
-        pnk_mem[TIMEOUT_BASE + ch] = curr_time + offset_us;
-        process_timeouts(curr_time);
-        break;
-    }
-    default:
-        sddf_dprintf("TIMER DRIVER|LOG: Unknown request %lu to timer from channel %u\n",
-                     seL4_MessageInfo_get_label(msginfo), ch);
-        break;
-    }
-
-    return seL4_MessageInfo_new(0, 0, 0, 0);
-}
+// Pancake version handles all protected calls
+extern seL4_MessageInfo_t protected(sddf_channel ch, seL4_MessageInfo_t msginfo);
 #else
 seL4_MessageInfo_t protected(sddf_channel ch, seL4_MessageInfo_t msginfo)
 {

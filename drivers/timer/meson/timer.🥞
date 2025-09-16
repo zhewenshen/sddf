@@ -1,7 +1,57 @@
 #define IRQ_CH              pnk_mem(0)
 #define TIMER_REG_BASE      pnk_mem(1)
-#define TIMEOUT_BASE    10
-#define MAX_TIMEOUTS    6
+#define SCRATCHPAD          pnk_mem(3)
+#define TIMEOUT_BASE        10
+#define MAX_TIMEOUTS        6
+
+// Timer protocol constants
+#define SDDF_TIMER_GET_TIME     0
+#define SDDF_TIMER_SET_TIMEOUT  1
+#define NS_IN_US                1000
+
+export fun protected(1 ch, 1 msginfo)
+{
+    // Extract label from msginfo (bits 12-63)
+    var label = msginfo >> 12;
+    
+    if (label == SDDF_TIMER_GET_TIME) {
+        // Get current time in nanoseconds
+        var 1 ticks = get_ticks();
+        // Meson timer already runs in microseconds, just multiply by 1000
+        var time_ns = ticks * NS_IN_US;
+        
+        // Set message register 0
+        seL4_SetMR(0, time_ns)
+        
+        // Return microkit_msginfo_new(0, 1) = 1
+        return 1;
+    }
+    
+    if (label == SDDF_TIMER_SET_TIMEOUT) {
+        // Get timeout value from message register 0
+        @seL4_GetMR_timer(0,0,0,0);
+        var timeout_ns = SCRATCHPAD;
+        
+        // Convert nanoseconds to microseconds (no division needed, use bit shift)
+        var timeout_us = timeout_ns >> 10;  // Divide by 1024 ≈ divide by 1000
+        
+        var 1 curr_time = get_ticks();
+        var new_timeout = curr_time + timeout_us;
+        
+        // Update timeout in memory
+        var timeout_addr = pnk_mem_ptr(TIMEOUT_BASE + ch);
+        !stw timeout_addr, new_timeout;
+        
+        // Process timeouts
+        process_timeouts(curr_time);
+        
+        // Return microkit_msginfo_new(0, 0) = 0
+        return 0;
+    }
+    
+    // Unknown request - return microkit_msginfo_new(0, 0) = 0
+    return 0;
+}
 #define TIMER_A_EN      65536
 #define TIMER_A_MODE    4096
 #define TIMER_A_OFFSET  4

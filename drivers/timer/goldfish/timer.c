@@ -142,30 +142,13 @@ void notified(microkit_channel ch)
 #endif
 
 #ifdef PANCAKE_TIMER
-seL4_MessageInfo_t protected(microkit_channel ch, microkit_msginfo msginfo)
-{
-    switch (microkit_msginfo_get_label(msginfo)) {
-    case SDDF_TIMER_GET_TIME: {
-        uint64_t time_ns = get_ticks_in_ns_pancake();
-        seL4_SetMR(0, time_ns);
-        return microkit_msginfo_new(0, 1);
-    }
-    case SDDF_TIMER_SET_TIMEOUT: {
-        uint64_t curr_time = get_ticks_in_ns_pancake();
-        uint64_t offset_us = seL4_GetMR(0);
-        uintptr_t *pnk_mem = (uintptr_t *) cml_heap;
-        pnk_mem[TIMEOUT_BASE + ch] = curr_time + offset_us;
-        process_timeouts_pancake(curr_time);
-        break;
-    }
-    default:
-        sddf_dprintf("TIMER DRIVER|LOG: Unknown request %lu to timer from channel %u\n",
-                     microkit_msginfo_get_label(msginfo), ch);
-        break;
-    }
-
-    return microkit_msginfo_new(0, 0);
+void ffiseL4_GetMR_timer(unsigned char *c, long clen, unsigned char *a, long alen) {
+    uintptr_t *pnk_mem = (uintptr_t *) cml_heap;
+    seL4_Word value = seL4_GetMR(clen);
+    pnk_mem[3] = value; // Store in SCRATCHPAD slot
 }
+
+extern seL4_MessageInfo_t protected(microkit_channel ch, microkit_msginfo msginfo);
 #else
 seL4_MessageInfo_t protected(microkit_channel ch, microkit_msginfo msginfo)
 {

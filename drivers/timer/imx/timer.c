@@ -49,6 +49,12 @@ void init_pancake_mem() {
     cml_stack = cml_heap + cml_heap_sz;
     cml_stackend = cml_stack + cml_stack_sz;
 }
+
+void ffiseL4_GetMR_timer(unsigned char *c, long clen, unsigned char *a, long alen) {
+    uintptr_t *pnk_mem = (uintptr_t *) cml_heap;
+    seL4_Word value = seL4_GetMR(clen);
+    pnk_mem[3] = value; // store in SCRATCHPAD slot
+}
 #endif
 
 #define GPT_STATUS_REGISTER_CLEAR 0x3F
@@ -117,35 +123,6 @@ static void process_timeouts(uint64_t curr_time)
         gpt[IR] |= 1;
     }
 }
-#else
-// Pancake versions maintain state in memory slots
-static void process_timeouts(uint64_t curr_time)
-{
-    uintptr_t *pnk_mem = (uintptr_t *) cml_heap;
-    
-    for (int i = 0; i < MAX_TIMEOUTS; i++) {
-        if (timeouts[i] <= curr_time) {
-            microkit_notify(i);
-            timeouts[i] = UINT64_MAX;
-            // update Pancake memory
-            pnk_mem[10 + i] = UINT64_MAX;
-        }
-    }
-
-    uint64_t next_timeout = UINT64_MAX;
-    for (int i = 0; i < MAX_TIMEOUTS; i++) {
-        if (timeouts[i] < next_timeout) {
-            next_timeout = timeouts[i];
-        }
-    }
-
-    if (next_timeout != UINT64_MAX && overflow_count == (next_timeout >> 32)) {
-        gpt[OCR1] = (uint32_t)next_timeout;
-        gpt[IR] |= 1;
-        // update overflow count in Pancake memory
-        pnk_mem[2] = overflow_count;
-    }
-}
 #endif
 
 #ifndef PANCAKE_TIMER
@@ -177,55 +154,23 @@ void notified(microkit_channel ch)
 extern void notified(microkit_channel ch);
 #endif
 
+#ifdef PANCAKE_TIMER
+// Pancake version handles all protected calls
+extern seL4_MessageInfo_t protected(microkit_channel ch, microkit_msginfo msginfo);
+#else
 seL4_MessageInfo_t protected(microkit_channel ch, microkit_msginfo msginfo)
 {
     switch (microkit_msginfo_get_label(msginfo)) {
     case SDDF_TIMER_GET_TIME: {
-#ifndef PANCAKE_TIMER
         uint64_t time_ns = (get_ticks() / (uint64_t)GPT_FREQ) * NS_IN_US;
-#else
-        // In Pancake mode, we need to call Pancake get_ticks through memory or use C version
-        uint64_t overflow = overflow_count;
-        uint32_t sr1 = gpt[SR];
-        uint32_t cnt = gpt[CNT];
-        uint32_t sr2 = gpt[SR];
-        if ((sr2 & (1 << 5)) && (!(sr1 & (1 << 5)))) {
-            cnt = gpt[CNT];
-            overflow++;
-        }
-        uint64_t ticks = (overflow << 32) | cnt;
-        uint64_t time_ns = (ticks / (uint64_t)GPT_FREQ) * NS_IN_US;
-#endif
         seL4_SetMR(0, time_ns);
         return microkit_msginfo_new(0, 1);
     }
     case SDDF_TIMER_SET_TIMEOUT: {
-#ifndef PANCAKE_TIMER
         uint64_t curr_time = get_ticks();
         uint64_t offset_ticks = (seL4_GetMR(0) / NS_IN_US) * (uint64_t)GPT_FREQ;
         timeouts[ch] = curr_time + offset_ticks;
         process_timeouts(curr_time);
-#else
-        // In Pancake mode, update both C state and Pancake memory
-        uint64_t overflow = overflow_count;
-        uint32_t sr1 = gpt[SR];
-        uint32_t cnt = gpt[CNT];
-        uint32_t sr2 = gpt[SR];
-        if ((sr2 & (1 << 5)) && (!(sr1 & (1 << 5)))) {
-            cnt = gpt[CNT];
-            overflow++;
-        }
-        uint64_t curr_time = (overflow << 32) | cnt;
-        uint64_t offset_ticks = (seL4_GetMR(0) / NS_IN_US) * (uint64_t)GPT_FREQ;
-        timeouts[ch] = curr_time + offset_ticks;
-        
-        // Update Pancake memory
-        uintptr_t *pnk_mem = (uintptr_t *) cml_heap;
-        pnk_mem[10 + ch] = timeouts[ch];
-        pnk_mem[2] = overflow_count;
-        
-        process_timeouts(curr_time);
-#endif
         break;
     }
     default:
@@ -236,6 +181,7 @@ seL4_MessageInfo_t protected(microkit_channel ch, microkit_msginfo msginfo)
 
     return microkit_msginfo_new(0, 0);
 }
+#endif
 
 void init(void)
 {

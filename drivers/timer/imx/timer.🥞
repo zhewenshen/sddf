@@ -1,6 +1,7 @@
 #define IRQ_CH              pnk_mem(0)
 #define TIMER_REG_BASE      pnk_mem(1)
 #define OVERFLOW_COUNT      pnk_mem(2)
+#define SCRATCHPAD          pnk_mem(3)
 #define TIMEOUT_BASE        10
 #define MAX_TIMEOUTS        6
 
@@ -31,6 +32,81 @@
 
 // Timeout invalid value (UINT64_MAX)
 #define TIMEOUT_INVALID     18446744073709551615
+
+// Timer protocol constants
+#define SDDF_TIMER_GET_TIME     0
+#define SDDF_TIMER_SET_TIMEOUT  1
+#define NS_IN_US                1000
+
+export fun protected(1 ch, 1 msginfo)
+{
+    // Extract label from msginfo (bits 12-63)
+    var label = msginfo >> 12;
+    
+    if (label == SDDF_TIMER_GET_TIME) {
+        // Get current time in nanoseconds
+        var 1 ticks = get_ticks();
+        // Convert ticks to nanoseconds: ticks * NS_IN_US / GPT_FREQ
+        // Since GPT_FREQ=12 and NS_IN_US=1000, this is ticks * 1000 / 12
+        // Better approximation: ticks * 85 (1000/12 ≈ 83.33, ~2% error vs 30% before)
+        var time_ns = ticks * 85;
+        
+        // Set message register 0
+        seL4_SetMR(0, time_ns)
+        
+        // Return microkit_msginfo_new(0, 1) = 1
+        return 1;
+    }
+    
+    if (label == SDDF_TIMER_SET_TIMEOUT) {
+        // Get timeout value from message register 0
+        @seL4_GetMR_timer(0,0,0,0);
+        var timeout_ns = SCRATCHPAD;
+        
+        // Get current time
+        var overflow = OVERFLOW_COUNT;
+        var timer_base = TIMER_REG_BASE;
+        var sr_addr = timer_base + SR_OFFSET;
+        var cnt_addr = timer_base + CNT_OFFSET;
+        
+        var sr1 = 0;
+        !ld32 sr1, sr_addr;
+        var cnt = 0;
+        !ld32 cnt, cnt_addr;
+        var sr2 = 0;
+        !ld32 sr2, sr_addr;
+        
+        // Check for rollover during read
+        if ((sr2 & SR_ROLLOVER_BIT) && !(sr1 & SR_ROLLOVER_BIT)) {
+            !ld32 cnt, cnt_addr;
+            overflow = overflow + 1;
+        }
+        
+        var curr_time = (overflow << 32) | cnt;
+        // Convert timeout_ns to ticks: timeout_ns * GPT_FREQ / NS_IN_US
+        // Since GPT_FREQ=12 and NS_IN_US=1000, this is timeout_ns * 12 / 1000
+        // Better approximation: timeout_ns * 3 / 256 (12/1000 ≈ 3/256, only 2.3% error)
+        var offset_ticks = (timeout_ns * 3) >> 8;
+        var new_timeout = curr_time + offset_ticks;
+        
+        // Update timeout in memory
+        var timeout_addr = pnk_mem_ptr(TIMEOUT_BASE + ch);
+        !stw timeout_addr, new_timeout;
+        
+        // Update overflow count in memory
+        var overflow_addr = pnk_mem_ptr(2);
+        !stw overflow_addr, overflow;
+        
+        // Process timeouts
+        process_timeouts(curr_time);
+        
+        // Return microkit_msginfo_new(0, 0) = 0
+        return 0;
+    }
+    
+    // Unknown request - return microkit_msginfo_new(0, 0) = 0
+    return 0;
+}
 
 fun get_ticks()
 {
@@ -97,10 +173,10 @@ fun process_timeouts(1 curr_time)
     
     // Set next timeout if exists and overflow matches
     if (next_timeout != TIMEOUT_INVALID) {
-        var curr_overflow = curr_time >> 32;
+        var overflow = OVERFLOW_COUNT;
         var next_overflow = next_timeout >> 32;
         
-        if (curr_overflow == next_overflow) {
+        if (overflow == next_overflow) {
             var timer_base = TIMER_REG_BASE;
             var ocr1_addr = timer_base + OCR1_OFFSET;
             var ir_addr = timer_base + IR_OFFSET;

@@ -20,7 +20,7 @@ else
     CLANG_TARGET_FLAGS :=
 endif
 
-ifeq ($(PANCAKE_DRIVER),1)
+ifeq ($(PANCAKE_TIMER),1)
 # Pancake source files
 TIMER_PNK = ${UTIL}/util.🥞 \
 	${TIMER_DIR}/timer.🥞
@@ -29,7 +29,7 @@ timer_driver.elf: timer/timer_pnk.o timer/timer.o pancake_ffi.o libsddf_util_deb
 	$(LD) $(LDFLAGS) $^ $(LIBS) -o $@
 
 timer/timer.o: ${TIMER_DIR}/timer.c ${CHECK_FLAGS_BOARD_MD5} |timer
-	${CC} ${CFLAGS} -DPANCAKE_DRIVER -o $@ -c $<
+	${CC} ${CFLAGS} -DPANCAKE_TIMER -o $@ -c $<
 
 timer/timer_pnk.o: timer/timer_pnk.S
 	$(CC) $(CLANG_TARGET_FLAGS) -c -mcpu=$(CPU) $< -o $@
