@@ -46,40 +46,51 @@ ${SERIAL_COMPONENT_OBJ}: ${CHECK_SERIAL_FLAGS_MD5}
 
 SERIAL_QUEUE_INCLUDE := ${SDDF}/include/sddf/serial
 
-ifeq ($(PANCAKE_SERIAL),1)
+ifeq ($(PANCAKE_SERIAL_VIRT_RX),1)
 SERIAL_VIRT_RX_PNK = ${UTIL}/util.🥞 \
 	${SERIAL_QUEUE_INCLUDE}/queue.🥞 \
 	${SDDF}/serial/components/virt_rx.🥞
 
-SERIAL_VIRT_TX_PNK = ${UTIL}/util.🥞 \
-	${SERIAL_QUEUE_INCLUDE}/queue.🥞 \
-	${SDDF}/serial/components/virt_tx.🥞
-
 serial_virt_rx.elf: serial/components/virt_rx_pnk.o serial/components/serial_virt_rx.o pancake_ffi.o libsddf_util_debug.a
 	$(LD) $(LDFLAGS) $^ $(LIBS) -o $@
 
-serial_virt_tx.elf: serial/components/virt_tx_pnk.o serial/components/serial_virt_tx.o pancake_ffi.o libsddf_util_debug.a
-	$(LD) $(LDFLAGS) $^ $(LIBS) -o $@
-
-serial/components/virt_%_pnk.o: serial/components/virt_%_pnk.S
+serial/components/virt_rx_pnk.o: serial/components/virt_rx_pnk.S
 	$(CC) $(ASM_FLAGS) -c $< -o $@
 
 serial/components/virt_rx_pnk.S: $(SERIAL_VIRT_RX_PNK) | serial/components
 	cat $(SERIAL_VIRT_RX_PNK) | cpp -P | $(CAKE_COMPILER) --target=$(PANCAKE_TARGET) --pancake --main_return=true > $@
 
-serial/components/virt_tx_pnk.S: $(SERIAL_VIRT_TX_PNK) | serial/components
-	cat $(SERIAL_VIRT_TX_PNK) | cpp -P | $(CAKE_COMPILER) --target=$(PANCAKE_TARGET) --pancake --main_return=true > $@
-
-serial/components/serial_virt_%.o: ${SDDF}/serial/components/virt_%.c
+serial/components/serial_virt_rx.o: ${SDDF}/serial/components/virt_rx.c
 	${CC} ${CFLAGS} ${CFLAGS_serial} -DPANCAKE_SERIAL -o $@ -c $<
 else
 serial_virt_rx.elf: serial/components/serial_virt_rx.o libsddf_util_debug.a
 	$(LD) $(LDFLAGS) $^ $(LIBS) -o $@
 
+serial/components/serial_virt_rx.o: ${SDDF}/serial/components/virt_rx.c
+	${CC} ${CFLAGS} ${CFLAGS_serial} -o $@ -c $<
+endif
+
+ifeq ($(PANCAKE_SERIAL_VIRT_TX),1)
+SERIAL_VIRT_TX_PNK = ${UTIL}/util.🥞 \
+	${SERIAL_QUEUE_INCLUDE}/queue.🥞 \
+	${SDDF}/serial/components/virt_tx.🥞
+
+serial_virt_tx.elf: serial/components/virt_tx_pnk.o serial/components/serial_virt_tx.o pancake_ffi.o libsddf_util_debug.a
+	$(LD) $(LDFLAGS) $^ $(LIBS) -o $@
+
+serial/components/virt_tx_pnk.o: serial/components/virt_tx_pnk.S
+	$(CC) $(ASM_FLAGS) -c $< -o $@
+
+serial/components/virt_tx_pnk.S: $(SERIAL_VIRT_TX_PNK) | serial/components
+	cat $(SERIAL_VIRT_TX_PNK) | cpp -P | $(CAKE_COMPILER) --target=$(PANCAKE_TARGET) --pancake --main_return=true > $@
+
+serial/components/serial_virt_tx.o: ${SDDF}/serial/components/virt_tx.c
+	${CC} ${CFLAGS} ${CFLAGS_serial} -DPANCAKE_SERIAL -o $@ -c $<
+else
 serial_virt_tx.elf: serial/components/serial_virt_tx.o libsddf_util_debug.a
 	$(LD) $(LDFLAGS) $^ $(LIBS) -o $@
 
-serial/components/serial_virt_%.o: ${SDDF}/serial/components/virt_%.c
+serial/components/serial_virt_tx.o: ${SDDF}/serial/components/virt_tx.c
 	${CC} ${CFLAGS} ${CFLAGS_serial} -o $@ -c $<
 endif
 
