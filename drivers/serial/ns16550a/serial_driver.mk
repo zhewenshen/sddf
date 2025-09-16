@@ -8,7 +8,7 @@
 
 SERIAL_DRIVER_DIR := $(dir $(lastword $(MAKEFILE_LIST)))
 
-ifeq ($(PANCAKE_SERIAL),1)
+ifeq ($(PANCAKE_SERIAL_DRIVER),1)
 # Architecture-specific settings
 ARCH := ${shell grep 'CONFIG_SEL4_ARCH  ' $(BOARD_DIR)/include/kernel/gen_config.h | cut -d' ' -f4}
 # Detect compiler type

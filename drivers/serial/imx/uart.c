@@ -16,7 +16,7 @@ __attribute__((__section__(".device_resources"))) device_resources_t device_reso
 
 __attribute__((__section__(".serial_driver_config"))) serial_driver_config_t config;
 
-#ifdef PANCAKE_SERIAL
+#ifdef PANCAKE_SERIAL_DRIVER
 serial_queue_handle_t *rx_queue_handle;
 serial_queue_handle_t *tx_queue_handle;
 
@@ -76,7 +76,7 @@ static void set_baud(long bps)
     uart_regs->bmr = bmr;
 }
 
-#ifndef PANCAKE_SERIAL
+#ifndef PANCAKE_SERIAL_DRIVER
 static void tx_provide(void)
 {
     bool transferred = false;
@@ -202,7 +202,7 @@ void init(void)
     assert(device_resources.num_irqs == 1);
     assert(device_resources.num_regions == 1);
 
-#ifdef PANCAKE_SERIAL
+#ifdef PANCAKE_SERIAL_DRIVER
     init_pancake_mem();
 
     uintptr_t *pnk_mem = (uintptr_t *) cml_heap;
@@ -236,7 +236,7 @@ void init(void)
 #endif
 }
 
-#ifdef PANCAKE_SERIAL
+#ifdef PANCAKE_SERIAL_DRIVER
 extern void notified(microkit_channel ch);
 #else
 void notified(microkit_channel ch)

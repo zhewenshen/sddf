@@ -11,7 +11,7 @@
 
 serial_DRIVER_DIR := $(dir $(lastword $(MAKEFILE_LIST)))
 SERIAL_QUEUE_INCLUDE := ${SDDF}/include/sddf/serial
-PANCAKE_SERIAL := 1
+PANCAKE_SERIAL_DRIVER := 1
 
 DRIVER_PNK = ${UTIL}/util.🥞 \
 	${SERIAL_QUEUE_INCLUDE}/queue.🥞 \

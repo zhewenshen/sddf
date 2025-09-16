@@ -8,7 +8,7 @@
 
 SERIAL_DRIVER_DIR := $(dir $(lastword $(MAKEFILE_LIST)))
 
-ifeq ($(PANCAKE_SERIAL),1)
+ifeq ($(PANCAKE_SERIAL_DRIVER),1)
 
 CC_IS_CLANG := $(shell $(CC) --version 2>/dev/null | grep -q clang && echo 1 || echo 0)
 

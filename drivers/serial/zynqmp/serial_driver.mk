@@ -18,7 +18,7 @@ else
     TARGET_FLAG :=
 endif
 
-ifeq ($(PANCAKE_SERIAL),1)
+ifeq ($(PANCAKE_SERIAL_DRIVER),1)
 serial_driver.elf: serial_pnk.o serial/zynqmp/serial_driver.o pancake_ffi.o
 	$(LD) $(LDFLAGS) $^ $(LIBS) -o $@
 
