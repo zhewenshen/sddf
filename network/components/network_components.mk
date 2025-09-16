@@ -49,40 +49,75 @@ ${NETWORK_COMPONENT_OBJ}: CFLAGS+=${CFLAGS_network}
 
 NETWORK_QUEUE_INCLUDE := ${SDDF}/include/sddf/network
 
-ifeq ($(PANCAKE_NETWORK_VIRT),1)
+ifeq ($(PANCAKE_NETWORK_VIRT_RX),1)
 NETWORK_VIRT_RX_PNK = ${UTIL}/util.🥞 \
 	${NETWORK_QUEUE_INCLUDE}/queue.🥞 \
 	${SDDF}/network/components/virt_rx.🥞
 
-NETWORK_VIRT_TX_PNK = ${UTIL}/util.🥞 \
-	${NETWORK_QUEUE_INCLUDE}/queue.🥞 \
-	${SDDF}/network/components/virt_tx.🥞
-
 network_virt_rx.elf: network/components/virt_rx_pnk.o network/components/network_virt_rx.o pancake_ffi.o libsddf_util_debug.a
 	$(LD) $(LDFLAGS) $^ $(LIBS) -o $@
 
-network_virt_tx.elf: network/components/virt_tx_pnk.o network/components/network_virt_tx.o pancake_ffi.o libsddf_util_debug.a
-	$(LD) $(LDFLAGS) $^ $(LIBS) -o $@
-
-network/components/virt_%_pnk.o: network/components/virt_%_pnk.S
+network/components/virt_rx_pnk.o: network/components/virt_rx_pnk.S
 	$(CC) $(ASM_FLAGS) -c $< -o $@
 
 network/components/virt_rx_pnk.S: $(NETWORK_VIRT_RX_PNK) | network/components
 	cat $(NETWORK_VIRT_RX_PNK) | cpp -P | $(CAKE_COMPILER) --target=$(PANCAKE_TARGET) --pancake --main_return=true > $@
 
-network/components/virt_tx_pnk.S: $(NETWORK_VIRT_TX_PNK) | network/components
-	cat $(NETWORK_VIRT_TX_PNK) | cpp -P | $(CAKE_COMPILER) --target=$(PANCAKE_TARGET) --pancake --main_return=true > $@
-
-network/components/network_virt_%.o: ${SDDF}/network/components/virt_%.c
+network/components/network_virt_rx.o: ${SDDF}/network/components/virt_rx.c
 	${CC} ${CFLAGS} -DPANCAKE_NETWORK_VIRT -o $@ -c $<
-
 else
-network/components/network_virt_%.o: ${SDDF}/network/components/virt_%.c
+network_virt_rx.elf: network/components/network_virt_rx.o libsddf_util_debug.a
+	$(LD) $(LDFLAGS) $^ $(LIBS) -o $@
+
+network/components/network_virt_rx.o: ${SDDF}/network/components/virt_rx.c
 	${CC} ${CFLAGS} -c -o $@ $<
 endif
 
+ifeq ($(PANCAKE_NETWORK_VIRT_TX),1)
+NETWORK_VIRT_TX_PNK = ${UTIL}/util.🥞 \
+	${NETWORK_QUEUE_INCLUDE}/queue.🥞 \
+	${SDDF}/network/components/virt_tx.🥞
+
+network_virt_tx.elf: network/components/virt_tx_pnk.o network/components/network_virt_tx.o pancake_ffi.o libsddf_util_debug.a
+	$(LD) $(LDFLAGS) $^ $(LIBS) -o $@
+
+network/components/virt_tx_pnk.o: network/components/virt_tx_pnk.S
+	$(CC) $(ASM_FLAGS) -c $< -o $@
+
+network/components/virt_tx_pnk.S: $(NETWORK_VIRT_TX_PNK) | network/components
+	cat $(NETWORK_VIRT_TX_PNK) | cpp -P | $(CAKE_COMPILER) --target=$(PANCAKE_TARGET) --pancake --main_return=true > $@
+
+network/components/network_virt_tx.o: ${SDDF}/network/components/virt_tx.c
+	${CC} ${CFLAGS} -DPANCAKE_NETWORK_VIRT -o $@ -c $<
+else
+network_virt_tx.elf: network/components/network_virt_tx.o libsddf_util_debug.a
+	$(LD) $(LDFLAGS) $^ $(LIBS) -o $@
+
+network/components/network_virt_tx.o: ${SDDF}/network/components/virt_tx.c
+	${CC} ${CFLAGS} -c -o $@ $<
+endif
+
+ifeq ($(PANCAKE_NETWORK_COPY),1)
+NETWORK_COPY_PNK = ${UTIL}/util.🥞 \
+	${NETWORK_QUEUE_INCLUDE}/queue.🥞 \
+	${SDDF}/network/components/copy.🥞
+
+network_copy.elf: network/components/copy_pnk.o network/components/network_copy.o pancake_ffi.o libsddf_util_debug.a
+	$(LD) $(LDFLAGS) $^ $(LIBS) -o $@
+
+network/components/copy_pnk.o: network/components/copy_pnk.S
+	$(CC) $(ASM_FLAGS) -c $< -o $@
+
+network/components/copy_pnk.S: $(NETWORK_COPY_PNK) | network/components
+	cat $(NETWORK_COPY_PNK) | cpp -P | $(CAKE_COMPILER) --target=$(PANCAKE_TARGET) --pancake --main_return=true > $@
+
+network/components/network_copy.o: ${SDDF}/network/components/copy.c
+	${CC} ${CFLAGS} -DPANCAKE_NETWORK_COPY -c -o $@ $<
+
+else
 network/components/network_copy.o: ${SDDF}/network/components/copy.c
 	${CC} ${CFLAGS} -c -o $@ $<
+endif
 
 network/components/network_arp.o: ${SDDF}/network/components/arp.c
 	${CC} ${CFLAGS} -c -o $@ $<
@@ -93,6 +128,7 @@ network/components/network_arp.o: ${SDDF}/network/components/arp.c
 clean::
 	${RM} -f network_virt_[rt]x.[od] network_copy.[od] network_arp.[od] .network_cflags-*
 	rm -f network/components/virt_[rt]x_pnk.[So]
+	rm -f network/components/copy_pnk.[So]
 
 clobber::
 	${RM} -f ${NETWORK_IMAGES}

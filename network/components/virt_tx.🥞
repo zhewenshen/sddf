@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: BSD-2-Clause
  */
 
-#define CONFIG_DRIVER_ID          pnk_mem(0)
+#define CONFIG_DRIVER_ID         pnk_mem(0)
 #define DRV_QUEUE_BASE           10
 #define CLI_QUEUE_BASE           30
 #define CLI_DATA_IO_BASE         100
@@ -18,7 +18,7 @@ fun extract_offset(1 phys_addr) {
     while (client < num_clients) {
         var cli_data_io = pnk_mem(CLI_DATA_IO_BASE + client);
         var cli_capacity = pnk_mem(CLI_QUEUE_BASE + client * 4 + 2);
-        var cli_max_addr = cli_data_io + cli_capacity * 512;
+        var cli_max_addr = cli_data_io + cli_capacity * 2048;
 
         if (phys_addr >= cli_data_io && phys_addr < cli_max_addr) {
             var offset = phys_addr - cli_data_io;
@@ -43,16 +43,17 @@ fun tx_provide() {
             var cli_active_queue = pnk_mem(cli_queue_base + 1);
             var cli_capacity = pnk_mem(cli_queue_base + 2);
             
-            var 1 cli_empty = net_queue_empty(cli_active_queue);
+            var 1 cli_empty = net_queue_empty(cli_active_queue, cli_capacity);
             
             while (1) {
+                
                 if (cli_empty) { break; }
                 var {1,1} buffer = net_dequeue(cli_active_queue, cli_capacity);
                 var io_offset = buffer.0;
                 var len = buffer.1;
                 
-                var aligned = (io_offset & 511) == 0;
-                var in_bounds = io_offset < (cli_capacity * 512);
+                var aligned = (io_offset & 2047) == 0;
+                var in_bounds = io_offset < (cli_capacity * 2048);
                 
                 var is_invalid = 0;
                 if (aligned == 0) { is_invalid = 1; }
@@ -76,13 +77,13 @@ fun tx_provide() {
                     enqueued = 1;
                 }
                 
-                cli_empty = net_queue_empty(cli_active_queue);
+                cli_empty = net_queue_empty(cli_active_queue, cli_capacity);
             }
             
-            net_request_signal(cli_active_queue);
+            net_request_signal(cli_active_queue, cli_capacity);
             reprocess = 0;
             
-            cli_empty = net_queue_empty(cli_active_queue);
+            cli_empty = net_queue_empty(cli_active_queue, cli_capacity);
             if (cli_empty == 0) {
                 net_cancel_signal(cli_active_queue);
                 reprocess = 1;
@@ -94,7 +95,8 @@ fun tx_provide() {
     
     if (enqueued) {
         var drv_active_queue = pnk_mem(DRV_QUEUE_BASE + 1);
-        var 1 signal_required = net_require_signal(drv_active_queue);
+        var drv_capacity = pnk_mem(DRV_QUEUE_BASE + 2);
+        var 1 signal_required = net_require_signal(drv_active_queue, drv_capacity);
         
         if (signal_required) {
             net_cancel_signal(drv_active_queue);
@@ -121,9 +123,10 @@ fun tx_return() {
         var drv_free_queue = pnk_mem(DRV_QUEUE_BASE);
         var drv_capacity = pnk_mem(DRV_QUEUE_BASE + 2);
         
-        var 1 drv_empty = net_queue_empty(drv_free_queue);
+        var 1 drv_empty = net_queue_empty(drv_free_queue, drv_capacity);
         
         while (true) {
+            
             if (drv_empty) { break; }
             var {1,1} drv_buffer = net_dequeue(drv_free_queue, drv_capacity);
             var phys_addr = drv_buffer.0;
@@ -133,24 +136,27 @@ fun tx_return() {
             var client = extract_result.0;
             var offset = extract_result.1;
             
-            if (client >= 0) {
-                var cli_queue_base = CLI_QUEUE_BASE + client * 4;
-                var cli_free_queue = pnk_mem(cli_queue_base);
-                var cli_capacity = pnk_mem(cli_queue_base + 2);
-                
-                net_enqueue(cli_free_queue, offset, len, cli_capacity);
-                
-                var notify_addr = pnk_mem_ptr(NOTIFY_CLIENTS_BASE + client);
-                !st32 notify_addr, 1;
+            if (client < 0) {
+                // Skip invalid buffer and break from processing
+                break;
             }
             
-            drv_empty = net_queue_empty(drv_free_queue);
+            var cli_queue_base = CLI_QUEUE_BASE + client * 4;
+            var cli_free_queue = pnk_mem(cli_queue_base);
+            var cli_capacity = pnk_mem(cli_queue_base + 2);
+            
+            net_enqueue(cli_free_queue, offset, len, cli_capacity);
+            
+            var notify_addr = pnk_mem_ptr(NOTIFY_CLIENTS_BASE + client);
+            !st32 notify_addr, 1;
+            
+            drv_empty = net_queue_empty(drv_free_queue, drv_capacity);
         }
         
-        net_request_signal(drv_free_queue);
+        net_request_signal(drv_free_queue, drv_capacity);
         reprocess = 0;
         
-        drv_empty = net_queue_empty(drv_free_queue);
+        drv_empty = net_queue_empty(drv_free_queue, drv_capacity);
         if (drv_empty == 0) {
             net_cancel_signal(drv_free_queue);
             reprocess = 1;
@@ -164,7 +170,8 @@ fun tx_return() {
         if (notify_flag) {
             var cli_queue_base = CLI_QUEUE_BASE + client * 4;
             var cli_free_queue = pnk_mem(cli_queue_base);
-            var 1 signal_required = net_require_signal(cli_free_queue);
+            var cli_capacity = pnk_mem(cli_queue_base + 2);
+            var 1 signal_required = net_require_signal(cli_free_queue, cli_capacity);
             
             if (signal_required) {
                 net_cancel_signal(cli_free_queue);
@@ -182,5 +189,9 @@ fun tx_return() {
 export fun notified(1 ch) {
     tx_return();
     tx_provide();
+
+    if (ch > 63) {
+        debug_print(0,ch,0,0);
+    }
     return 0;
 }
