@@ -16,6 +16,7 @@
 
 #include <stdbool.h>
 #include <stdint.h>
+#include <string.h>
 #include <os/sddf.h>
 #include <sddf/network/queue.h>
 #include <sddf/network/config.h>
@@ -80,7 +81,7 @@ uint32_t tx_descriptors[TX_COUNT];
 int rx_last_desc_idx = 0;
 int tx_last_desc_idx = 0;
 
-#ifdef PANCAKE_NETWORK
+#ifdef PANCAKE_NETWORK_DRIVER
 static char cml_memory[1024*20];
 extern void *cml_heap;
 extern void *cml_stack;
@@ -112,7 +113,7 @@ void init_pancake_mem() {
 }
 #endif
 
-#ifndef PANCAKE_NETWORK
+#ifndef PANCAKE_NETWORK_DRIVER
 static inline bool virtio_avail_full_rx(struct virtq *virtq)
 {
     return rx_last_desc_idx >= rx_virtq.num;
@@ -180,6 +181,7 @@ static void rx_return(void)
     uint16_t packets_transferred = 0;
     uint16_t i = rx_last_seen_used;
     uint16_t curr_idx = rx_virtq.used->idx;
+    sddf_dprintf("ETH|DEBUG: rx_return() called, curr_idx=%u, last_seen=%u\n", curr_idx, i);
     while (i != curr_idx) {
         LOG_DRIVER("i: 0x%lx\n", i);
         struct virtq_used_elem hdr_used = rx_virtq.used->ring[i % rx_virtq.num];
@@ -392,10 +394,16 @@ static void eth_setup(void)
     size_t tx_used_off = ALIGN(tx_avail_off + (6 + 2 * TX_COUNT), 4);
     size_t virtq_size = tx_used_off + (6 + 8 * TX_COUNT);
 
+    sddf_dprintf("ETH|DEBUG: Setting up rx_virtq: num=%d, desc_off=%zu, avail_off=%zu, used_off=%zu\n", 
+                 RX_COUNT, rx_desc_off, rx_avail_off, rx_used_off);
+    
     rx_virtq.num = RX_COUNT;
     rx_virtq.desc = (struct virtq_desc *)(hw_ring_buffer_vaddr + rx_desc_off);
     rx_virtq.avail = (struct virtq_avail *)(hw_ring_buffer_vaddr + rx_avail_off);
     rx_virtq.used = (struct virtq_used *)(hw_ring_buffer_vaddr + rx_used_off);
+    
+    sddf_dprintf("ETH|DEBUG: rx_virtq setup complete: desc=%p, avail=%p, used=%p\n",
+                 rx_virtq.desc, rx_virtq.avail, rx_virtq.used);
 
     assert((uintptr_t)rx_virtq.desc % 16 == 0);
     assert((uintptr_t)rx_virtq.avail % 2 == 0);
@@ -415,20 +423,31 @@ static void eth_setup(void)
     virtio_net_tx_headers_vaddr = hw_ring_buffer_vaddr + virtq_size;
     virtio_net_tx_headers_paddr = hw_ring_buffer_paddr + virtq_size;
 
-#ifndef PANCAKE_NETWORK
+#ifndef PANCAKE_NETWORK_DRIVER
     virtio_net_tx_headers = (virtio_net_hdr_t *) virtio_net_tx_headers_vaddr;
 #else
     uintptr_t *pnk_mem = (uintptr_t *) cml_heap;
     pnk_mem[24] = virtio_net_tx_headers_vaddr;
+    pnk_mem[20] = virtio_net_tx_headers_paddr;
 #endif
 
     size_t tx_headers_size = ((TX_COUNT / 2) * sizeof(virtio_net_hdr_t));
     virtio_net_rx_headers_paddr = virtio_net_tx_headers_paddr + tx_headers_size;
     size_t rx_headers_size = ((RX_COUNT / 2) * sizeof(virtio_net_hdr_t));
 
+#ifdef PANCAKE_NETWORK_DRIVER
+    pnk_mem[19] = virtio_net_rx_headers_paddr;
+    
+    /* Debug final pancake memory layout */
+    sddf_dprintf("ETH|DEBUG: Final pancake memory layout after eth_setup:\n");
+    for (int i = 19; i <= 24; i++) {
+        sddf_dprintf("ETH|DEBUG: pnk_mem[%d] = 0x%lx\n", i, pnk_mem[i]);
+    }
+#endif
+
     assert(virtq_size + tx_headers_size + rx_headers_size <= HW_RING_SIZE);
 
-#ifndef PANCAKE_NETWORK
+#ifndef PANCAKE_NETWORK_DRIVER
     rx_provide();
     tx_provide();
 #else 
@@ -491,7 +510,7 @@ void init(void)
     net_queue_init(&tx_queue, config.virt_tx.free_queue.vaddr, config.virt_tx.active_queue.vaddr,
                    config.virt_tx.num_buffers);
 
-#ifdef PANCAKE_NETWORK
+#ifdef PANCAKE_NETWORK_DRIVER
     init_pancake_mem();
 
     /* init_pancake_data */
@@ -520,27 +539,49 @@ void init(void)
     pnk_mem[15] = (uintptr_t) &rx_last_desc_idx;
     pnk_mem[16] = (uintptr_t) &tx_last_desc_idx;
     
-    pnk_mem[17] = (uintptr_t) &rx_ialloc_desc;
-    pnk_mem[18] = (uintptr_t) &tx_ialloc_desc;
-    pnk_mem[19] = virtio_net_rx_headers_paddr;
-    pnk_mem[20] = virtio_net_tx_headers_paddr;
-    pnk_mem[21] = 0; // @zhewen: what is this slot for?
+    sddf_dprintf("ETH|DEBUG: Copying ialloc data to pancake memory...\n");
+    uintptr_t ialloc_data_base = (uintptr_t)cml_heap + 256; // Start after pnk_mem array
+    sddf_dprintf("ETH|DEBUG: ialloc_data_base: 0x%lx\n", ialloc_data_base);
+    
+    uintptr_t rx_ialloc_pancake = ialloc_data_base;
+    uintptr_t rx_descriptors_pancake = rx_ialloc_pancake + sizeof(ialloc_t);
+    uintptr_t tx_ialloc_pancake = rx_descriptors_pancake + (RX_COUNT * sizeof(uint32_t));
+    uintptr_t tx_descriptors_pancake = tx_ialloc_pancake + sizeof(ialloc_t);
+    
+    memcpy((void*)rx_ialloc_pancake, &rx_ialloc_desc, sizeof(ialloc_t));
+    memcpy((void*)rx_descriptors_pancake, rx_descriptors, RX_COUNT * sizeof(uint32_t));
+    memcpy((void*)tx_ialloc_pancake, &tx_ialloc_desc, sizeof(ialloc_t));
+    memcpy((void*)tx_descriptors_pancake, tx_descriptors, TX_COUNT * sizeof(uint32_t));
+    
+    ((ialloc_t*)rx_ialloc_pancake)->idxlist = (uint32_t*)rx_descriptors_pancake;
+    ((ialloc_t*)tx_ialloc_pancake)->idxlist = (uint32_t*)tx_descriptors_pancake;
+    
+    pnk_mem[17] = rx_ialloc_pancake;
+    pnk_mem[18] = tx_ialloc_pancake;
+    sddf_dprintf("ETH|DEBUG: Updated pnk_mem[17] (RX_IALLOC_PTR) to: 0x%lx\n", pnk_mem[17]);
+    sddf_dprintf("ETH|DEBUG: Updated pnk_mem[18] (TX_IALLOC_PTR) to: 0x%lx\n", pnk_mem[18]);
+    
+    pnk_mem[21] = 1; // Set INITIALIZED_BUFFERS to 1
     
     pnk_mem[22] = hw_ring_buffer_vaddr;
     pnk_mem[23] = hw_ring_buffer_paddr;
-    pnk_mem[24] = 0;
+
+    eth_setup();    
 
     cml_main();
-#endif
+#else
     eth_setup();
+#endif
 }
 
-#ifdef PANCAKE_NETWORK
+#ifdef PANCAKE_NETWORK_DRIVER
 extern void notified(sddf_channel ch);
 #else
 void notified(sddf_channel ch)
 {
+    sddf_dprintf("ETH|DEBUG: notified() called with ch=%u\n", ch);
     if (ch == device_resources.irqs[0].id) {
+        sddf_dprintf("ETH|DEBUG: handling device IRQ\n");
         handle_irq();
         sddf_deferred_irq_ack(ch);
     } else if (ch == config.virt_rx.id) {

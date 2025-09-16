@@ -3,61 +3,61 @@
  * SPDX-License-Identifier: BSD-2-Clause
  */
 
-#define VIRTIO_REGS_BASE        pnk_mem(0)
-#define IRQ_CH  pnk_mem(1)
-#define RX_CH   pnk_mem(2)
-#define TX_CH   pnk_mem(3)
-#define NET_RX_FREE     pnk_mem(4)
-#define NET_RX_ACTIVE   pnk_mem(5)
-#define NET_RX_CAPACITY pnk_mem(6)
-#define NET_TX_FREE     pnk_mem(7)
-#define NET_TX_ACTIVE   pnk_mem(8)
-#define NET_TX_CAPACITY pnk_mem(9)
-#define RX_VIRTQ_BASE           pnk_mem(11)
-#define TX_VIRTQ_BASE           pnk_mem(12)
-#define RX_LAST_SEEN_USED_PTR   pnk_mem(13)
-#define TX_LAST_SEEN_USED_PTR   pnk_mem(14)
-#define RX_LAST_DESC_IDX_PTR    pnk_mem(15)
-#define TX_LAST_DESC_IDX_PTR    pnk_mem(16)
-#define RX_IALLOC_PTR           pnk_mem(17)
-#define TX_IALLOC_PTR           pnk_mem(18)
-#define VIRTIO_NET_RX_HEADERS_PADDR pnk_mem(19)
-#define VIRTIO_NET_TX_HEADERS_PADDR pnk_mem(20)
-#define INITIALIZED_BUFFERS pnk_mem(21)
-#define HW_RING_BUFFER_VADDR pnk_mem(22)
-#define HW_RING_BUFFER_PADDR pnk_mem(23)
-#define VIRTIO_NET_TX_HEADERS_VADDR pnk_mem(24)
+#define VIRTIO_REGS_BASE             pnk_mem(0)
+#define IRQ_CH                       pnk_mem(1)
+#define RX_CH                        pnk_mem(2)
+#define TX_CH                        pnk_mem(3)
+#define NET_RX_FREE                  pnk_mem(4)
+#define NET_RX_ACTIVE                pnk_mem(5)
+#define NET_RX_CAPACITY              pnk_mem(6)
+#define NET_TX_FREE                  pnk_mem(7)
+#define NET_TX_ACTIVE                pnk_mem(8)
+#define NET_TX_CAPACITY              pnk_mem(9)
+#define RX_VIRTQ_BASE                pnk_mem(11)
+#define TX_VIRTQ_BASE                pnk_mem(12)
+#define RX_LAST_SEEN_USED_PTR        pnk_mem(13)
+#define TX_LAST_SEEN_USED_PTR        pnk_mem(14)
+#define RX_LAST_DESC_IDX_PTR         pnk_mem(15)
+#define TX_LAST_DESC_IDX_PTR         pnk_mem(16)
+#define RX_IALLOC_PTR                pnk_mem(17)
+#define TX_IALLOC_PTR                pnk_mem(18)
+#define VIRTIO_NET_RX_HEADERS_PADDR  pnk_mem(19)
+#define VIRTIO_NET_TX_HEADERS_PADDR  pnk_mem(20)
+#define INITIALIZED_BUFFERS          pnk_mem(21)
+#define HW_RING_BUFFER_VADDR         pnk_mem(22)
+#define HW_RING_BUFFER_PADDR         pnk_mem(23)
+#define VIRTIO_NET_TX_HEADERS_VADDR  pnk_mem(24)
 
-#define VIRTIO_NET_RX_QUEUE     0
-#define VIRTIO_NET_TX_QUEUE     1
-#define VIRTIO_MMIO_IRQ_VQUEUE  1
-#define VIRTIO_MMIO_IRQ_CONFIG  2
-#define VIRTQ_DESC_F_NEXT       1
-#define VIRTQ_DESC_F_WRITE      2
-#define NET_BUFFER_SIZE         2048
-#define VIRTIO_NET_HDR_SIZE     10
+#define VIRTIO_NET_RX_QUEUE          0
+#define VIRTIO_NET_TX_QUEUE          1
+#define VIRTIO_MMIO_IRQ_VQUEUE       1
+#define VIRTIO_MMIO_IRQ_CONFIG       2
+#define VIRTQ_DESC_F_NEXT            1
+#define VIRTQ_DESC_F_WRITE           2
+#define NET_BUFFER_SIZE              2048
+#define VIRTIO_NET_HDR_SIZE          10
 
-#define RX_COUNT                512
-#define TX_COUNT                512
-#define HW_RING_SIZE            65536
+#define RX_COUNT                     512
+#define TX_COUNT                     512
+#define HW_RING_SIZE                 65536
 
-#define VIRTIO_DEVICE_STATUS_ACKNOWLEDGE    1
-#define VIRTIO_DEVICE_STATUS_DRIVER         2
-#define VIRTIO_DEVICE_STATUS_DRIVER_OK      4
-#define VIRTIO_DEVICE_STATUS_FEATURES_OK    8
+#define VIRTIO_DEVICE_STATUS_ACKNOWLEDGE  1
+#define VIRTIO_DEVICE_STATUS_DRIVER       2
+#define VIRTIO_DEVICE_STATUS_DRIVER_OK    4
+#define VIRTIO_DEVICE_STATUS_FEATURES_OK  8
 
-#define VIRTIO_NET_F_MAC        32
-#define VIRTIO_F_VERSION_1      4294967296
+#define VIRTIO_NET_F_MAC             32
+#define VIRTIO_F_VERSION_1           4294967296
 
-#define VIRTIO_DEVICE_ID_NET    1
-#define VIRTIO_VERSION          2
+#define VIRTIO_DEVICE_ID_NET         1
+#define VIRTIO_VERSION               2
 
-#define MAGIC_VALUE_OFFSET      0
-#define VERSION_OFFSET          4
-#define DEVICE_ID_OFFSET        8
-#define DEVICE_FEATURES_OFFSET  16
-#define DEVICE_FEATURES_SEL_OFFSET 20
-#define DRIVER_FEATURES_OFFSET  32
+#define MAGIC_VALUE_OFFSET           0
+#define VERSION_OFFSET               4
+#define DEVICE_ID_OFFSET             8
+#define DEVICE_FEATURES_OFFSET       16
+#define DEVICE_FEATURES_SEL_OFFSET   20
+#define DRIVER_FEATURES_OFFSET       32
 #define DRIVER_FEATURES_SEL_OFFSET 36
 #define QUEUE_SEL_OFFSET        48
 #define QUEUE_NUM_MAX_OFFSET    52
@@ -104,6 +104,8 @@
 #define IALLOC_NUM_FREE_OFFSET  16
 #define IALLOC_OFFSET_OFFSET    20
 #define IALLOC_SIZE_OFFSET      24
+
+
 fun virtio_avail_full_rx()
 {
   var rx_last_desc_idx_ptr = RX_LAST_DESC_IDX_PTR;
@@ -209,106 +211,8 @@ fun ialloc_free(1 ialloc_ptr, 1 id)
 
   return 0;
 }
-fun main() {
-  var regs_base = VIRTIO_REGS_BASE;
-  var magic = 0;
-  !ld32 magic, regs_base + MAGIC_VALUE_OFFSET;
-  if (magic != 1953655158) {
-  }
 
-  var version = 0;
-  !ld32 version, regs_base + VERSION_OFFSET;
-
-  var device_id = 0;
-  !ld32 device_id, regs_base + DEVICE_ID_OFFSET;
-
-  !st32 regs_base + STATUS_OFFSET, 0;
-
-  !st32 regs_base + STATUS_OFFSET, VIRTIO_DEVICE_STATUS_ACKNOWLEDGE;
-
-  !st32 regs_base + STATUS_OFFSET, VIRTIO_DEVICE_STATUS_DRIVER;
-
-  !st32 regs_base + DRIVER_FEATURES_OFFSET, VIRTIO_NET_F_MAC;
-  !st32 regs_base + DRIVER_FEATURES_SEL_OFFSET, 1;
-  !st32 regs_base + DRIVER_FEATURES_OFFSET, 1;
-
-  !st32 regs_base + STATUS_OFFSET, VIRTIO_DEVICE_STATUS_FEATURES_OK;
-
-  var status = 0;
-  !ld32 status, regs_base + STATUS_OFFSET;
-
-  var rx_desc_off = 0;
-  var rx_avail_off = (rx_desc_off + 16 * RX_COUNT + 1) & 65534;
-  var rx_used_off = (rx_avail_off + 6 + 2 * RX_COUNT + 3) & 65532;
-  var tx_desc_off = (rx_used_off + 6 + 8 * RX_COUNT + 15) & 65520;
-  var tx_avail_off = (tx_desc_off + 16 * TX_COUNT + 1) & 65534;
-  var tx_used_off = (tx_avail_off + 6 + 2 * TX_COUNT + 3) & 65532;
-  var virtq_size = tx_used_off + 6 + 8 * TX_COUNT;
-
-  var hw_vaddr = HW_RING_BUFFER_VADDR;
-  var hw_paddr = HW_RING_BUFFER_PADDR;
-
-  var rx_virtq = RX_VIRTQ_BASE;
-  !st16 rx_virtq + VIRTQ_NUM_OFFSET, RX_COUNT;
-  !stw rx_virtq + VIRTQ_DESC_OFFSET, hw_vaddr + rx_desc_off;
-  !stw rx_virtq + VIRTQ_AVAIL_OFFSET, hw_vaddr + rx_avail_off;
-  !stw rx_virtq + VIRTQ_USED_OFFSET, hw_vaddr + rx_used_off;
-
-  var tx_virtq = TX_VIRTQ_BASE;
-  !st16 tx_virtq + VIRTQ_NUM_OFFSET, TX_COUNT;
-  !stw tx_virtq + VIRTQ_DESC_OFFSET, hw_vaddr + tx_desc_off;
-  !stw tx_virtq + VIRTQ_AVAIL_OFFSET, hw_vaddr + tx_avail_off;
-  !stw tx_virtq + VIRTQ_USED_OFFSET, hw_vaddr + tx_used_off;
-
-  var tx_headers_size = 256 * VIRTIO_NET_HDR_SIZE;
-  var rx_headers_size = 256 * VIRTIO_NET_HDR_SIZE;
-
-  var tx_headers_vaddr = hw_vaddr + virtq_size;
-  !st32 pnk_mem_ptr(24), tx_headers_vaddr;
-
-  !st32 regs_base + QUEUE_SEL_OFFSET, VIRTIO_NET_RX_QUEUE;
-  !st32 regs_base + QUEUE_NUM_OFFSET, RX_COUNT;
-  !st32 regs_base + QUEUE_DESC_LOW_OFFSET, (hw_paddr + rx_desc_off) & 4294967295;
-  !st32 regs_base + QUEUE_DESC_HIGH_OFFSET, (hw_paddr + rx_desc_off) >> 32;
-  !st32 regs_base + QUEUE_DRIVER_LOW_OFFSET, (hw_paddr + rx_avail_off) & 4294967295;
-  !st32 regs_base + QUEUE_DRIVER_HIGH_OFFSET, (hw_paddr + rx_avail_off) >> 32;
-  !st32 regs_base + QUEUE_DEVICE_LOW_OFFSET, (hw_paddr + rx_used_off) & 4294967295;
-  !st32 regs_base + QUEUE_DEVICE_HIGH_OFFSET, (hw_paddr + rx_used_off) >> 32;
-  !st32 regs_base + QUEUE_READY_OFFSET, 1;
-
-  !st32 regs_base + QUEUE_SEL_OFFSET, VIRTIO_NET_TX_QUEUE;
-  !st32 regs_base + QUEUE_NUM_OFFSET, TX_COUNT;
-  !st32 regs_base + QUEUE_DESC_LOW_OFFSET, (hw_paddr + tx_desc_off) & 4294967295;
-  !st32 regs_base + QUEUE_DESC_HIGH_OFFSET, (hw_paddr + tx_desc_off) >> 32;
-  !st32 regs_base + QUEUE_DRIVER_LOW_OFFSET, (hw_paddr + tx_avail_off) & 4294967295;
-  !st32 regs_base + QUEUE_DRIVER_HIGH_OFFSET, (hw_paddr + tx_avail_off) >> 32;
-  !st32 regs_base + QUEUE_DEVICE_LOW_OFFSET, (hw_paddr + tx_used_off) & 4294967295;
-  !st32 regs_base + QUEUE_DEVICE_HIGH_OFFSET, (hw_paddr + tx_used_off) >> 32;
-  !st32 regs_base + QUEUE_READY_OFFSET, 1;
-
-  var config_addr = regs_base + CONFIG_OFFSET;
-  !st8 config_addr + 0, 82;
-  !st8 config_addr + 1, 84;
-  !st8 config_addr + 2, 1;
-  !st8 config_addr + 3, 0;
-  !st8 config_addr + 4, 0;
-  !st8 config_addr + 5, 7;
-
-  !st32 regs_base + STATUS_OFFSET, VIRTIO_DEVICE_STATUS_DRIVER_OK;
-  !st32 regs_base + INTERRUPT_ACK_OFFSET, VIRTIO_MMIO_IRQ_VQUEUE;
-
-  return 0;
-}
-
-export fun init_virtio_buffers()
-{
-  rx_provide();
-  tx_provide();
-  !st32 pnk_mem_ptr(21), 1;
-  return 0;
-}
-
-export fun rx_provide()
+fun rx_provide()
 {
 
   var rx_free = NET_RX_FREE;
@@ -316,7 +220,7 @@ export fun rx_provide()
 
   if (rx_free == 0) { return 0; }
   if (rx_capacity == 0) { return 0; }
-  var 1 queue_empty = net_queue_empty(rx_free);
+  var 1 queue_empty = net_queue_empty(rx_free, rx_capacity);
 
   if (queue_empty && (INITIALIZED_BUFFERS == 0)) {
     return 0;
@@ -331,7 +235,7 @@ export fun rx_provide()
     {
       var 1 avail_full = virtio_avail_full_rx();
       if (avail_full) { break; }
-      var 1 queue_empty = net_queue_empty(rx_free);
+      var 1 queue_empty = net_queue_empty(rx_free, rx_capacity);
       if (queue_empty) { break; }
 
       var {1,1} buffer = net_dequeue(rx_free, rx_capacity);
@@ -387,10 +291,10 @@ export fun rx_provide()
       transferred = true;
     }
 
-    net_request_signal(rx_free);
+    net_request_signal(rx_free, rx_capacity);
     reprocess = false;
 
-    var 1 queue_empty = net_queue_empty(rx_free);
+    var 1 queue_empty = net_queue_empty(rx_free, rx_capacity);
     var 1 avail_full = virtio_avail_full_rx();
     if ((queue_empty == 0) && (avail_full == 0)) {
       net_cancel_signal(rx_free);
@@ -407,7 +311,8 @@ export fun rx_provide()
 
   return 0;
 }
-export fun tx_provide()
+
+fun tx_provide()
 {
 
   var tx_active = NET_TX_ACTIVE;
@@ -415,7 +320,7 @@ export fun tx_provide()
 
   if (tx_active == 0) { return 0; }
   if (tx_capacity == 0) { return 0; }
-  var 1 queue_empty = net_queue_empty(tx_active);
+  var 1 queue_empty = net_queue_empty(tx_active, tx_capacity);
 
   var reprocess = true;
   var packets_transferred = false;
@@ -426,7 +331,7 @@ export fun tx_provide()
     {
       var 1 avail_full = virtio_avail_full_tx();
       if (avail_full) { break; }
-      var 1 queue_empty = net_queue_empty(tx_active);
+      var 1 queue_empty = net_queue_empty(tx_active, tx_capacity);
       if (queue_empty) { break; }
 
       var {1,1} buffer = net_dequeue(tx_active, tx_capacity);
@@ -488,11 +393,11 @@ export fun tx_provide()
       packets_transferred = true;
     }
 
-    net_request_signal(tx_active);
+    net_request_signal(tx_active, tx_capacity);
     reprocess = false;
 
     var 1 avail_full = virtio_avail_full_tx();
-    var 1 queue_empty = net_queue_empty(tx_active);
+    var 1 queue_empty = net_queue_empty(tx_active, tx_capacity);
     if ((avail_full == 0) && (queue_empty == 0)) {
       net_cancel_signal(tx_active);
       reprocess = true;
@@ -509,54 +414,7 @@ export fun tx_provide()
   return 0;
 }
 
-export fun handle_irq()
-{
-
-  var regs_base = VIRTIO_REGS_BASE;
-  var irq_status_addr = regs_base + INTERRUPT_STATUS_OFFSET;
-  var irq_ack_addr = regs_base + INTERRUPT_ACK_OFFSET;
-
-  var irq_status = 0;
-  !ld32 irq_status, irq_status_addr;
-
-  if (irq_status & VIRTIO_MMIO_IRQ_VQUEUE) {
-    !st32 irq_ack_addr, VIRTIO_MMIO_IRQ_VQUEUE;
-
-    tx_return();
-    tx_provide();
-    rx_return();
-  }
-
-  if (irq_status & VIRTIO_MMIO_IRQ_CONFIG) {
-  }
-
-  return 0;
-}
-export fun notified(1 ch)
-{
-
-  var irq_ch = IRQ_CH;
-  var rx_ch = RX_CH;
-  var tx_ch = TX_CH;
-
-  if (ch == irq_ch) {
-
-    handle_irq();
-    microkit_deferred_irq_ack(ch)
-  }
-  if (ch == rx_ch) {
-
-    rx_provide();
-  }
-  if (ch == tx_ch) {
-
-    tx_provide();
-  }
-  if ((ch != irq_ch) && (ch != rx_ch) && (ch != tx_ch)) {
-  }
-  return 0;
-}
-export fun rx_return()
+fun rx_return()
 {
   var rx_active = NET_RX_ACTIVE;
   var rx_capacity = NET_RX_CAPACITY;
@@ -613,7 +471,7 @@ export fun rx_return()
   !st16 rx_last_seen_used_ptr, curr_used_idx;
 
   if (packets_transferred > 0) {
-    var 1 to_signal = net_require_signal(rx_active);
+    var 1 to_signal = net_require_signal(rx_active, rx_capacity);
     if (to_signal) {
       net_cancel_signal(rx_active);
       microkit_notify(RX_CH)
@@ -622,7 +480,7 @@ export fun rx_return()
   return 0;
 }
 
-export fun tx_return()
+fun tx_return()
 {
   var tx_free = NET_TX_FREE;
   var tx_capacity = NET_TX_CAPACITY;
@@ -677,11 +535,70 @@ export fun tx_return()
   !st16 tx_last_seen_used_ptr, curr_used_idx;
 
   if (packets_transferred > 0) {
-    var 1 to_signal = net_require_signal(tx_free);
+    var 1 to_signal = net_require_signal(tx_free, tx_capacity);
     if (to_signal) {
       net_cancel_signal(tx_free);
       microkit_notify(TX_CH)
     }
+  }
+  return 0;
+}
+
+fun main() {
+  rx_provide();
+  tx_provide();
+
+  return 0;
+}
+
+
+fun handle_irq()
+{
+
+  var regs_base = VIRTIO_REGS_BASE;
+  var irq_status_addr = regs_base + INTERRUPT_STATUS_OFFSET;
+  var irq_ack_addr = regs_base + INTERRUPT_ACK_OFFSET;
+
+  var irq_status = 0;
+  !ld32 irq_status, irq_status_addr;
+
+  if (irq_status & VIRTIO_MMIO_IRQ_VQUEUE) {
+    !st32 irq_ack_addr, VIRTIO_MMIO_IRQ_VQUEUE;
+
+    tx_return();
+    tx_provide();
+    rx_return();
+  }
+
+  if (irq_status & VIRTIO_MMIO_IRQ_CONFIG) {
+  }
+
+  return 0;
+}
+
+export fun notified(1 ch)
+{
+
+  var irq_ch = IRQ_CH;
+  var rx_ch = RX_CH;
+  var tx_ch = TX_CH;
+
+  if (ch == irq_ch) {
+
+    handle_irq();
+    microkit_deferred_irq_ack(ch)
+  }
+  if (ch == rx_ch) {
+
+    rx_provide();
+  }
+  if (ch == tx_ch) {
+
+    tx_provide();
+  }
+  if ((ch != irq_ch) && (ch != rx_ch) && (ch != tx_ch)) {
+    debug_print(0,ch,0,123456);
+    // @assert(0,0,0,0);
   }
   return 0;
 }

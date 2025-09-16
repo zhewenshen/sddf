@@ -33,7 +33,7 @@ struct descriptor {
 
 /* HW ring buffer data type */
 typedef struct {
-#ifdef PANCAKE_NETWORK
+#ifdef PANCAKE_NETWORK_DRIVER
     /* to avoid bit-shift operations, we try to use word size variables when possible in Pancake */
     uint64_t tail; /* index to insert at */
     uint64_t head; /* index to remove from */
@@ -46,7 +46,7 @@ typedef struct {
     volatile struct descriptor *descr; /* buffer descriptor array */
 } hw_ring_t;
 
-#ifdef PANCAKE_NETWORK
+#ifdef PANCAKE_NETWORK_DRIVER
 hw_ring_t *rx;
 hw_ring_t *tx;
 
@@ -64,7 +64,7 @@ net_queue_handle_t tx_queue;
 
 volatile struct enet_regs *eth;
 
-#ifdef PANCAKE_NETWORK
+#ifdef PANCAKE_NETWORK_DRIVER
 static char cml_memory[1024*8];
 extern void *cml_heap;
 extern void *cml_stack;
@@ -100,7 +100,7 @@ void init_pancake_mem() {
 }
 #endif
 
-#ifndef PANCAKE_NETWORK
+#ifndef PANCAKE_NETWORK_DRIVER
 static inline bool hw_ring_full(hw_ring_t *ring)
 {
     return ring->tail - ring->head == ring->capacity;
@@ -273,7 +273,7 @@ static void eth_setup(void)
     uint32_t h = eth->paur;
 
     /* Set up HW rings */
-#ifdef PANCAKE_NETWORK
+#ifdef PANCAKE_NETWORK_DRIVER
     rx->descr = (volatile struct descriptor *)device_resources.regions[1].region.vaddr;
     tx->descr = (volatile struct descriptor *)device_resources.regions[2].region.vaddr;
     rx->capacity = RX_COUNT;
@@ -366,7 +366,7 @@ void init(void)
     assert(RX_COUNT * sizeof(struct descriptor) <= device_resources.regions[1].region.size);
     assert(TX_COUNT * sizeof(struct descriptor) <= device_resources.regions[2].region.size);
 
-#ifdef PANCAKE_NETWORK
+#ifdef PANCAKE_NETWORK_DRIVER
     init_pancake_mem();
 
     /* init_pancake_data */
@@ -386,7 +386,7 @@ void init(void)
 
     eth_setup();
 
-#ifdef PANCAKE_NETWORK
+#ifdef PANCAKE_NETWORK_DRIVER
     pnk_mem[0] = (uintptr_t) eth;
 
     net_queue_init(rx_queue, config.virt_rx.free_queue.vaddr, config.virt_rx.active_queue.vaddr,
@@ -406,7 +406,7 @@ void init(void)
 #endif
 }
 
-#ifdef PANCAKE_NETWORK
+#ifdef PANCAKE_NETWORK_DRIVER
 extern void notified(microkit_channel ch);
 #else
 void notified(microkit_channel ch)

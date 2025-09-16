@@ -35,7 +35,7 @@ struct descriptor {
 };
 
 typedef struct {
-#ifdef PANCAKE_NETWORK
+#ifdef PANCAKE_NETWORK_DRIVER
     /* to avoid bit-shift operations, we try to use word size variables when possible in Pancake */
     uint64_t tail; /* index to insert at */
     uint64_t head; /* index to remove from */
@@ -48,7 +48,7 @@ typedef struct {
     volatile struct descriptor *descr; /* buffer descriptor array */
 } hw_ring_t;
 
-#ifdef PANCAKE_NETWORK
+#ifdef PANCAKE_NETWORK_DRIVER
 hw_ring_t *rx;
 hw_ring_t *tx;
 
@@ -65,7 +65,7 @@ net_queue_handle_t tx_queue;
 volatile struct eth_mac_regs *eth_mac;
 volatile struct eth_dma_regs *eth_dma;
 
-#ifdef PANCAKE_NETWORK
+#ifdef PANCAKE_NETWORK_DRIVER
 static char cml_memory[1024*8];
 extern void *cml_heap;
 extern void *cml_stack;
@@ -97,7 +97,7 @@ void init_pancake_mem() {
 }
 #endif
 
-#ifndef PANCAKE_NETWORK
+#ifndef PANCAKE_NETWORK_DRIVER
 static inline bool hw_ring_full(hw_ring_t *ring)
 {
     return ring->tail - ring->head == ring->capacity;
@@ -283,7 +283,7 @@ static void eth_setup(void)
     assert((device_resources.regions[1].io_addr & 0xFFFFFFFF) == device_resources.regions[1].io_addr);
     assert((device_resources.regions[2].io_addr & 0xFFFFFFFF) == device_resources.regions[2].io_addr);
 
-#ifdef PANCAKE_NETWORK
+#ifdef PANCAKE_NETWORK_DRIVER
     rx->descr = (volatile struct descriptor *)device_resources.regions[1].region.vaddr;
     tx->descr = (volatile struct descriptor *)device_resources.regions[2].region.vaddr;
     rx->capacity = RX_COUNT;
@@ -337,7 +337,7 @@ void init(void)
     assert(RX_COUNT * sizeof(struct descriptor) <= device_resources.regions[1].region.size);
     assert(TX_COUNT * sizeof(struct descriptor) <= device_resources.regions[2].region.size);
 
-#ifdef PANCAKE_NETWORK
+#ifdef PANCAKE_NETWORK_DRIVER
     init_pancake_mem();
 
     /* init_pancake_data */
@@ -357,7 +357,7 @@ void init(void)
 
     eth_setup();
 
-#ifdef PANCAKE_NETWORK
+#ifdef PANCAKE_NETWORK_DRIVER
     pnk_mem[0] = (uintptr_t) eth_mac;
     pnk_mem[12] = rx->capacity;
     pnk_mem[13] = (uintptr_t) rx->descr;
@@ -393,9 +393,9 @@ void init(void)
     microkit_irq_ack(device_resources.irqs[0].id);
 }
 
-#ifdef PANCAKE_NETWORK
+#ifdef PANCAKE_NETWORK_DRIVER
 extern void notified(microkit_channel ch);
-#else
+#else a
 void notified(microkit_channel ch)
 {
     if (ch == device_resources.irqs[0].id) {
