@@ -513,7 +513,6 @@ void ffihandle_irq(unsigned char *c, long clen, unsigned char *a, long alen) {
 static void eth_init()
 {
 #if USE_MAC_ADDR_REGS
-    sddf_dprintf("we should not get here\n");
     uint32_t mac_high = *MAC_REG(MAC_ADDRESS0_HIGH);
     uint32_t mac_low = *MAC_REG(MAC_ADDRESS0_LOW);
 #endif
