@@ -16,16 +16,16 @@
 
 #define HW_RX_TAIL_SLOT         pnk_mem_ptr(10)
 #define HW_RX_HEAD_SLOT         pnk_mem_ptr(11)
-#define HW_RX_TAIL              lds 1 HW_RX_TAIL_SLOT
-#define HW_RX_HEAD              lds 1 HW_RX_HEAD_SLOT
+#define HW_RX_TAIL              pnk_mem(10)
+#define HW_RX_HEAD              pnk_mem(11)
 #define HW_RX_CAPACITY          pnk_mem(12)
 #define HW_RX_DESCR             pnk_mem(13)
 #define HW_RX_PTR               pnk_mem_ptr(10)
 
 #define HW_TX_TAIL_SLOT         pnk_mem_ptr(14)
 #define HW_TX_HEAD_SLOT         pnk_mem_ptr(15)
-#define HW_TX_TAIL              lds 1 HW_TX_TAIL_SLOT
-#define HW_TX_HEAD              lds 1 HW_TX_HEAD_SLOT
+#define HW_TX_TAIL              pnk_mem(14)
+#define HW_TX_HEAD              pnk_mem(15)
 #define HW_TX_CAPACITY          pnk_mem(16)
 #define HW_TX_DESCR             pnk_mem(17)
 #define HW_TX_PTR               pnk_mem_ptr(14)
@@ -50,55 +50,59 @@
 
 #define ETH_REG                 pnk_mem(0)
 
-fun rx_hw_ring_empty() {
-  var tail = HW_RX_TAIL;
-  var head = HW_RX_HEAD;
 
-  var ret = (head == tail);
+var 1 irq_ch          = IRQ_CH;
+var 1 rx_ch           = RX_CH;
+var 1 tx_ch           = TX_CH;
+var 1 eth_reg         = ETH_REG;
+var 1 net_rx_free     = NET_RX_FREE;
+var 1 net_rx_active   = NET_RX_ACTIVE;
+var 1 net_rx_capacity = NET_RX_CAPACITY;
+var 1 net_tx_free     = NET_TX_FREE;
+var 1 net_tx_active   = NET_TX_ACTIVE;
+var 1 net_tx_capacity = NET_TX_CAPACITY;
+var 1 hw_rx_capacity  = HW_RX_CAPACITY;
+var 1 hw_tx_capacity  = HW_TX_CAPACITY;
+var 1 hw_rx_descr     = HW_RX_DESCR;
+var 1 hw_tx_descr     = HW_TX_DESCR;
+
+fun rx_hw_ring_empty() {
+  var ret = (HW_RX_HEAD == HW_RX_TAIL);
   return ret;
 }
 
 fun tx_hw_ring_empty() {
-  var tail = HW_TX_TAIL;
-  var head = HW_TX_HEAD;
-
-  var ret = (head == tail);
+  var ret = (HW_TX_HEAD == HW_TX_TAIL);
   return ret;
 }
 
 fun rx_hw_ring_full() {
-  var tail = HW_RX_TAIL;
-  var head = HW_RX_HEAD;
-
-  var ret = (tail - head) == HW_RX_CAPACITY;
+  var ret = (HW_RX_TAIL - HW_RX_HEAD) == hw_rx_capacity;
   return ret;
 }
 
 fun tx_hw_ring_full() {
-  var tail = HW_TX_TAIL;
-  var head = HW_TX_HEAD;
-
-  var ret = (tail - head) == HW_TX_CAPACITY;
+  var ret = (HW_TX_TAIL - HW_TX_HEAD) == hw_tx_capacity;
   return ret;
 }
 
 fun set_rdar()
 {
-  var reg_addr = ETH_REG + RDAR_OFFSET;
+  var reg_addr = eth_reg + RDAR_OFFSET;
   !st32 reg_addr, RDAR_RDAR;
   return 0;
 }
 
 fun set_tdar()
 {
-  var reg_addr = ETH_REG + TDAR_OFFSET;
+  var reg_addr = eth_reg + TDAR_OFFSET;
   !st32 reg_addr, TDAR_TDAR;
   return 0;
 }
 
 fun get_eir_status()
 {
-  var reg_addr = ETH_REG + EIR_OFFSET;
+  var reg_addr = eth_reg + EIR_OFFSET;
   var eir = 0;
   !ld32 eir, reg_addr;
   return eir;
@@ -113,17 +117,17 @@ fun get_eir()
 
 fun set_eir(1 eir)
 {
-  var reg_addr = ETH_REG + EIR_OFFSET;
+  var reg_addr = eth_reg + EIR_OFFSET;
   !st32 reg_addr, eir;
   return 0;
 }
 
 fun rx_update_ring_slot(1 ring_addr, 1 idx, 1 phys, 1 len, 1 stat)
 {
-  var descr_base = HW_RX_DESCR;
+  var descr_base = hw_rx_descr;
   var descr = descr_base + idx * 8;
-  
-  if (idx + 1 == HW_RX_CAPACITY) {
+
+  if (idx + 1 == hw_rx_capacity) {
     stat = stat | WRAP;
   }
   
@@ -136,10 +140,10 @@ fun rx_update_ring_slot(1 ring_addr, 1 idx, 1 phys, 1 len, 1 stat)
 
 fun tx_update_ring_slot(1 ring_addr, 1 idx, 1 phys, 1 len, 1 stat)
 {
-  var descr_base = HW_TX_DESCR;
+  var descr_base = hw_tx_descr;
   var descr = descr_base + idx * 8;
-  
-  if (idx + 1 == HW_TX_CAPACITY) {
+
+  if (idx + 1 == hw_tx_capacity) {
     stat = stat | WRAP;
   }
   
@@ -153,9 +157,9 @@ fun tx_update_ring_slot(1 ring_addr, 1 idx, 1 phys, 1 len, 1 stat)
 fun rx_provide()
 {
   var reprocess = true;
-  var rx_free = NET_RX_FREE;
-  var rx_queue_cap = NET_RX_CAPACITY;
-  var rx_hw_cap = HW_RX_CAPACITY;
+  var rx_free = net_rx_free;
+  var rx_queue_cap = net_rx_capacity;
+  var rx_hw_cap = hw_rx_capacity;
 
   while (reprocess)
   {
@@ -199,9 +203,9 @@ fun rx_provide()
 fun tx_provide()
 {
   var reprocess = true;
-  var tx_active = NET_TX_ACTIVE;
-  var tx_queue_cap = NET_TX_CAPACITY;
-  var tx_hw_cap = HW_TX_CAPACITY;
+  var tx_active = net_tx_active;
+  var tx_queue_cap = net_tx_capacity;
+  var tx_hw_cap = hw_tx_capacity;
 
   while (reprocess)
   {
@@ -246,10 +250,10 @@ fun tx_provide()
 
 fun rx_return()
 {
-  var rx_active = NET_RX_ACTIVE;
-  var rx_descr = HW_RX_DESCR;
-  var rx_queue_cap = NET_RX_CAPACITY;
-  var rx_hw_cap = HW_RX_CAPACITY;
+  var rx_active = net_rx_active;
+  var rx_descr = hw_rx_descr;
+  var rx_queue_cap = net_rx_capacity;
+  var rx_hw_cap = hw_rx_capacity;
 
   var packets_transferred = false;
 
@@ -284,7 +288,7 @@ fun rx_return()
   var 1 to_signal = net_require_signal(rx_active, rx_queue_cap);
   if (packets_transferred && to_signal) {
     net_cancel_signal(rx_active);
-    microkit_notify(RX_CH)
+    microkit_notify(rx_ch)
   }
 
   return 0;
@@ -292,10 +296,10 @@ fun rx_return()
 
 fun tx_return()
 {
-  var tx_free = NET_TX_FREE;
-  var tx_descr = HW_TX_DESCR;
-  var tx_queue_cap = NET_TX_CAPACITY;
-  var tx_hw_cap = HW_TX_CAPACITY;
+  var tx_free = net_tx_free;
+  var tx_descr = hw_tx_descr;
+  var tx_queue_cap = net_tx_capacity;
+  var tx_hw_cap = hw_tx_capacity;
 
   var enqueued = false;
 
@@ -325,7 +329,7 @@ fun tx_return()
   var 1 to_signal = net_require_signal(tx_free, tx_queue_cap);
   if (enqueued && to_signal) {
     net_cancel_signal(tx_free);
-    microkit_notify(TX_CH)
+    microkit_notify(tx_ch)
   }
 
   return 0;
@@ -364,17 +368,17 @@ fun handle_irq() {
 
 export fun notified(1 ch)
 {
-  if (ch == IRQ_CH) {
+  if (ch == irq_ch) {
     handle_irq();
     microkit_deferred_irq_ack(ch)
   }
-  if (ch == RX_CH) {
+  if (ch == rx_ch) {
     rx_provide();
   }
-  if (ch == TX_CH) {
+  if (ch == tx_ch) {
     tx_provide();
   }
-  if ((ch != IRQ_CH) && (ch != RX_CH) && (ch != TX_CH)) {
+  if ((ch != irq_ch) && (ch != rx_ch) && (ch != tx_ch)) {
     @assert(0,0,0,0);
   }
   return 0;
