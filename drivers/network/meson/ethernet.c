@@ -354,6 +354,7 @@ void init(void)
     rx = (hw_ring_t *) &pnk_mem[10];
     tx = (hw_ring_t *) &pnk_mem[10 + sizeof(hw_ring_t)/sizeof(uintptr_t)];
 #endif
+    microkit_irq_ack(device_resources.irqs[0].id);
 
     eth_setup();
 
@@ -389,13 +390,11 @@ void init(void)
     /* We are ready to receive. Enable. */
     eth_mac->conf |= RX_ENABLE | TX_ENABLE;
     eth_dma->opmode |= TXSTART | RXSTART;
-
-    microkit_irq_ack(device_resources.irqs[0].id);
 }
 
 #ifdef PANCAKE_NETWORK_DRIVER
 extern void notified(microkit_channel ch);
-#else a
+#else
 void notified(microkit_channel ch)
 {
     if (ch == device_resources.irqs[0].id) {

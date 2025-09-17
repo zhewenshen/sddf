@@ -34,7 +34,7 @@ meson/ethernet.o: ${ETHERNET_DRIVER_DIR}/ethernet.c ${CHECK_NETDRV_FLAGS_MD5}
 	${CC} -c ${CFLAGS} ${CFLAGS_network} -DPANCAKE_NETWORK_DRIVER -I ${ETHERNET_DRIVER_DIR} -o $@ $<
 
 ${BUILD_DIR}/ethernet_pnk.o: ${BUILD_DIR}/ethernet_pnk.S
-	$(CC) -c -mcpu=$(CPU) $< -o $@
+	$(CC) -c -mcpu=$(CPU) -target aarch64-none-elf $< -o $@
 else
 eth_driver.elf: network/meson/ethernet.o
 	$(LD) $(LDFLAGS) $< $(LIBS) -o $@
