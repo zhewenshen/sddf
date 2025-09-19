@@ -55,7 +55,7 @@ util/custom_libc/%.o: ${SDDF}/util/custom_libc/${ARCH}/%.S
 util/custom_libc/%.o: ${SDDF}/util/custom_libc/${ARCH}/%.c
 	${CC} ${CFLAGS} -c -o $@ $<
 
-ifneq ($(filter 1,$(PANCAKE_DRIVER) $(PANCAKE_VIRT) $(PANCAKE_NETWORK_DRIVER) $(PANCAKE_SERIAL_DRIVER) $(PANCAKE_TIMER) $(PANCAKE_I2C) $(PANCAKE_BLK)),)
+ifneq ($(filter 1,$(PANCAKE_NETWORK_DRIVER) $(PANCAKE_SERIAL_DRIVER) $(PANCAKE_SERIAL_VIRT_TX) $(PANCAKE_SERIAL_VIRT_RX) $(PANCAKE_NETWORK_VIRT_TX) $(PANCAKE_NETWORK_VIRT_RX) $(PANCAKE_NETWORK_COPY) $(PANCAKE_TIMER) $(PANCAKE_I2C) $(PANCAKE_BLK)),)
 pancake_ffi.o: ${SDDF}/util/pancake_ffi.c
 	${CC} ${CFLAGS} -c -o $@ $<
 endif

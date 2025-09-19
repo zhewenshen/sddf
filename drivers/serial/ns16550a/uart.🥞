@@ -251,23 +251,25 @@ fun handle_irq()
 
 export fun notified(1 ch)
 {
-  var irq_ch = IRQ_CH;
-  if (ch == irq_ch) {
+  if (ch == IRQ_CH) {
     handle_irq();
     microkit_deferred_irq_ack(ch)
-    return 0;
+    // return 0;
   }
   
-  var tx_ch = TX_CH;
-  if (ch == tx_ch) {
+  if (ch == TX_CH) {
     tx_provide();
-    return 0;
+    // return 0;
   }
-  
-  var rx_ch = RX_CH;
-  if (ch == rx_ch) {
+
+  if (ch == RX_CH) {
     rx_return();
-    return 0;
+    // return 0;
+  }
+
+  if ((ch != IRQ_CH) && (ch != TX_CH) && (ch != RX_CH)) {
+    // debug_print(0,ch,0,123456789);
+    @assert(0,0,0,0);
   }
   
   return 0;

@@ -17,6 +17,7 @@ endif
 
 BUILD_DIR ?= build
 MICROKIT_CONFIG ?= debug
+SDDF_CUSTOM_LIBC := 1
 IMAGE_FILE = loader.img
 REPORT_FILE = report.txt
 

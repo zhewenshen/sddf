@@ -192,12 +192,12 @@ fun rx_return() {
 
     var rx_head = HW_RX_HEAD;
     var idx = rx_head & (hw_rx_capacity - 1);
-    var idx = rx_head;
+    // var idx = rx_head;
     // while (idx >= HW_RX_CAPACITY) {
     //   idx = idx - HW_RX_CAPACITY;
     // }
     // idx = rx_head;
-    idx = idx & 255;
+    // idx = idx & 255;
 
     // debug_print(0,rx_head,0,1111);
     // debug_print(0,idx,0,2222);
