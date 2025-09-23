@@ -25,6 +25,13 @@ $(error Unsupported MICROKIT_BOARD)
 endif
 
 BOARD_DIR := $(MICROKIT_SDK)/board/$(MICROKIT_BOARD)/$(MICROKIT_CONFIG)
+ARCH := ${shell grep 'CONFIG_SEL4_ARCH  ' $(BOARD_DIR)/include/kernel/gen_config.h | cut -d' ' -f4}
+SDDF_CUSTOM_LIBC := 1
+
+# Export Pancake variables for util.mk
+export PANCAKE_TIMER
+export PANCAKE_I2C
+export CAKE_COMPILER
 
 CC := clang -target aarch64-none-elf
 LD := ld.lld
@@ -64,6 +71,7 @@ METAPROGRAM := $(TOP)/meta.py
 CFLAGS += -I$(BOARD_DIR)/include \
 	-I$(SDDF)/include \
 	-I$(SDDF)/include/microkit \
+	-I$(SDDF)/include/microkit/os \
 	-I$(LIBCO) \
 	-MD \
 	-MP

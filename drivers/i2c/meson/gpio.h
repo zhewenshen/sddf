@@ -31,7 +31,7 @@
 #define GPIO_DS_2B_X17 BIT(3) | BIT(2)
 #define GPIO_DS_2B_X18 BIT(1) | BIT(0)  // Also used for X19, for some reason
 #define GPIO_DS_2B_X17_SHIFT 2
-#define GPIO_DS_2B_X18_SHIFT 4
+#define GPIO_DS_2B_X18_SHIFT 0
 
 #define GPIO_DS_5A     0xd4 // M3
 #define GPIO_DS_5A_A14 BIT(28) | BIT(29)

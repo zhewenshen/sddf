@@ -18,7 +18,7 @@ i2c_driver.elf: i2c/i2c_pnk.o i2c/i2c_driver.o pancake_ffi.o
 	$(LD) $(LDFLAGS) $^ $(LIBS) -o $@
 
 I2C_PNK = ${UTIL}/util.🥞 \
-        ${SDDF}/include/sddf/i2c/queue.🥞 \
+        ${SDDF}/include/microkit/os/sddf/i2c/queue.🥞 \
         ${I2C_DRIVER_DIR}/i2c.🥞
 
 i2c/i2c_pnk.S: $(I2C_PNK) |i2c
