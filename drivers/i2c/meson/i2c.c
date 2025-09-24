@@ -16,6 +16,8 @@
 #include <sddf/resources/device.h>
 #include "driver.h"
 
+// #define DEBUG_DRIVER
+
 #ifdef PANCAKE_I2C
 static char cml_memory[1024*8];
 extern void *cml_heap;
@@ -805,6 +807,73 @@ void ffii2c_enqueue_response(unsigned char* c, long clen, unsigned char* a, long
                                    STATE_PTR->curr_response_len + RESPONSE_DATA_OFFSET);
     if (ret) {
         LOG_DRIVER_ERR("Failed to enqueue response\n");
+    }
+}
+
+/* FFI function to extract a single byte from read registers */
+void ffiget_read_byte(unsigned char* c, long clen, unsigned char* a, long alen) {
+    /* Get the byte index from pancake memory */
+    uintptr_t *pnk_mem = (uintptr_t *) cml_heap;
+    uint8_t byte_index = (uint8_t)pnk_mem[25];  /* Byte index to extract */
+
+    uint8_t value = 0;
+
+    if (byte_index < 4) {
+        /* Extract from rdata0 register */
+        value = (regs->rdata0 >> (byte_index * 8)) & 0xFF;
+    } else if (byte_index < 8) {
+        /* Extract from rdata1 register */
+        value = (regs->rdata1 >> ((byte_index - 4) * 8)) & 0xFF;
+    }
+
+    /* Store the extracted value in scratch slot for return */
+    pnk_mem[26] = (uintptr_t)value;  /* Return value in slot 26 */
+}
+
+/* FFI function to handle response error checking and data extraction */
+void ffihandle_response_core(unsigned char* c, long clen, unsigned char* a, long alen) {
+    /* Get error status from control register */
+    volatile uint32_t ctl = regs->ctl;
+    bool err = ctl & (1 << 3);                /* bit 3 -> set if error */
+    uint8_t bytes_read = (ctl & 0xF00) >> 8;  /* bits 8-11 -> number of bytes to read */
+    uint8_t curr_token = (ctl & 0xF0) >> 4;   /* bits 4-7 -> curr token */
+
+    /* Get return buffer pointer */
+    i2c_token_t *return_buffer = (i2c_token_t *)STATE_PTR->curr_data;
+
+    /* Store results in pancake memory for return values */
+    uintptr_t *pnk_mem = (uintptr_t *) cml_heap;
+    pnk_mem[22] = (uintptr_t)err;         /* Store error status */
+    pnk_mem[23] = (uintptr_t)bytes_read;  /* Store bytes_read */
+    pnk_mem[24] = (uintptr_t)curr_token;  /* Store curr_token */
+
+    if (err) {
+        /* Handle error case */
+        if (curr_token == I2C_TOKEN_ADDR_READ) {
+            return_buffer[RESPONSE_ERR] = I2C_ERR_NOREAD;
+        } else {
+            return_buffer[RESPONSE_ERR] = I2C_ERR_NACK;
+        }
+        return_buffer[RESPONSE_ERR_TOKEN] = curr_token;
+    } else {
+        /* Success case - copy read data from registers to return buffer */
+        for (int i = 0; i < bytes_read; i++) {
+            size_t index = RESPONSE_DATA_OFFSET + STATE_PTR->curr_response_len;
+            uint8_t value = 0;
+
+            if (i < 4) {
+                value = (regs->rdata0 >> (i * 8)) & 0xFF;
+            } else if (i < 8) {
+                value = (regs->rdata1 >> ((i - 4) * 8)) & 0xFF;
+            }
+
+            return_buffer[index] = value;
+            STATE_PTR->curr_response_len++;
+        }
+
+        /* Set success status */
+        return_buffer[RESPONSE_ERR] = I2C_ERR_OK;
+        return_buffer[RESPONSE_ERR_TOKEN] = 0x0;
     }
 }
 

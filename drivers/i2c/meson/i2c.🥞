@@ -223,47 +223,6 @@ fun get_response_queue_ptr() {
     return response_ptr;
 }
 
-/* Helper function to extract bytes_read from masked value */
-fun extract_bytes_read(1 masked_val) {
-    if (masked_val == 0) { return 0; }
-    if (masked_val == 256) { return 1; }
-    if (masked_val == 512) { return 2; }
-    if (masked_val == 768) { return 3; }
-    if (masked_val == 1024) { return 4; }
-    if (masked_val == 1280) { return 5; }
-    if (masked_val == 1536) { return 6; }
-    if (masked_val == 1792) { return 7; }
-    if (masked_val == 2048) { return 8; }
-    if (masked_val == 2304) { return 9; }
-    if (masked_val == 2560) { return 10; }
-    if (masked_val == 2816) { return 11; }
-    if (masked_val == 3072) { return 12; }
-    if (masked_val == 3328) { return 13; }
-    if (masked_val == 3584) { return 14; }
-    if (masked_val == 3840) { return 15; }
-    return 0;
-}
-
-/* Helper function to extract curr_token from masked value */
-fun extract_curr_token(1 masked_val) {
-    if (masked_val == 0) { return 0; }
-    if (masked_val == 16) { return 1; }
-    if (masked_val == 32) { return 2; }
-    if (masked_val == 48) { return 3; }
-    if (masked_val == 64) { return 4; }
-    if (masked_val == 80) { return 5; }
-    if (masked_val == 96) { return 6; }
-    if (masked_val == 112) { return 7; }
-    if (masked_val == 128) { return 8; }
-    if (masked_val == 144) { return 9; }
-    if (masked_val == 160) { return 10; }
-    if (masked_val == 176) { return 11; }
-    if (masked_val == 192) { return 12; }
-    if (masked_val == 208) { return 13; }
-    if (masked_val == 224) { return 14; }
-    if (masked_val == 240) { return 15; }
-    return 0;
-}
 
 /* Helper function to get error status from i2c control register */
 fun get_i2c_error() {
@@ -271,12 +230,9 @@ fun get_i2c_error() {
     var ctl = 0;
     !ld32 ctl, ctl_addr;
 
-    var err = ctl & (1 << 3);        /* bit 3 -> set if error */
-    var bytes_read_masked = ctl & 3840;  /* bits 8-11 -> number of bytes to read (0xF00 = 3840) */
-    var curr_token_masked = ctl & 240;   /* bits 4-7 -> curr token (0xF0 = 240) */
-
-    var 1 bytes_read = extract_bytes_read(bytes_read_masked);
-    var 1 curr_token = extract_curr_token(curr_token_masked);
+    var err = ctl & (1 << 3);           /* bit 3 -> set if error */
+    var bytes_read = (ctl >> 8) & 15;   /* bits 8-11 -> number of bytes to read (0xF = 15) */
+    var curr_token = (ctl >> 4) & 15;   /* bits 4-7 -> curr token (0xF = 15) */
 
     return <err, bytes_read, curr_token>;
 }
@@ -292,26 +248,23 @@ fun i2c_halt() {
 }
 
 fun handle_response() {
-    /* Get error status */
+    /* Get error status using Pancake logic */
     var 3 error_info = get_i2c_error();
-    var err = error_info.0;
+    var write_error = error_info.0;
     var bytes_read = error_info.1;
     var curr_token = error_info.2;
-    var write_error = err;
+
+    /* Store bytes_read in pancake memory for FFI function */
+    st pnk_mem_ptr(23), bytes_read;
 
     /* Get return buffer pointer */
     var return_buffer = I2C_CURR_DATA;
 
-    /* Declare loop variables */
-    var index = 0;
-    var err_addr = 0;
-    var token_addr = 0;
-    var bytes_copied = 0;
-
+    /* Handle error checking in Pancake */
     if (write_error) {
         /* Error handling - set error codes in return buffer */
-        err_addr = return_buffer + RESPONSE_ERR;
-        token_addr = return_buffer + RESPONSE_ERR_TOKEN;
+        var err_addr = return_buffer + RESPONSE_ERR;
+        var token_addr = return_buffer + RESPONSE_ERR_TOKEN;
         if (curr_token == I2C_TOKEN_ADDR_READ) {
             !st8 err_addr, I2C_ERR_NOREAD;
         } else {
@@ -319,54 +272,51 @@ fun handle_response() {
         }
         !st8 token_addr, curr_token;
     } else {
-        /* Success - copy data from i2c registers to return buffer */
-        bytes_copied = 0;
+        /* Success - copy data from i2c registers to return buffer using loop */
+        var bytes_copied = 0;
         while (bytes_copied < bytes_read) {
             var curr_resp_len = I2C_CURR_RESPONSE_LEN;
-            index = RESPONSE_DATA_OFFSET + curr_resp_len;
+            var index = RESPONSE_DATA_OFFSET + curr_resp_len;
+
+            /* Try Pancake implementation instead of FFI */
+            var value = 0;
 
             if (bytes_copied < 4) {
                 /* Read directly from rdata0 register byte by byte */
-                var byte_addr = i2c_reg + 40 + bytes_copied;
-                var value = 0;
+                /* rdata0 is at offset 24 from base, each byte at offset 0,1,2,3 within the 32-bit register */
+                var byte_addr = i2c_reg + 24 + bytes_copied;
                 !ld8 value, byte_addr;
-
-
-                /* Store value in return buffer */
-                var data_addr = return_buffer + index;
-                !st8 data_addr, value;
-
-                /* Update response length */
-                var new_resp_len = I2C_CURR_RESPONSE_LEN + 1;
-                st pnk_mem_ptr(8), new_resp_len;
-
-                bytes_copied = bytes_copied + 1;
             } else {
                 if (bytes_copied < 8) {
-                    /* Read from rdata1 register (offset 44) */
-                    var byte_addr = i2c_reg + 44 + (bytes_copied - 4);
-                    var value = 0;
+                    /* Read from rdata1 register (offset 28) */
+                    /* Bytes 4-7 map to offsets 0-3 within rdata1 */
+                    var byte_addr = i2c_reg + 28 + (bytes_copied - 4);
                     !ld8 value, byte_addr;
-
-                    /* Store value in return buffer */
-                    var data_addr = return_buffer + index;
-                    !st8 data_addr, value;
-
-                    /* Update response length */
-                    var new_resp_len = I2C_CURR_RESPONSE_LEN + 1;
-                    st pnk_mem_ptr(8), new_resp_len;
-
-                    bytes_copied = bytes_copied + 1;
-                } else {
-                    /* More than 8 bytes not supported */
-                    bytes_copied = bytes_read;
                 }
             }
+
+            /* FFI version - commented out but kept for potential revert */
+            /* Store byte index in pancake memory for FFI */
+            // st pnk_mem_ptr(25), bytes_copied;
+            /* Call FFI to extract the value from register */
+            // @get_read_byte(0,0,0,0);
+            /* Get the extracted value from scratch slot */
+            // var value = pnk_mem(26);
+
+            /* Store value in return buffer */
+            var data_addr = return_buffer + index;
+            !st8 data_addr, value;
+
+            /* Update response length */
+            var new_resp_len = I2C_CURR_RESPONSE_LEN + 1;
+            st pnk_mem_ptr(8), new_resp_len;
+
+            bytes_copied = bytes_copied + 1;
         }
 
         /* Set success status */
-        err_addr = return_buffer + RESPONSE_ERR;
-        token_addr = return_buffer + RESPONSE_ERR_TOKEN;
+        var err_addr = return_buffer + RESPONSE_ERR;
+        var token_addr = return_buffer + RESPONSE_ERR_TOKEN;
         !st8 err_addr, I2C_ERR_OK;
         !st8 token_addr, 0;
     }
@@ -409,26 +359,27 @@ fun handle_response() {
 }
 
 /* Helper functions for bit shifting operations */
+/* NOTE: These exist because shift by variable doesn't work in Pancake, only shift by literal */
 
-/* Simulate token << (tk_offset * 4) */
+/* Simulate token << (tk_offset * 4) for 4-bit tokens */
 fun token_shift_left(1 token, 1 tk_offset) {
-    if (tk_offset == 0) { return token; }
-    if (tk_offset == 1) { return token * 16; }
-    if (tk_offset == 2) { return token * 256; }
-    if (tk_offset == 3) { return token * 4096; }
-    if (tk_offset == 4) { return token * 65536; }
-    if (tk_offset == 5) { return token * 1048576; }
-    if (tk_offset == 6) { return token * 16777216; }
-    if (tk_offset == 7) { return token * 268435456; }
+    if (tk_offset == 0) { return token << 0; }   /* No shift */
+    if (tk_offset == 1) { return token << 4; }   /* Shift by 4 bits */
+    if (tk_offset == 2) { return token << 8; }   /* Shift by 8 bits */
+    if (tk_offset == 3) { return token << 12; }  /* Shift by 12 bits */
+    if (tk_offset == 4) { return token << 16; }  /* Shift by 16 bits */
+    if (tk_offset == 5) { return token << 20; }  /* Shift by 20 bits */
+    if (tk_offset == 6) { return token << 24; }  /* Shift by 24 bits */
+    if (tk_offset == 7) { return token << 28; }  /* Shift by 28 bits */
     return 0;
 }
 
-/* Simulate data << (wdata_offset * 8) */
+/* Simulate data << (wdata_offset * 8) for 8-bit data bytes */
 fun data_shift_left(1 data, 1 wdata_offset) {
-    if (wdata_offset == 0) { return data; }
-    if (wdata_offset == 1) { return data * 256; }
-    if (wdata_offset == 2) { return data * 65536; }
-    if (wdata_offset == 3) { return data * 16777216; }
+    if (wdata_offset == 0) { return data << 0; }   /* No shift */
+    if (wdata_offset == 1) { return data << 8; }   /* Shift by 8 bits */
+    if (wdata_offset == 2) { return data << 16; }  /* Shift by 16 bits */
+    if (wdata_offset == 3) { return data << 24; }  /* Shift by 24 bits */
     return 0;
 }
 
@@ -524,20 +475,38 @@ fun i2c_load_tokens() {
         }
 
         /* Pack token into register */
+        /* NOTE: Shift by variable doesn't work in Pancake, but shift by literal does */
         if (tk_offset < 8) {
             /* Pack into tk_list0 */
             var tk_list0 = 0;
             !ld32 tk_list0, tk_list0_addr;
-            var 1 shifted_token = token_shift_left(meson_token, tk_offset);
-            tk_list0 = tk_list0 | shifted_token;
+
+            /* Use conditional with literal shifts instead of variable shift */
+            if (tk_offset == 0) { tk_list0 = tk_list0 | (meson_token << 0); }
+            if (tk_offset == 1) { tk_list0 = tk_list0 | (meson_token << 4); }
+            if (tk_offset == 2) { tk_list0 = tk_list0 | (meson_token << 8); }
+            if (tk_offset == 3) { tk_list0 = tk_list0 | (meson_token << 12); }
+            if (tk_offset == 4) { tk_list0 = tk_list0 | (meson_token << 16); }
+            if (tk_offset == 5) { tk_list0 = tk_list0 | (meson_token << 20); }
+            if (tk_offset == 6) { tk_list0 = tk_list0 | (meson_token << 24); }
+            if (tk_offset == 7) { tk_list0 = tk_list0 | (meson_token << 28); }
+
             !st32 tk_list0_addr, tk_list0;
         } else {
             /* Pack into tk_list1 */
             var tk_list1 = 0;
             !ld32 tk_list1, tk_list1_addr;
             var offset_mod8 = tk_offset - 8;
-            var 1 shifted_token = token_shift_left(meson_token, offset_mod8);
-            tk_list1 = tk_list1 | shifted_token;
+
+            if (offset_mod8 == 0) { tk_list1 = tk_list1 | (meson_token << 0); }
+            if (offset_mod8 == 1) { tk_list1 = tk_list1 | (meson_token << 4); }
+            if (offset_mod8 == 2) { tk_list1 = tk_list1 | (meson_token << 8); }
+            if (offset_mod8 == 3) { tk_list1 = tk_list1 | (meson_token << 12); }
+            if (offset_mod8 == 4) { tk_list1 = tk_list1 | (meson_token << 16); }
+            if (offset_mod8 == 5) { tk_list1 = tk_list1 | (meson_token << 20); }
+            if (offset_mod8 == 6) { tk_list1 = tk_list1 | (meson_token << 24); }
+            if (offset_mod8 == 7) { tk_list1 = tk_list1 | (meson_token << 28); }
+
             !st32 tk_list1_addr, tk_list1;
         }
         tk_offset = tk_offset + 1;
@@ -550,6 +519,7 @@ fun i2c_load_tokens() {
                 var wdata0 = 0;
                 !ld32 wdata0, wdata0_addr;
                 var 1 shifted_data = data_shift_left(data, wdata_offset);
+                // var shifted_data = data << wdata_offset;
                 wdata0 = wdata0 | shifted_data;
                 !st32 wdata0_addr, wdata0;
             } else {
@@ -662,7 +632,8 @@ export fun notified(1 ch) {
         handle_request(); /* Call pancake implementation */
     } else {
         if (ch == irq_ch_0) {
-            handle_response();  /* Call pancake implementation */
+            // @handle_response(0,0,0,0);  /* Call pancake implementation */
+            handle_response();
             microkit_deferred_irq_ack(ch)
         } else {
             if (ch == irq_ch_1) {
