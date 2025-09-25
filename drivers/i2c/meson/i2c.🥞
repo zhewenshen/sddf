@@ -1,24 +1,43 @@
-/* Memory access helpers */
-#define IRQ_CH_0                pnk_mem(1)
-#define IRQ_CH_1                pnk_mem(2)
-#define VIRT_CH                 pnk_mem(3)
+/* Global variables for frequently modified state */
+var 1 g_curr_data = 0;
+var 1 g_curr_request_len = 0;
+var 1 g_curr_response_len = 0;
+var 1 g_remaining = 0;
+var 1 g_notified = 0;
+var 1 g_rw_remaining = 0;
+var 1 g_data_direction = 0;
+var 1 g_addr = 0;
 
-/* I2C State structure in pancake memory */
-#define I2C_STATE_PTR           pnk_mem_ptr(6)
-#define I2C_CURR_DATA           pnk_mem(6)
-#define I2C_CURR_REQUEST_LEN    pnk_mem(7)
-#define I2C_CURR_RESPONSE_LEN   pnk_mem(8)
-#define I2C_REMAINING           pnk_mem(9)
-#define I2C_NOTIFIED            pnk_mem(10)
-#define I2C_RW_REMAINING        pnk_mem(11)
-#define I2C_DATA_DIRECTION      pnk_mem(12)
-#define I2C_ADDR                pnk_mem(13)
+/* Global queue pointers - set once during init */
+var 1 g_request_queue_ptr = 0;
+var 1 g_response_queue_ptr = 0;
+var 1 g_data_region_base = 0;  /* Data region base address */
 
-/* Queue handle in pancake memory */
-#define QUEUE_HANDLE_PTR        pnk_mem_ptr(4)
+/* Global hardware register addresses - set once during init */
+var 1 g_ctl_reg_addr = 0;      /* Control register */
+var 1 g_addr_reg_addr = 0;     /* Address register */
+var 1 g_tk_list0_addr = 0;     /* Token list 0 */
+var 1 g_tk_list1_addr = 0;     /* Token list 1 */
+var 1 g_wdata0_addr = 0;       /* Write data 0 */
+var 1 g_wdata1_addr = 0;       /* Write data 1 */
+var 1 g_rdata0_addr = 0;       /* Read data 0 */
+var 1 g_rdata1_addr = 0;       /* Read data 1 */
 
-/* Hardware register base */
-#define I2C_REG                 pnk_mem(0)
+
+var 1 virt = pnk_mem(3);
+var 1 irq0 = pnk_mem(1);
+var 1 irq1 = pnk_mem(2);
+
+
+/* I2C State macros */
+#define I2C_CURR_DATA           g_curr_data
+#define I2C_CURR_REQUEST_LEN    g_curr_request_len
+#define I2C_CURR_RESPONSE_LEN   g_curr_response_len
+#define I2C_REMAINING           g_remaining
+#define I2C_NOTIFIED            g_notified
+#define I2C_RW_REMAINING        g_rw_remaining
+#define I2C_DATA_DIRECTION      g_data_direction
+#define I2C_ADDR                g_addr
 
 /* Constants */
 #define RESPONSE_ERR            0
@@ -51,10 +70,28 @@
 #define NUM_QUEUE_ENTRIES       32
 
 
-var 1 irq_ch_0 = IRQ_CH_0;
-var 1 irq_ch_1 = IRQ_CH_1;
-var 1 virt_ch = VIRT_CH;
-var 1 i2c_reg = I2C_REG;
+/* Initialize queue and register pointers during init */
+fun init_globals() {
+    /* Get queue pointers and data region base once */
+    var handle_ptr = pnk_mem_ptr(4);
+    !ldw g_request_queue_ptr, handle_ptr;
+    var response_ptr_addr = handle_ptr + 8;
+    !ldw g_response_queue_ptr, response_ptr_addr;
+    g_data_region_base = pnk_mem(21);
+
+    /* Pre-calculate hardware register addresses */
+    var base_reg = pnk_mem(0);
+    g_ctl_reg_addr = base_reg + 0;
+    g_addr_reg_addr = base_reg + 4;
+    g_tk_list0_addr = base_reg + 8;
+    g_tk_list1_addr = base_reg + 12;
+    g_wdata0_addr = base_reg + 16;
+    g_wdata1_addr = base_reg + 20;
+    g_rdata0_addr = base_reg + 24;
+    g_rdata1_addr = base_reg + 28;
+
+    return 0;
+}
 
 /* Queue memory access helpers */
 /* Queue structure: tail(4) + head(4) + entries(NUM_QUEUE_ENTRIES * 24) */
@@ -179,12 +216,11 @@ fun i2c_enqueue_pnk(1 queue_ptr, 1 bus_address, 1 offset, 1 len) {
     return 0; /* success */
 }
 
-/* Dequeue from queue - stores results in pancake memory slots 17-20 */
+/* Dequeue from queue - returns (error, bus_address, offset, len) */
 fun i2c_dequeue_pnk(1 queue_ptr) {
     var 1 is_empty = i2c_queue_empty_pnk(queue_ptr);
     if (is_empty) {
-        st pnk_mem_ptr(17), 1; /* error */
-        return 1;
+        return <1, 0, 0, 0>; /* error = 1, rest = 0 */
     }
 
     var 1 head = get_queue_head(queue_ptr);
@@ -198,37 +234,14 @@ fun i2c_dequeue_pnk(1 queue_ptr) {
     var new_head = head + 1;
     set_queue_head(queue_ptr, new_head);
 
-    /* Store results in pancake memory */
-    st pnk_mem_ptr(17), 0;           /* error = 0 (success) */
-    st pnk_mem_ptr(18), bus_address; /* bus_address */
-    st pnk_mem_ptr(19), offset;      /* offset */
-    st pnk_mem_ptr(20), len;         /* len */
-
-    return 0; /* success */
-}
-
-/* Get queue pointers from handle */
-fun get_request_queue_ptr() {
-    var handle_ptr = pnk_mem_ptr(4); /* queue_handle is at slot 4 */
-    var request_ptr = 0;
-    !ldw request_ptr, handle_ptr;   /* request is first field in handle */
-    return request_ptr;
-}
-
-fun get_response_queue_ptr() {
-    var handle_ptr = pnk_mem_ptr(4); /* queue_handle is at slot 4 */
-    var response_ptr_addr = handle_ptr + 8; /* response is second field */
-    var response_ptr = 0;
-    !ldw response_ptr, response_ptr_addr;
-    return response_ptr;
+    return <0, bus_address, offset, len>; /* success with values */
 }
 
 
 /* Helper function to get error status from i2c control register */
 fun get_i2c_error() {
-    var ctl_addr = i2c_reg + 0; /* ctl register offset is 0 */
     var ctl = 0;
-    !ld32 ctl, ctl_addr;
+    !ld32 ctl, g_ctl_reg_addr;
 
     var err = ctl & (1 << 3);           /* bit 3 -> set if error */
     var bytes_read = (ctl >> 8) & 15;   /* bits 8-11 -> number of bytes to read (0xF = 15) */
@@ -239,11 +252,10 @@ fun get_i2c_error() {
 
 /* Function to halt i2c operation */
 fun i2c_halt() {
-    var ctl_addr = i2c_reg + 0;
     var ctl = 0;
-    !ld32 ctl, ctl_addr;
+    !ld32 ctl, g_ctl_reg_addr;
     ctl = ctl & 4294967294;  /* clear start bit (bit 0) - 0xFFFFFFFE = 4294967294 */
-    !st32 ctl_addr, ctl;
+    !st32 g_ctl_reg_addr, ctl;
     return 0;
 }
 
@@ -254,8 +266,6 @@ fun handle_response() {
     var bytes_read = error_info.1;
     var curr_token = error_info.2;
 
-    /* Store bytes_read in pancake memory for FFI function */
-    st pnk_mem_ptr(23), bytes_read;
 
     /* Get return buffer pointer */
     var return_buffer = I2C_CURR_DATA;
@@ -283,33 +293,25 @@ fun handle_response() {
 
             if (bytes_copied < 4) {
                 /* Read directly from rdata0 register byte by byte */
-                /* rdata0 is at offset 24 from base, each byte at offset 0,1,2,3 within the 32-bit register */
-                var byte_addr = i2c_reg + 24 + bytes_copied;
+                var byte_addr = g_rdata0_addr + bytes_copied;
                 !ld8 value, byte_addr;
             } else {
                 if (bytes_copied < 8) {
-                    /* Read from rdata1 register (offset 28) */
+                    /* Read from rdata1 register */
                     /* Bytes 4-7 map to offsets 0-3 within rdata1 */
-                    var byte_addr = i2c_reg + 28 + (bytes_copied - 4);
+                    var byte_addr = g_rdata1_addr + (bytes_copied - 4);
                     !ld8 value, byte_addr;
                 }
             }
 
-            /* FFI version - commented out but kept for potential revert */
-            /* Store byte index in pancake memory for FFI */
-            // st pnk_mem_ptr(25), bytes_copied;
-            /* Call FFI to extract the value from register */
-            // @get_read_byte(0,0,0,0);
-            /* Get the extracted value from scratch slot */
-            // var value = pnk_mem(26);
 
             /* Store value in return buffer */
             var data_addr = return_buffer + index;
             !st8 data_addr, value;
 
             /* Update response length */
-            var new_resp_len = I2C_CURR_RESPONSE_LEN + 1;
-            st pnk_mem_ptr(8), new_resp_len;
+            var new_resp_len = g_curr_response_len + 1;
+            g_curr_response_len = new_resp_len;
 
             bytes_copied = bytes_copied + 1;
         }
@@ -325,22 +327,21 @@ fun handle_response() {
     var remaining = I2C_REMAINING;
     if (write_error || remaining == 0) {
         /* Enqueue response using pancake implementation */
-        var 1 resp_queue_ptr = get_response_queue_ptr();
-        var bus_address = I2C_ADDR;
-        var curr_data = I2C_CURR_DATA;
-        var base_data_addr = pnk_mem(21); /* Data region base */
-        var offset = curr_data - base_data_addr;
+        var resp_queue_ptr = g_response_queue_ptr;
+        var bus_address = g_addr;
+        var curr_data = g_curr_data;
+        var offset = curr_data - g_data_region_base;
         var response_len = I2C_CURR_RESPONSE_LEN + RESPONSE_DATA_OFFSET;
         i2c_enqueue_pnk(resp_queue_ptr, bus_address, offset, response_len);
 
         /* Reset driver state */
-        st pnk_mem_ptr(8), 0;  /* curr_response_len = 0 */
-        st pnk_mem_ptr(6), 0;  /* curr_data = 0 */
-        st pnk_mem_ptr(7), 0;  /* curr_request_len = 0 */
-        st pnk_mem_ptr(9), 0;  /* remaining = 0 */
-        st pnk_mem_ptr(13), 0; /* addr = 0 */
+        g_curr_response_len = 0;
+        g_curr_data = 0;
+        g_curr_request_len = 0;
+        g_remaining = 0;
+        g_addr = 0;
 
-        @microkit_notify_virt(0,0,0,0);
+        microkit_notify(virt)
         i2c_halt();
     }
 
@@ -383,38 +384,42 @@ fun data_shift_left(1 data, 1 wdata_offset) {
     return 0;
 }
 
-/* Token conversion helper - uses FFI */
+/* Token conversion helper - native Pancake implementation */
 fun convert_token(1 token) {
-    st pnk_mem_ptr(14), token;  /* Store token for FFI */
-    @i2c_token_convert(0,0,0,0);
-    var result = pnk_mem(15);   /* Get result from FFI */
-    return result;
+    /* Convert I2C_TOKEN_* to MESON_I2C_TOKEN_* */
+    if (token == 0) { return MESON_I2C_TOKEN_END; }        /* I2C_TOKEN_END */
+    if (token == 1) { return MESON_I2C_TOKEN_START; }      /* I2C_TOKEN_START */
+    if (token == 2) {                                      /* I2C_TOKEN_ADDR_WRITE */
+        g_data_direction = DATA_DIRECTION_WRITE;           /* Set data direction */
+        return MESON_I2C_TOKEN_ADDR_WRITE;
+    }
+    if (token == 3) {                                      /* I2C_TOKEN_ADDR_READ */
+        g_data_direction = DATA_DIRECTION_READ;            /* Set data direction */
+        return MESON_I2C_TOKEN_ADDR_READ;
+    }
+    if (token == 4) { return MESON_I2C_TOKEN_STOP; }       /* I2C_TOKEN_STOP */
+    return MESON_I2C_TOKEN_END; /* Default/error case */
 }
 
 fun i2c_load_tokens() {
-    /* Get token buffer pointer */
-    var tokens = I2C_CURR_DATA;
-    var remaining = I2C_REMAINING;
-    var curr_request_len = I2C_CURR_REQUEST_LEN;
+    /* Get token buffer pointer - use locals to avoid repeated global reads */
+    var tokens = g_curr_data;
+    var remaining = g_remaining;
+    var curr_request_len = g_curr_request_len;
 
     /* Load address into address register - clear bits 0-7 then set address */
-    var addr_reg_addr = i2c_reg + 4;
     var addr_reg = 0;
-    !ld32 addr_reg, addr_reg_addr;
+    !ld32 addr_reg, g_addr_reg_addr;
     addr_reg = addr_reg & 4294967040; /* ~0xFF = 4294967040 */
-    var device_addr = (I2C_ADDR & 127) * 2; /* (addr & 0x7f) << 1 */
+    var device_addr = (g_addr & 127) * 2; /* (addr & 0x7f) << 1 */
     addr_reg = addr_reg | device_addr;
-    !st32 addr_reg_addr, addr_reg;
+    !st32 g_addr_reg_addr, addr_reg;
 
     /* Clear token buffer registers */
-    var tk_list0_addr = i2c_reg + 8;
-    var tk_list1_addr = i2c_reg + 12;
-    var wdata0_addr = i2c_reg + 16;
-    var wdata1_addr = i2c_reg + 20;
-    !st32 tk_list0_addr, 0;
-    !st32 tk_list1_addr, 0;
-    !st32 wdata0_addr, 0;
-    !st32 wdata1_addr, 0;
+    !st32 g_tk_list0_addr, 0;
+    !st32 g_tk_list1_addr, 0;
+    !st32 g_wdata0_addr, 0;
+    !st32 g_wdata1_addr, 0;
 
     /* Offset variables */
     var tk_offset = 0;
@@ -427,7 +432,7 @@ fun i2c_load_tokens() {
         /* Discover next operation */
         var meson_token = 0;
         var data = 0;
-        var rw_remaining = I2C_RW_REMAINING;
+        var rw_remaining = g_rw_remaining;
 
         if (rw_remaining == 0) {
             /* Get meson_token if no read/write is in progress */
@@ -445,11 +450,11 @@ fun i2c_load_tokens() {
                 !ld8 buff_length, len_addr;
 
                 /* Set interface state */
-                st pnk_mem_ptr(11), buff_length; /* rw_remaining = buff_length */
+                g_rw_remaining = buff_length;
                 if (meson_token == MESON_I2C_TOKEN_ADDR_WRITE) {
-                    st pnk_mem_ptr(12), DATA_DIRECTION_WRITE; /* data_direction = WRITE */
+                    g_data_direction = DATA_DIRECTION_WRITE;
                 } else {
-                    st pnk_mem_ptr(12), DATA_DIRECTION_READ; /* data_direction = READ */
+                    g_data_direction = DATA_DIRECTION_READ;
                 }
 
                 /* Skip buffer length byte */
@@ -457,7 +462,7 @@ fun i2c_load_tokens() {
             }
         } else {
             /* We are in the middle of a read or write */
-            var data_direction = I2C_DATA_DIRECTION;
+            var data_direction = g_data_direction;
             if (rw_remaining == 1 && data_direction == DATA_DIRECTION_READ) {
                 /* Write data end on last byte of a read */
                 meson_token = MESON_I2C_TOKEN_DATA_END;
@@ -471,72 +476,54 @@ fun i2c_load_tokens() {
             }
             /* Decrement rw_remaining */
             var new_rw_remaining = rw_remaining - 1;
-            st pnk_mem_ptr(11), new_rw_remaining;
+            g_rw_remaining = new_rw_remaining;
         }
 
         /* Pack token into register */
         /* NOTE: Shift by variable doesn't work in Pancake, but shift by literal does */
         if (tk_offset < 8) {
-            /* Pack into tk_list0 */
+            /* Pack into tk_list0 using helper function */
             var tk_list0 = 0;
-            !ld32 tk_list0, tk_list0_addr;
-
-            /* Use conditional with literal shifts instead of variable shift */
-            if (tk_offset == 0) { tk_list0 = tk_list0 | (meson_token << 0); }
-            if (tk_offset == 1) { tk_list0 = tk_list0 | (meson_token << 4); }
-            if (tk_offset == 2) { tk_list0 = tk_list0 | (meson_token << 8); }
-            if (tk_offset == 3) { tk_list0 = tk_list0 | (meson_token << 12); }
-            if (tk_offset == 4) { tk_list0 = tk_list0 | (meson_token << 16); }
-            if (tk_offset == 5) { tk_list0 = tk_list0 | (meson_token << 20); }
-            if (tk_offset == 6) { tk_list0 = tk_list0 | (meson_token << 24); }
-            if (tk_offset == 7) { tk_list0 = tk_list0 | (meson_token << 28); }
-
-            !st32 tk_list0_addr, tk_list0;
+            !ld32 tk_list0, g_tk_list0_addr;
+            var 1 shifted_token = token_shift_left(meson_token, tk_offset);
+            tk_list0 = tk_list0 | shifted_token;
+            !st32 g_tk_list0_addr, tk_list0;
         } else {
-            /* Pack into tk_list1 */
+            /* Pack into tk_list1 using helper function */
             var tk_list1 = 0;
-            !ld32 tk_list1, tk_list1_addr;
+            !ld32 tk_list1, g_tk_list1_addr;
             var offset_mod8 = tk_offset - 8;
-
-            if (offset_mod8 == 0) { tk_list1 = tk_list1 | (meson_token << 0); }
-            if (offset_mod8 == 1) { tk_list1 = tk_list1 | (meson_token << 4); }
-            if (offset_mod8 == 2) { tk_list1 = tk_list1 | (meson_token << 8); }
-            if (offset_mod8 == 3) { tk_list1 = tk_list1 | (meson_token << 12); }
-            if (offset_mod8 == 4) { tk_list1 = tk_list1 | (meson_token << 16); }
-            if (offset_mod8 == 5) { tk_list1 = tk_list1 | (meson_token << 20); }
-            if (offset_mod8 == 6) { tk_list1 = tk_list1 | (meson_token << 24); }
-            if (offset_mod8 == 7) { tk_list1 = tk_list1 | (meson_token << 28); }
-
-            !st32 tk_list1_addr, tk_list1;
+            var 1 shifted_token = token_shift_left(meson_token, offset_mod8);
+            tk_list1 = tk_list1 | shifted_token;
+            !st32 g_tk_list1_addr, tk_list1;
         }
         tk_offset = tk_offset + 1;
 
         /* If data token and we are writing, load data into wbuf registers */
-        var data_direction = I2C_DATA_DIRECTION;
-        if (meson_token == MESON_I2C_TOKEN_DATA && data_direction == DATA_DIRECTION_WRITE) {
+        var data_direction_check = g_data_direction;
+        if (meson_token == MESON_I2C_TOKEN_DATA && data_direction_check == DATA_DIRECTION_WRITE) {
             if (wdata_offset < 4) {
                 /* Pack into wdata0 */
                 var wdata0 = 0;
-                !ld32 wdata0, wdata0_addr;
+                !ld32 wdata0, g_wdata0_addr;
                 var 1 shifted_data = data_shift_left(data, wdata_offset);
-                // var shifted_data = data << wdata_offset;
                 wdata0 = wdata0 | shifted_data;
-                !st32 wdata0_addr, wdata0;
+                !st32 g_wdata0_addr, wdata0;
             } else {
                 /* Pack into wdata1 */
                 var wdata1 = 0;
-                !ld32 wdata1, wdata1_addr;
+                !ld32 wdata1, g_wdata1_addr;
                 var offset_minus4 = wdata_offset - 4;
                 var 1 shifted_data = data_shift_left(data, offset_minus4);
                 wdata1 = wdata1 | shifted_data;
-                !st32 wdata1_addr, wdata1;
+                !st32 g_wdata1_addr, wdata1;
             }
             wdata_offset = wdata_offset + 1;
         }
 
         /* If data token and we are reading, increment counter of rdata */
         if ((meson_token == MESON_I2C_TOKEN_DATA || meson_token == MESON_I2C_TOKEN_DATA_END)
-            && data_direction == DATA_DIRECTION_READ) {
+            && data_direction_check == DATA_DIRECTION_READ) {
             rdata_offset = rdata_offset + 1;
         }
 
@@ -545,7 +532,7 @@ fun i2c_load_tokens() {
 
     /* Update remaining tokens indicator */
     var new_remaining = curr_request_len - request_data_offset;
-    st pnk_mem_ptr(9), new_remaining; /* remaining = curr_request_len - request_data_offset */
+    g_remaining = new_remaining;
 
     /* Start list processor */
     i2c_start();
@@ -555,37 +542,35 @@ fun i2c_load_tokens() {
 
 /* Start I2C list processor */
 fun i2c_start() {
-    var ctl_addr = i2c_reg + 0;
     var ctl = 0;
-    !ld32 ctl, ctl_addr;
+    !ld32 ctl, g_ctl_reg_addr;
     ctl = ctl & 4294967294; /* clear bit 0 */
-    !st32 ctl_addr, ctl;
+    !st32 g_ctl_reg_addr, ctl;
     ctl = ctl | 1; /* set bit 0 */
-    !st32 ctl_addr, ctl;
+    !st32 g_ctl_reg_addr, ctl;
     return 0;
 }
 
 /* Handle incoming I2C requests */
 fun handle_request() {
-    /* Get request queue pointer and check if empty */
-    var 1 req_queue_ptr = get_request_queue_ptr();
-    var 1 queue_empty = i2c_queue_empty_pnk(req_queue_ptr);
+    /* Check if request queue is empty */
+    var 1 queue_empty = i2c_queue_empty_pnk(g_request_queue_ptr);
 
     if (queue_empty == 0) {  /* Queue is not empty */
         /* Check if this interface is busy */
         var curr_data = I2C_CURR_DATA;
         if (curr_data != 0) {
             /* Driver busy - defer notification until later */
-            st pnk_mem_ptr(10), 1; /* notified = 1 */
+            g_notified = 1;
             return 0;
         }
 
         /* Begin work - extract the request */
-        i2c_dequeue_pnk(req_queue_ptr);
-        var err = pnk_mem(17);
-        var bus_address = pnk_mem(18);
-        var offset = pnk_mem(19);
-        var size = pnk_mem(20);
+        var 4 dequeue_result = i2c_dequeue_pnk(g_request_queue_ptr);
+        var err = dequeue_result.0;
+        var bus_address = dequeue_result.1;
+        var offset = dequeue_result.2;
+        var size = dequeue_result.3;
 
         if (err != 0) {
             /* Failed to dequeue request */
@@ -605,42 +590,41 @@ fun handle_request() {
         /* Set up driver state for new request */
         /* curr_data = base_addr + offset */
         /* Note: In pancake mode, we store the full address as uint64_t */
-        var base_data_addr = pnk_mem(21); /* Data region base stored during init */
-        var curr_data_addr = base_data_addr + offset;
-        st pnk_mem_ptr(6), curr_data_addr;  /* curr_data */
-        st pnk_mem_ptr(13), bus_address;    /* addr */
-        st pnk_mem_ptr(7), size;            /* curr_request_len */
-        st pnk_mem_ptr(9), size;            /* remaining */
-        st pnk_mem_ptr(10), 0;              /* notified = 0 */
+        var curr_data_addr = g_data_region_base + offset;
+        g_curr_data = curr_data_addr;
+        g_addr = bus_address;
+        g_curr_request_len = size;
+        g_remaining = size;
+        g_notified = 0;
 
         /* Load tokens and start I2C operation */
         i2c_load_tokens();
     } else {
         /* No work available - clear notified flag */
-        st pnk_mem_ptr(10), 0; /* notified = 0 */
+        g_notified = 0;
     }
 
     return 0;
 }
 
 fun main() {
+    init_globals();
     return 0;
 }
 
+
 export fun notified(1 ch) {
-    if (ch == virt_ch) {
-        handle_request(); /* Call pancake implementation */
+    if (ch == virt) {
+        handle_request();
     } else {
-        if (ch == irq_ch_0) {
-            // @handle_response(0,0,0,0);  /* Call pancake implementation */
+        if (ch == irq0) {
             handle_response();
             microkit_deferred_irq_ack(ch)
         } else {
-            if (ch == irq_ch_1) {
-                @handle_response_timeout(0,0,0,0);
+            if (ch == irq1) {
                 microkit_deferred_irq_ack(ch)
             } else {
-                // error
+                /* Unexpected channel - ignore */
             }
         }
     }
