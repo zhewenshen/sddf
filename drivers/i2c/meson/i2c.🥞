@@ -23,11 +23,9 @@ var 1 g_wdata1_addr = 0;       /* Write data 1 */
 var 1 g_rdata0_addr = 0;       /* Read data 0 */
 var 1 g_rdata1_addr = 0;       /* Read data 1 */
 
-
 var 1 virt = pnk_mem(3);
 var 1 irq0 = pnk_mem(1);
 var 1 irq1 = pnk_mem(2);
-
 
 /* I2C State macros */
 #define I2C_CURR_DATA           g_curr_data
@@ -68,7 +66,6 @@ var 1 irq1 = pnk_mem(2);
 
 /* Queue constants */
 #define NUM_QUEUE_ENTRIES       32
-
 
 /* Initialize queue and register pointers during init */
 fun init_globals() {

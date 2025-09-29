@@ -68,7 +68,9 @@ volatile uintptr_t uart_base;
 #error "unknown platform reg-io-width"
 #endif
 
-#ifndef PANCAKE_SERIAL
+#ifdef PANCAKE_SERIAL
+// Pancake-specific functions are defined in Pancake code
+#else
 static inline bool tx_fifo_not_full(void)
 {
 #if UART_DW_APB_REGISTERS

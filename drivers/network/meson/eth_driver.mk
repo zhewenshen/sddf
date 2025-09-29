@@ -36,8 +36,8 @@ meson/ethernet.o: ${ETHERNET_DRIVER_DIR}/ethernet.c ${CHECK_NETDRV_FLAGS_MD5}
 ${BUILD_DIR}/ethernet_pnk.o: ${BUILD_DIR}/ethernet_pnk.S
 	$(CC) -c -mcpu=$(CPU) -target aarch64-none-elf $< -o $@
 else
-eth_driver.elf: network/meson/ethernet.o
-	$(LD) $(LDFLAGS) $< $(LIBS) -o $@
+eth_driver.elf: network/meson/ethernet.o libsddf_util_debug.a
+	$(LD) $(LDFLAGS) $^ $(LIBS) -o $@
 endif
 
 network/meson/ethernet.o: ${ETHERNET_DRIVER_DIR}/ethernet.c ${CHECK_NETDRV_FLAGS_MD5}

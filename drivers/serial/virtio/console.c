@@ -82,7 +82,15 @@ serial_queue_handle_t tx_queue_handle;
 #define VIRTIO_SERIAL_RX_QUEUE 0
 #define VIRTIO_SERIAL_TX_QUEUE 1
 
-#ifndef PANCAKE_SERIAL
+#ifdef PANCAKE_SERIAL
+// Pancake-specific variables are defined in Pancake code
+#else
+/*
+ * The 'hardware' ring buffer region is used to store the virtIO virtqs
+ */
+uintptr_t hw_ring_buffer_vaddr;
+uintptr_t hw_ring_buffer_paddr;
+
 serial_queue_t *rx_queue;
 serial_queue_t *tx_queue;
 
@@ -123,7 +131,9 @@ int tx_last_desc_idx = 0;
 
 volatile virtio_mmio_regs_t *uart_regs;
 
-#ifndef PANCAKE_SERIAL
+#ifdef PANCAKE_SERIAL
+// Pancake-specific functions are defined in Pancake code
+#else
 static inline bool virtio_avail_full_rx(struct virtq *virtq)
 {
     return rx_last_desc_idx >= rx_virtq.num;
@@ -525,8 +535,11 @@ void init()
 
     cml_main();
 #else
-    uintptr_t hw_ring_buffer_vaddr = (uintptr_t)device_resources.regions[1].region.vaddr;
-    uintptr_t hw_ring_buffer_paddr = device_resources.regions[1].io_addr;
+    /* Ack any IRQs that were delivered before the driver started. */
+    sddf_irq_ack(device_resources.irqs[0].id);
+
+    hw_ring_buffer_vaddr = (uintptr_t)device_resources.regions[1].region.vaddr;
+    hw_ring_buffer_paddr = device_resources.regions[1].io_addr;
     virtio_rx_char = device_resources.regions[2].region.vaddr;
     virtio_rx_char_paddr = device_resources.regions[2].io_addr;
     virtio_tx_char = device_resources.regions[3].region.vaddr;
@@ -543,12 +556,12 @@ void init()
         serial_queue_init(&rx_queue_handle, config.rx.queue.vaddr, config.rx.data.size, config.rx.data.vaddr);
     }
     serial_queue_init(&tx_queue_handle, config.tx.queue.vaddr, config.tx.data.size, config.tx.data.vaddr);
-
-    microkit_irq_ack(device_resources.irqs[0].id);
 #endif
 }
 
-#ifndef PANCAKE_SERIAL
+#ifdef PANCAKE_SERIAL
+extern void notified(microkit_channel ch);
+#else
 void notified(sddf_channel ch)
 {
     if (ch == device_resources.irqs[0].id) {

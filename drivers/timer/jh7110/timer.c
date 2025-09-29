@@ -30,7 +30,9 @@
 
 #define CLIENT_CH_START 2
 #define MAX_TIMEOUTS 6
+#ifdef PANCAKE_TIMER
 #define TIMEOUT_BASE 10
+#endif
 
 #define STARFIVE_TIMER_MAX_TICKS UINT32_MAX
 #define STARFIVE_TIMER_MODE_CONTINUOUS 0
@@ -100,6 +102,8 @@ void cml_err(int arg, char* filename, char* funcname, int lineno) {
     }
     cml_exit(arg);
 }
+
+// Pancake-specific functions are defined in Pancake code
 #else
 static uint64_t timeouts[MAX_TIMEOUTS];
 
@@ -152,9 +156,9 @@ static void process_timeouts(uint64_t curr_time)
         uint64_t ticks_remainder = (ns % NS_IN_S) * STARFIVE_TIMER_TICKS_PER_SECOND / NS_IN_S;
         uint64_t num_ticks = ticks_whole_seconds + ticks_remainder;
 
-        assert(num_ticks <= STARFIVE_TIMER_MAX_TICKS);
         if (num_ticks > STARFIVE_TIMER_MAX_TICKS) {
-            sddf_dprintf("ERROR: num_ticks: 0x%lx\n", num_ticks);
+            /* truncate num_ticks to maximum timeout, will use multiple interrupts to process the requested timeout. */
+            num_ticks = STARFIVE_TIMER_MAX_TICKS;
         }
 
         timeout_regs->load = num_ticks;

@@ -24,28 +24,28 @@
 
 fun rx_return() {
     var transferred = false;
-    
+
     var current_client = CURRENT_CLIENT;
-    
+
     var drv_queue_ptr = pnk_mem(10);
     var drv_capacity = pnk_mem(11);
     var drv_data_ptr = pnk_mem(12);
-    
+
     var cli_offset = CLI_QUEUE_BASE + current_client * 3;
     var cli_queue_ptr = pnk_mem(cli_offset);
     var cli_capacity = pnk_mem(cli_offset + 1);
     var cli_data_ptr = pnk_mem(cli_offset + 2);
-    
+
     var 1 local_tail = serial_queue_get_tail(cli_queue_ptr);
-    
+
     while (true) {
         var 1 drv_empty = serial_queue_is_empty(drv_queue_ptr);
         if (drv_empty) {
             break;
         }
-        
+
         var 1 c = serial_queue_dequeue_char(drv_queue_ptr, drv_capacity, drv_data_ptr);
-        
+
         var current_mode = CURRENT_MODE;
         if (current_mode == NORMAL) {
             if (c == SERIAL_SWITCH_CHAR) {
@@ -54,7 +54,7 @@ fun rx_return() {
             }
             var 1 cli_head = serial_queue_get_head(cli_queue_ptr);
             var cli_used = local_tail - cli_head;
-            
+
             if (cli_used < cli_capacity) {
                 var cli_pos = local_tail & (cli_capacity - 1);
                 !st8 cli_data_ptr + cli_pos, c;
@@ -68,10 +68,10 @@ fun rx_return() {
                 var next_client_index = NEXT_CLIENT_INDEX;
                 var next_client_addr = @base + 3 * @biw;
                 !st8 next_client_addr + next_client_index, c;
-                
+
                 var addr = @base + 2 * @biw;
                 !stw addr, next_client_index + 1;
-                
+
                 var addr = @base + 0 * @biw;
                 !stw addr, NUMBER;
             } else {
@@ -97,42 +97,42 @@ fun rx_return() {
                 @simple_atoi(next_client_addr, next_client_index, result_addr, 4);
                 var input_number = 0;
                 !ld32 input_number, result_addr;
-                
+
                 if (input_number >= 0 && input_number < 2) {
                     if (transferred) {
                         serial_queue_set_tail(cli_queue_ptr, local_tail);
                         var ch = current_client + 1;
                         microkit_notify(ch)
                     }
-                    
+
                     var addr = @base + 1 * @biw;
                     !stw addr, input_number;
-                    
+
                     current_client = input_number;
                     cli_offset = CLI_QUEUE_BASE + current_client * 3;
                     cli_queue_ptr = pnk_mem(cli_offset);
                     cli_capacity = pnk_mem(cli_offset + 1);
                     cli_data_ptr = pnk_mem(cli_offset + 2);
-                    
+
                     local_tail = serial_queue_get_tail(cli_queue_ptr);
                     transferred = false;
                 }
                 @reset_state(0, 0, 0, 0);
             }
-            
+
             if (c != SERIAL_TERMINATE_CHAR && c >= 48 && c <= 57) {
                 var next_client_index = NEXT_CLIENT_INDEX;
-                if (next_client_index < 4) { // MAX_CLI_BASE_10
+                if (next_client_index < 4) {
                     var next_client_addr = @base + 3 * @biw;
                     !st8 next_client_addr + next_client_index, c;
-                    
+
                     var addr = @base + 2 * @biw;
                     !stw addr, next_client_index + 1;
                 } else {
                     @reset_state(0, 0, 0, 0);
                 }
             }
-            
+
             if (c != SERIAL_TERMINATE_CHAR && (c < 48 || c > 57)) {
                 @reset_state(0, 0, 0, 0);
             }
@@ -140,9 +140,9 @@ fun rx_return() {
     }
 
     serial_queue_set_tail(cli_queue_ptr, local_tail);
-    
+
     var 1 drv_used = serial_queue_get_used(drv_queue_ptr);
-    
+
     if (drv_used < drv_capacity) {
         var 1 signal_required = serial_queue_require_signal(drv_queue_ptr);
         if (signal_required) {
@@ -150,13 +150,13 @@ fun rx_return() {
             microkit_notify(DRIVER_CH)
         }
     }
-    
+
     if (transferred) {
         var current_client = CURRENT_CLIENT;
         var ch = current_client + 1;
         microkit_notify(ch)
     }
-    
+
     return 0;
 }
 

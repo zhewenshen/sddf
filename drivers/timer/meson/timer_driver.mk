@@ -13,6 +13,7 @@
 
 TIMER_DIR := $(dir $(lastword $(MAKEFILE_LIST)))
 
+ifeq ($(PANCAKE_TIMER),1)
 # Set up clang target flags if using clang
 ifeq ($(CC),clang)
     CLANG_TARGET_FLAGS := -target aarch64-none-elf
@@ -28,13 +29,20 @@ timer_driver.elf: timer/timer_pnk.o timer/timer.o pancake_ffi.o libsddf_util_deb
 	$(LD) $(LDFLAGS) $^ $(LIBS) -o $@
 
 timer/timer.o: ${TIMER_DIR}/timer.c ${CHECK_FLAGS_BOARD_MD5} |timer
-	${CC} ${CFLAGS} -o $@ -c $<
+	${CC} ${CFLAGS} -DPANCAKE_TIMER -o $@ -c $<
 
 timer/timer_pnk.o: timer/timer_pnk.S
 	$(CC) $(CLANG_TARGET_FLAGS) -c -mcpu=$(CPU) $< -o $@
 
 timer/timer_pnk.S: $(TIMER_PNK) | timer
 	cat $(TIMER_PNK) | cpp -P | $(CAKE_COMPILER) --target=arm8 --pancake --main_return=true > $@
+else
+timer_driver.elf: timer/timer.o libsddf_util_debug.a
+	$(LD) $(LDFLAGS) $^ $(LIBS) -o $@
+
+timer/timer.o: ${TIMER_DIR}/timer.c ${CHECK_FLAGS_BOARD_MD5} |timer
+	${CC} ${CFLAGS} -o $@ -c $<
+endif
 
 timer:
 	mkdir -p timer

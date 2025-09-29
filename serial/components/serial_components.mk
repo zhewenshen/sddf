@@ -21,6 +21,8 @@ CHECK_SERIAL_FLAGS_MD5:=.serial_cflags-$(shell echo -- ${CFLAGS} ${CFLAGS_serial
 CC_IS_CLANG := $(shell $(CC) --version 2>/dev/null | grep -q clang && echo 1 || echo 0)
 
 ARCH := ${shell grep 'CONFIG_SEL4_ARCH  ' $(BOARD_DIR)/include/kernel/gen_config.h | cut -d' ' -f4}
+$(info [serial_components] Detected ARCH: $(ARCH) from $(BOARD_DIR))
+
 ifeq ($(ARCH),aarch64)
     PANCAKE_TARGET := arm8
     ifeq ($(CC_IS_CLANG),1)
@@ -35,7 +37,12 @@ else ifeq ($(ARCH),riscv64)
     else
         ASM_FLAGS := -march=rv64imafdc -mabi=lp64d
     endif
+else
+    $(warning [serial_components] Unknown ARCH '$(ARCH)', defaulting to arm8)
+    PANCAKE_TARGET := arm8
 endif
+
+$(info [serial_components] Using PANCAKE_TARGET: $(PANCAKE_TARGET))
 
 ${CHECK_SERIAL_FLAGS_MD5}:
 	-rm -f .serial_cflags-*

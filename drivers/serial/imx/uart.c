@@ -76,7 +76,9 @@ static void set_baud(long bps)
     uart_regs->bmr = bmr;
 }
 
-#ifndef PANCAKE_SERIAL_DRIVER
+#ifdef PANCAKE_SERIAL_DRIVER
+// Pancake-specific functions are defined in Pancake code
+#else
 static void tx_provide(void)
 {
     bool transferred = false;
@@ -86,8 +88,8 @@ static void tx_provide(void)
         transferred = true;
     }
 
-    /* If transmit fifo is full and there is data remaining to be sent, enable interrupt when fifo is no longer full */
-    if (uart_regs->ts & UART_TST_TX_FIFO_FULL && !serial_queue_empty(&tx_queue_handle, tx_queue_handle.queue->head)) {
+    /* If there is data remaining to be sent, enable interrupt when fifo is no longer full */
+    if (!serial_queue_empty(&tx_queue_handle, tx_queue_handle.queue->head)) {
         uart_regs->cr1 |= UART_CR1_TX_READY_INT;
     } else {
         uart_regs->cr1 &= ~UART_CR1_TX_READY_INT;
@@ -201,6 +203,9 @@ void init(void)
     assert(device_resources_check_magic(&device_resources));
     assert(device_resources.num_irqs == 1);
     assert(device_resources.num_regions == 1);
+
+    /* Ack any IRQs that were delivered before the driver started. */
+    microkit_irq_ack(device_resources.irqs[0].id);
 
 #ifdef PANCAKE_SERIAL_DRIVER
     init_pancake_mem();

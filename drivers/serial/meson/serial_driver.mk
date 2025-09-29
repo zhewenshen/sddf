@@ -10,9 +10,9 @@
 # in the system description file.
 
 serial_DRIVER_DIR := $(dir $(lastword $(MAKEFILE_LIST)))
-SERIAL_QUEUE_INCLUDE := ${SDDF}/include/sddf/serial
-PANCAKE_SERIAL_DRIVER := 1
+SERIAL_QUEUE_INCLUDE := ${SDDF}/include/microkit/os/sddf/serial
 
+ifeq ($(PANCAKE_SERIAL_DRIVER),1)
 DRIVER_PNK = ${UTIL}/util.🥞 \
 	${SERIAL_QUEUE_INCLUDE}/queue.🥞 \
 	${serial_DRIVER_DIR}/uart.🥞
@@ -35,7 +35,14 @@ serial_driver.elf: serial_pnk.o serial/meson/serial_driver.o pancake_ffi.o
 	$(LD) $(LDFLAGS) $^ $(LIBS) -o $@
 
 serial/meson/serial_driver.o: ${serial_DRIVER_DIR}/uart.c | serial/meson
+	$(CC) -c $(CFLAGS) -DPANCAKE_SERIAL_DRIVER -I${serial_DRIVER_DIR}/include -o $@ $<
+else
+serial_driver.elf: serial/meson/serial_driver.o libsddf_util_debug.a
+	$(LD) $(LDFLAGS) $^ $(LIBS) -o $@
+
+serial/meson/serial_driver.o: ${serial_DRIVER_DIR}/uart.c | serial/meson
 	$(CC) -c $(CFLAGS) -I${serial_DRIVER_DIR}/include -o $@ $<
+endif
 
 -include serial_driver.d
 

@@ -28,11 +28,7 @@ export fun protected(1 ch, 1 msginfo)
     
     if (label == SDDF_TIMER_GET_TIME) {
         // Get current time in nanoseconds
-        var 1 ticks = get_ticks();
-        
-        // Convert ticks to nanoseconds: ticks * NS_IN_S / TIMER_FREQ
-        // For 4MHz: ticks * 1000000000 / 4000000 = ticks * 250
-        var time_ns = ticks * 250;
+        var 1 time_ns = get_ticks_in_ns();
         
         // Set message register 0
         seL4_SetMR(0, time_ns)
@@ -45,14 +41,9 @@ export fun protected(1 ch, 1 msginfo)
         // Get timeout value from message register 0
         @seL4_GetMR_timer(0,0,0,0);
         var timeout_ns = SCRATCHPAD;
-        
-        var 1 curr_time = get_ticks();
-        
-        // Convert nanoseconds to ticks: timeout_ns * TIMER_FREQ / NS_IN_S
-        // For 4MHz: timeout_ns * 4000000 / 1000000000 = timeout_ns / 250
-        // Use approximation: timeout_ns >> 8 (divide by 256, close to 250)
-        var offset_ticks = timeout_ns >> 8;
-        var new_timeout = curr_time + offset_ticks;
+
+        var 1 curr_time = get_ticks_in_ns();
+        var new_timeout = curr_time + timeout_ns;
         
         // Update timeout in memory
         var timeout_addr = pnk_mem_ptr(TIMEOUT_BASE + ch);

@@ -86,62 +86,92 @@ fun i2c_dequeue_response(1 resp_queue_ptr)
   var {1,1,1,1} result = i2c_dequeue(resp_queue_ptr);
   return result;
 }
-var 1 irq_ch_0 = (lds 1 (@base + (1) * @biw));
-var 1 irq_ch_1 = (lds 1 (@base + (2) * @biw));
-var 1 virt_ch = (lds 1 (@base + (3) * @biw));
-var 1 i2c_reg = (lds 1 (@base + (0) * @biw));
+var 1 g_curr_data = 0;
+var 1 g_curr_request_len = 0;
+var 1 g_curr_response_len = 0;
+var 1 g_remaining = 0;
+var 1 g_notified = 0;
+var 1 g_rw_remaining = 0;
+var 1 g_data_direction = 0;
+var 1 g_addr = 0;
+var 1 g_request_queue_ptr = 0;
+var 1 g_response_queue_ptr = 0;
+var 1 g_ctl_reg_addr = 0;
+var 1 g_addr_reg_addr = 0;
+var 1 g_tk_list0_addr = 0;
+var 1 g_tk_list1_addr = 0;
+var 1 g_wdata0_addr = 0;
+var 1 g_wdata1_addr = 0;
+var 1 g_rdata0_addr = 0;
+var 1 g_rdata1_addr = 0;
+fun init_globals() {
+    var handle_ptr = (@base + (4) * @biw);
+    !ldw g_request_queue_ptr, handle_ptr;
+    var response_ptr_addr = handle_ptr + 8;
+    !ldw g_response_queue_ptr, response_ptr_addr;
+    var base_reg = (lds 1 (@base + (0) * @biw));
+    g_ctl_reg_addr = base_reg + 0;
+    g_addr_reg_addr = base_reg + 4;
+    g_tk_list0_addr = base_reg + 8;
+    g_tk_list1_addr = base_reg + 12;
+    g_wdata0_addr = base_reg + 16;
+    g_wdata1_addr = base_reg + 20;
+    g_rdata0_addr = base_reg + 24;
+    g_rdata1_addr = base_reg + 28;
+    return 0;
+}
 fun get_queue_head(1 queue_ptr) {
-    var head_addr = queue_ptr + 0;
+    var head_addr = queue_ptr + 4;
     var head = 0;
     !ld32 head, head_addr;
     return head;
 }
 fun set_queue_head(1 queue_ptr, 1 head) {
-    var head_addr = queue_ptr + 0;
+    var head_addr = queue_ptr + 4;
     !st32 head_addr, head;
     return 0;
 }
 fun get_queue_tail(1 queue_ptr) {
-    var tail_addr = queue_ptr + 4;
+    var tail_addr = queue_ptr + 0;
     var tail = 0;
     !ld32 tail, tail_addr;
     return tail;
 }
 fun set_queue_tail(1 queue_ptr, 1 tail) {
-    var tail_addr = queue_ptr + 4;
+    var tail_addr = queue_ptr + 0;
     !st32 tail_addr, tail;
     return 0;
 }
 fun get_entry_offset(1 queue_ptr, 1 index) {
-    var entry_base = queue_ptr + 8 + (index * 16);
+    var entry_base = queue_ptr + 8 + (index * 24);
     var offset = 0;
     !ldw offset, entry_base;
     return offset;
 }
 fun set_entry_offset(1 queue_ptr, 1 index, 1 offset) {
-    var entry_base = queue_ptr + 8 + (index * 16);
+    var entry_base = queue_ptr + 8 + (index * 24);
     !stw entry_base, offset;
     return 0;
 }
 fun get_entry_len(1 queue_ptr, 1 index) {
-    var entry_base = queue_ptr + 8 + (index * 16) + 8;
+    var entry_base = queue_ptr + 8 + (index * 24) + 8;
     var len = 0;
     !ld32 len, entry_base;
     return len;
 }
 fun set_entry_len(1 queue_ptr, 1 index, 1 len) {
-    var entry_base = queue_ptr + 8 + (index * 16) + 8;
+    var entry_base = queue_ptr + 8 + (index * 24) + 8;
     !st32 entry_base, len;
     return 0;
 }
 fun get_entry_bus_address(1 queue_ptr, 1 index) {
-    var entry_base = queue_ptr + 8 + (index * 16) + 12;
+    var entry_base = queue_ptr + 8 + (index * 24) + 16;
     var bus_address = 0;
     !ldw bus_address, entry_base;
     return bus_address;
 }
 fun set_entry_bus_address(1 queue_ptr, 1 index, 1 bus_address) {
-    var entry_base = queue_ptr + 8 + (index * 16) + 12;
+    var entry_base = queue_ptr + 8 + (index * 24) + 16;
     !stw entry_base, bus_address;
     return 0;
 }
@@ -173,7 +203,7 @@ fun i2c_enqueue_pnk(1 queue_ptr, 1 bus_address, 1 offset, 1 len) {
     set_entry_bus_address(queue_ptr, index, bus_address);
     set_entry_offset(queue_ptr, index, offset);
     set_entry_len(queue_ptr, index, len);
-    @THREAD_MEMORY_RELEASE(0,0,0,0);;
+    @THREAD_MEMORY_RELEASE(0,0,0,0);
     var new_tail = tail + 1;
     set_queue_tail(queue_ptr, new_tail);
     return 0;
@@ -181,107 +211,42 @@ fun i2c_enqueue_pnk(1 queue_ptr, 1 bus_address, 1 offset, 1 len) {
 fun i2c_dequeue_pnk(1 queue_ptr) {
     var 1 is_empty = i2c_queue_empty_pnk(queue_ptr);
     if (is_empty) {
-        st (@base + (17) * @biw), 1;
-        return 1;
+        return <1, 0, 0, 0>;
     }
     var 1 head = get_queue_head(queue_ptr);
     var index = head & (32 - 1);
     var 1 bus_address = get_entry_bus_address(queue_ptr, index);
     var 1 offset = get_entry_offset(queue_ptr, index);
     var 1 len = get_entry_len(queue_ptr, index);
-    @THREAD_MEMORY_RELEASE(0,0,0,0);;
+    @THREAD_MEMORY_RELEASE(0,0,0,0);
     var new_head = head + 1;
     set_queue_head(queue_ptr, new_head);
-    st (@base + (17) * @biw), 0;
-    st (@base + (18) * @biw), bus_address;
-    st (@base + (19) * @biw), offset;
-    st (@base + (20) * @biw), len;
-    return 0;
-}
-fun get_request_queue_ptr() {
-    var handle_ptr = (@base + (4) * @biw);
-    var request_ptr = 0;
-    !ldw request_ptr, handle_ptr;
-    return request_ptr;
-}
-fun get_response_queue_ptr() {
-    var handle_ptr = (@base + (4) * @biw);
-    var response_ptr_addr = handle_ptr + 8;
-    var response_ptr = 0;
-    !ldw response_ptr, response_ptr_addr;
-    return response_ptr;
-}
-fun extract_bytes_read(1 masked_val) {
-    if (masked_val == 0) { return 0; }
-    if (masked_val == 256) { return 1; }
-    if (masked_val == 512) { return 2; }
-    if (masked_val == 768) { return 3; }
-    if (masked_val == 1024) { return 4; }
-    if (masked_val == 1280) { return 5; }
-    if (masked_val == 1536) { return 6; }
-    if (masked_val == 1792) { return 7; }
-    if (masked_val == 2048) { return 8; }
-    if (masked_val == 2304) { return 9; }
-    if (masked_val == 2560) { return 10; }
-    if (masked_val == 2816) { return 11; }
-    if (masked_val == 3072) { return 12; }
-    if (masked_val == 3328) { return 13; }
-    if (masked_val == 3584) { return 14; }
-    if (masked_val == 3840) { return 15; }
-    return 0;
-}
-fun extract_curr_token(1 masked_val) {
-    if (masked_val == 0) { return 0; }
-    if (masked_val == 16) { return 1; }
-    if (masked_val == 32) { return 2; }
-    if (masked_val == 48) { return 3; }
-    if (masked_val == 64) { return 4; }
-    if (masked_val == 80) { return 5; }
-    if (masked_val == 96) { return 6; }
-    if (masked_val == 112) { return 7; }
-    if (masked_val == 128) { return 8; }
-    if (masked_val == 144) { return 9; }
-    if (masked_val == 160) { return 10; }
-    if (masked_val == 176) { return 11; }
-    if (masked_val == 192) { return 12; }
-    if (masked_val == 208) { return 13; }
-    if (masked_val == 224) { return 14; }
-    if (masked_val == 240) { return 15; }
-    return 0;
+    return <0, bus_address, offset, len>;
 }
 fun get_i2c_error() {
-    var ctl_addr = i2c_reg + 0;
     var ctl = 0;
-    !ld32 ctl, ctl_addr;
+    !ld32 ctl, g_ctl_reg_addr;
     var err = ctl & (1 << 3);
-    var bytes_read_masked = ctl & 3840;
-    var curr_token_masked = ctl & 240;
-    var 1 bytes_read = extract_bytes_read(bytes_read_masked);
-    var 1 curr_token = extract_curr_token(curr_token_masked);
+    var bytes_read = (ctl >> 8) & 15;
+    var curr_token = (ctl >> 4) & 15;
     return <err, bytes_read, curr_token>;
 }
 fun i2c_halt() {
-    var ctl_addr = i2c_reg + 0;
     var ctl = 0;
-    !ld32 ctl, ctl_addr;
+    !ld32 ctl, g_ctl_reg_addr;
     ctl = ctl & 4294967294;
-    !st32 ctl_addr, ctl;
+    !st32 g_ctl_reg_addr, ctl;
     return 0;
 }
 fun handle_response() {
     var 3 error_info = get_i2c_error();
-    var err = error_info.0;
+    var write_error = error_info.0;
     var bytes_read = error_info.1;
     var curr_token = error_info.2;
-    var write_error = err;
-    var return_buffer = (lds 1 (@base + (6) * @biw));
-    var index = 0;
-    var err_addr = 0;
-    var token_addr = 0;
-    var bytes_copied = 0;
+    var return_buffer = g_curr_data;
     if (write_error) {
-        err_addr = return_buffer + 0;
-        token_addr = return_buffer + 1;
+        var err_addr = return_buffer + 0;
+        var token_addr = return_buffer + 1;
         if (curr_token == 3) {
             !st8 err_addr, 3;
         } else {
@@ -289,58 +254,50 @@ fun handle_response() {
         }
         !st8 token_addr, curr_token;
     } else {
-        bytes_copied = 0;
+        var bytes_copied = 0;
         while (bytes_copied < bytes_read) {
-            var curr_resp_len = (lds 1 (@base + (8) * @biw));
-            index = 2 + curr_resp_len;
+            var curr_resp_len = g_curr_response_len;
+            var index = 2 + curr_resp_len;
+            var value = 0;
             if (bytes_copied < 4) {
-                var byte_addr = i2c_reg + 40 + bytes_copied;
-                var value = 0;
+                var byte_addr = g_rdata0_addr + bytes_copied;
                 !ld8 value, byte_addr;
-                var data_addr = return_buffer + index;
-                !st8 data_addr, value;
-                var new_resp_len = (lds 1 (@base + (8) * @biw)) + 1;
-                st (@base + (8) * @biw), new_resp_len;
-                bytes_copied = bytes_copied + 1;
             } else {
                 if (bytes_copied < 8) {
-                    var byte_addr = i2c_reg + 44 + (bytes_copied - 4);
-                    var value = 0;
+                    var byte_addr = g_rdata1_addr + (bytes_copied - 4);
                     !ld8 value, byte_addr;
-                    var data_addr = return_buffer + index;
-                    !st8 data_addr, value;
-                    var new_resp_len = (lds 1 (@base + (8) * @biw)) + 1;
-                    st (@base + (8) * @biw), new_resp_len;
-                    bytes_copied = bytes_copied + 1;
-                } else {
-                    bytes_copied = bytes_read;
                 }
             }
+            var data_addr = return_buffer + index;
+            !st8 data_addr, value;
+            var new_resp_len = g_curr_response_len + 1;
+            g_curr_response_len = new_resp_len;
+            bytes_copied = bytes_copied + 1;
         }
-        err_addr = return_buffer + 0;
-        token_addr = return_buffer + 1;
+        var err_addr = return_buffer + 0;
+        var token_addr = return_buffer + 1;
         !st8 err_addr, 0;
         !st8 token_addr, 0;
     }
-    var remaining = (lds 1 (@base + (9) * @biw));
+    var remaining = g_remaining;
     if (write_error || remaining == 0) {
-        var 1 resp_queue_ptr = get_response_queue_ptr();
-        var bus_address = (lds 1 (@base + (13) * @biw));
-        var curr_data = (lds 1 (@base + (6) * @biw));
+        var 1 resp_queue_ptr = g_response_queue_ptr;
+        var bus_address = g_addr;
+        var curr_data = g_curr_data;
         var base_data_addr = (lds 1 (@base + (21) * @biw));
         var offset = curr_data - base_data_addr;
-        var response_len = (lds 1 (@base + (8) * @biw)) + 2;
+        var response_len = g_curr_response_len + 2;
         i2c_enqueue_pnk(resp_queue_ptr, bus_address, offset, response_len);
-        st (@base + (8) * @biw), 0;
-        st (@base + (6) * @biw), 0;
-        st (@base + (7) * @biw), 0;
-        st (@base + (9) * @biw), 0;
-        st (@base + (13) * @biw), 0;
+        g_curr_response_len = 0;
+        g_curr_data = 0;
+        g_curr_request_len = 0;
+        g_remaining = 0;
+        g_addr = 0;
         @microkit_notify_virt(0,0,0,0);
         i2c_halt();
     }
-    var remaining_check = (lds 1 (@base + (9) * @biw));
-    var notified_check = (lds 1 (@base + (10) * @biw));
+    var remaining_check = g_remaining;
+    var notified_check = g_notified;
     if (remaining_check > 0) {
         i2c_load_tokens();
     } else {
@@ -351,48 +308,51 @@ fun handle_response() {
     return 0;
 }
 fun token_shift_left(1 token, 1 tk_offset) {
-    if (tk_offset == 0) { return token; }
-    if (tk_offset == 1) { return token * 16; }
-    if (tk_offset == 2) { return token * 256; }
-    if (tk_offset == 3) { return token * 4096; }
-    if (tk_offset == 4) { return token * 65536; }
-    if (tk_offset == 5) { return token * 1048576; }
-    if (tk_offset == 6) { return token * 16777216; }
-    if (tk_offset == 7) { return token * 268435456; }
+    if (tk_offset == 0) { return token << 0; }
+    if (tk_offset == 1) { return token << 4; }
+    if (tk_offset == 2) { return token << 8; }
+    if (tk_offset == 3) { return token << 12; }
+    if (tk_offset == 4) { return token << 16; }
+    if (tk_offset == 5) { return token << 20; }
+    if (tk_offset == 6) { return token << 24; }
+    if (tk_offset == 7) { return token << 28; }
     return 0;
 }
 fun data_shift_left(1 data, 1 wdata_offset) {
-    if (wdata_offset == 0) { return data; }
-    if (wdata_offset == 1) { return data * 256; }
-    if (wdata_offset == 2) { return data * 65536; }
-    if (wdata_offset == 3) { return data * 16777216; }
+    if (wdata_offset == 0) { return data << 0; }
+    if (wdata_offset == 1) { return data << 8; }
+    if (wdata_offset == 2) { return data << 16; }
+    if (wdata_offset == 3) { return data << 24; }
     return 0;
 }
 fun convert_token(1 token) {
-    st (@base + (14) * @biw), token;
-    @i2c_token_convert(0,0,0,0);
-    var result = (lds 1 (@base + (15) * @biw));
-    return result;
+    if (token == 0) { return 0; }
+    if (token == 1) { return 1; }
+    if (token == 2) {
+        g_data_direction = 0;
+        return 2;
+    }
+    if (token == 3) {
+        g_data_direction = 1;
+        return 3;
+    }
+    if (token == 4) { return 6; }
+    return 0;
 }
 fun i2c_load_tokens() {
-    var tokens = (lds 1 (@base + (6) * @biw));
-    var remaining = (lds 1 (@base + (9) * @biw));
-    var curr_request_len = (lds 1 (@base + (7) * @biw));
-    var addr_reg_addr = i2c_reg + 4;
+    var tokens = g_curr_data;
+    var remaining = g_remaining;
+    var curr_request_len = g_curr_request_len;
     var addr_reg = 0;
-    !ld32 addr_reg, addr_reg_addr;
+    !ld32 addr_reg, g_addr_reg_addr;
     addr_reg = addr_reg & 4294967040;
-    var device_addr = ((lds 1 (@base + (13) * @biw)) & 127) * 2;
+    var device_addr = (g_addr & 127) * 2;
     addr_reg = addr_reg | device_addr;
-    !st32 addr_reg_addr, addr_reg;
-    var tk_list0_addr = i2c_reg + 8;
-    var tk_list1_addr = i2c_reg + 12;
-    var wdata0_addr = i2c_reg + 16;
-    var wdata1_addr = i2c_reg + 20;
-    !st32 tk_list0_addr, 0;
-    !st32 tk_list1_addr, 0;
-    !st32 wdata0_addr, 0;
-    !st32 wdata1_addr, 0;
+    !st32 g_addr_reg_addr, addr_reg;
+    !st32 g_tk_list0_addr, 0;
+    !st32 g_tk_list1_addr, 0;
+    !st32 g_wdata0_addr, 0;
+    !st32 g_wdata1_addr, 0;
     var tk_offset = 0;
     var wdata_offset = 0;
     var rdata_offset = 0;
@@ -400,7 +360,7 @@ fun i2c_load_tokens() {
     while (tk_offset < 16 && wdata_offset < 8 && rdata_offset < 8 && request_data_offset < curr_request_len) {
         var meson_token = 0;
         var data = 0;
-        var rw_remaining = (lds 1 (@base + (11) * @biw));
+        var rw_remaining = g_rw_remaining;
         if (rw_remaining == 0) {
             var token_addr = tokens + request_data_offset;
             var token = 0;
@@ -411,16 +371,16 @@ fun i2c_load_tokens() {
                 var len_addr = tokens + request_data_offset + 1;
                 var buff_length = 0;
                 !ld8 buff_length, len_addr;
-                st (@base + (11) * @biw), buff_length;
+                g_rw_remaining = buff_length;
                 if (meson_token == 2) {
-                    st (@base + (12) * @biw), 0;
+                    g_data_direction = 0;
                 } else {
-                    st (@base + (12) * @biw), 1;
+                    g_data_direction = 1;
                 }
                 request_data_offset = request_data_offset + 1;
             }
         } else {
-            var data_direction = (lds 1 (@base + (12) * @biw));
+            var data_direction = g_data_direction;
             if (rw_remaining == 1 && data_direction == 1) {
                 meson_token = 5;
             } else {
@@ -431,76 +391,74 @@ fun i2c_load_tokens() {
                 !ld8 data, data_addr;
             }
             var new_rw_remaining = rw_remaining - 1;
-            st (@base + (11) * @biw), new_rw_remaining;
+            g_rw_remaining = new_rw_remaining;
         }
         if (tk_offset < 8) {
             var tk_list0 = 0;
-            !ld32 tk_list0, tk_list0_addr;
+            !ld32 tk_list0, g_tk_list0_addr;
             var 1 shifted_token = token_shift_left(meson_token, tk_offset);
             tk_list0 = tk_list0 | shifted_token;
-            !st32 tk_list0_addr, tk_list0;
+            !st32 g_tk_list0_addr, tk_list0;
         } else {
             var tk_list1 = 0;
-            !ld32 tk_list1, tk_list1_addr;
+            !ld32 tk_list1, g_tk_list1_addr;
             var offset_mod8 = tk_offset - 8;
             var 1 shifted_token = token_shift_left(meson_token, offset_mod8);
             tk_list1 = tk_list1 | shifted_token;
-            !st32 tk_list1_addr, tk_list1;
+            !st32 g_tk_list1_addr, tk_list1;
         }
         tk_offset = tk_offset + 1;
-        var data_direction = (lds 1 (@base + (12) * @biw));
-        if (meson_token == 4 && data_direction == 0) {
+        var data_direction_check = g_data_direction;
+        if (meson_token == 4 && data_direction_check == 0) {
             if (wdata_offset < 4) {
                 var wdata0 = 0;
-                !ld32 wdata0, wdata0_addr;
+                !ld32 wdata0, g_wdata0_addr;
                 var 1 shifted_data = data_shift_left(data, wdata_offset);
                 wdata0 = wdata0 | shifted_data;
-                !st32 wdata0_addr, wdata0;
+                !st32 g_wdata0_addr, wdata0;
             } else {
                 var wdata1 = 0;
-                !ld32 wdata1, wdata1_addr;
+                !ld32 wdata1, g_wdata1_addr;
                 var offset_minus4 = wdata_offset - 4;
                 var 1 shifted_data = data_shift_left(data, offset_minus4);
                 wdata1 = wdata1 | shifted_data;
-                !st32 wdata1_addr, wdata1;
+                !st32 g_wdata1_addr, wdata1;
             }
             wdata_offset = wdata_offset + 1;
         }
         if ((meson_token == 4 || meson_token == 5)
-            && data_direction == 1) {
+            && data_direction_check == 1) {
             rdata_offset = rdata_offset + 1;
         }
         request_data_offset = request_data_offset + 1;
     }
     var new_remaining = curr_request_len - request_data_offset;
-    st (@base + (9) * @biw), new_remaining;
+    g_remaining = new_remaining;
     i2c_start();
     return 0;
 }
 fun i2c_start() {
-    var ctl_addr = i2c_reg + 0;
     var ctl = 0;
-    !ld32 ctl, ctl_addr;
+    !ld32 ctl, g_ctl_reg_addr;
     ctl = ctl & 4294967294;
-    !st32 ctl_addr, ctl;
+    !st32 g_ctl_reg_addr, ctl;
     ctl = ctl | 1;
-    !st32 ctl_addr, ctl;
+    !st32 g_ctl_reg_addr, ctl;
     return 0;
 }
 fun handle_request() {
-    var 1 req_queue_ptr = get_request_queue_ptr();
-    var 1 queue_empty = i2c_queue_empty_pnk(req_queue_ptr);
+    var 1 queue_empty = i2c_queue_empty_pnk(g_request_queue_ptr);
     if (queue_empty == 0) {
-        var curr_data = (lds 1 (@base + (6) * @biw));
+        var curr_data = g_curr_data;
         if (curr_data != 0) {
-            st (@base + (10) * @biw), 1;
+            g_notified = 1;
             return 0;
         }
-        i2c_dequeue_pnk(req_queue_ptr);
-        var err = (lds 1 (@base + (17) * @biw));
-        var bus_address = (lds 1 (@base + (18) * @biw));
-        var offset = (lds 1 (@base + (19) * @biw));
-        var size = (lds 1 (@base + (20) * @biw));
+        var 4 dequeue_result = i2c_dequeue_pnk(g_request_queue_ptr);
+        var err = dequeue_result.0;
+        var bus_address = dequeue_result.1;
+        var offset = dequeue_result.2;
+        var size = dequeue_result.3;
         if (err != 0) {
             return 0;
         }
@@ -512,29 +470,33 @@ fun handle_request() {
         }
         var base_data_addr = (lds 1 (@base + (21) * @biw));
         var curr_data_addr = base_data_addr + offset;
-        st (@base + (6) * @biw), curr_data_addr;
-        st (@base + (13) * @biw), bus_address;
-        st (@base + (7) * @biw), size;
-        st (@base + (9) * @biw), size;
-        st (@base + (10) * @biw), 0;
+        g_curr_data = curr_data_addr;
+        g_addr = bus_address;
+        g_curr_request_len = size;
+        g_remaining = size;
+        g_notified = 0;
         i2c_load_tokens();
     } else {
-        st (@base + (10) * @biw), 0;
+        g_notified = 0;
     }
     return 0;
 }
 fun main() {
+    init_globals();
     return 0;
 }
 export fun notified(1 ch) {
-    if (ch == virt_ch) {
+    var virt = (lds 1 (@base + (3) * @biw));
+    var irq0 = (lds 1 (@base + (1) * @biw));
+    var irq1 = (lds 1 (@base + (2) * @biw));
+    if (ch == virt) {
         handle_request();
     } else {
-        if (ch == irq_ch_0) {
+        if (ch == irq0) {
             handle_response();
             @microkit_deferred_irq_ack(0,ch,0,0);
         } else {
-            if (ch == irq_ch_1) {
+            if (ch == irq1) {
                 @handle_response_timeout(0,0,0,0);
                 @microkit_deferred_irq_ack(0,ch,0,0);
             } else {

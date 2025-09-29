@@ -12,7 +12,7 @@
 SERIAL_DRIVER_DIR := $(dir $(lastword $(MAKEFILE_LIST)))
 SERIAL_QUEUE_INCLUDE := ${SDDF}/include/sddf/serial
 
-ifdef PANCAKE_SERIAL
+ifeq ($(PANCAKE_SERIAL_DRIVER),1)
 DRIVER_PNK = ${UTIL}/util.🥞 \
 	${SERIAL_QUEUE_INCLUDE}/queue.🥞 \
 	${SERIAL_DRIVER_DIR}/console.🥞

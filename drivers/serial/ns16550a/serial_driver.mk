@@ -11,6 +11,8 @@ SERIAL_DRIVER_DIR := $(dir $(lastword $(MAKEFILE_LIST)))
 ifeq ($(PANCAKE_SERIAL_DRIVER),1)
 # Architecture-specific settings
 ARCH := ${shell grep 'CONFIG_SEL4_ARCH  ' $(BOARD_DIR)/include/kernel/gen_config.h | cut -d' ' -f4}
+$(info [ns16550a] Detected ARCH: $(ARCH) from $(BOARD_DIR))
+
 # Detect compiler type
 CC_IS_CLANG := $(shell $(CC) --version 2>/dev/null | grep -q clang && echo 1 || echo 0)
 
@@ -28,7 +30,12 @@ else ifeq ($(ARCH),riscv64)
     else
         ASM_FLAGS := -march=rv64imafdc -mabi=lp64d
     endif
+else
+    $(warning [ns16550a] Unknown ARCH '$(ARCH)', defaulting to arm8)
+    PANCAKE_TARGET := arm8
 endif
+
+$(info [ns16550a] Using PANCAKE_TARGET: $(PANCAKE_TARGET))
 
 serial_driver.elf: serial_pnk.o serial/ns16550a/serial_driver.o pancake_ffi.o
 	$(LD) $(LDFLAGS) $^ $(LIBS) -o $@

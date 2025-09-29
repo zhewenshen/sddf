@@ -15,12 +15,18 @@ __attribute__((__section__(".device_resources"))) device_resources_t device_reso
 
 __attribute__((__section__(".serial_driver_config"))) serial_driver_config_t config;
 
+#ifdef PANCAKE_SERIAL_DRIVER
 serial_queue_handle_t *rx_queue_handle;
 serial_queue_handle_t *tx_queue_handle;
+#else
+serial_queue_handle_t rx_queue_handle;
+serial_queue_handle_t tx_queue_handle;
+#endif
 
 volatile meson_uart_regs_t *uart_regs;
 struct uart_clock_state uart_clock;
 
+#ifdef PANCAKE_SERIAL_DRIVER
 static char cml_memory[1024*20];
 extern void *cml_heap;
 extern void *cml_stack;
@@ -39,10 +45,6 @@ void cml_err(int arg) {
   cml_exit(arg);
 }
 
-/* Need to come up with a replacement for this clear cache function.
-    Might be worth testing just flushing the entire l1 cache,
-    but might cause issues with returning to this file
-*/
 void cml_clear() {
     microkit_dbg_puts("Trying to clear cache\n");
 }
@@ -54,6 +56,7 @@ void init_pancake_mem() {
     cml_stack = cml_heap + cml_heap_sz;
     cml_stackend = cml_stack + cml_stack_sz;
 }
+#endif
 
 /* UART baud register expects baud rate to be expressed in terms of the number of reference
  ticks per symbol change. This function calculates these ticks and modifies the divisor of
@@ -151,6 +154,7 @@ static void uart_setup(void)
     uart_regs->cr = cr;
 }
 
+#ifdef PANCAKE_SERIAL_DRIVER
 void init(void)
 {
     init_pancake_mem();
@@ -172,7 +176,6 @@ void init(void)
 
     pnk_mem[0] = (volatile uintptr_t) uart_regs;
 
-    // queue
     if (config.rx_enabled) {
         serial_queue_init(rx_queue_handle, config.rx.queue.vaddr, config.rx.data.size, config.rx.data.vaddr);
     }
@@ -182,3 +185,107 @@ void init(void)
 }
 
 extern void notified(microkit_channel ch);
+#else
+static void tx_provide(void)
+{
+    bool transferred = false;
+    char c;
+    while (!(uart_regs->sr & AML_UART_TX_FULL) && !serial_dequeue(&tx_queue_handle, &c)) {
+        uart_regs->wfifo = (uint32_t)c;
+        transferred = true;
+    }
+
+    if (!serial_queue_empty(&tx_queue_handle, tx_queue_handle.queue->head)) {
+        uart_regs->cr |= AML_UART_TX_INT_EN;
+    } else {
+        uart_regs->cr &= ~AML_UART_TX_INT_EN;
+    }
+
+    if (transferred && serial_require_consumer_signal(&tx_queue_handle)) {
+        serial_cancel_consumer_signal(&tx_queue_handle);
+        microkit_notify(config.tx.id);
+    }
+}
+
+static void rx_return(void)
+{
+    bool reprocess = true;
+    bool enqueued = false;
+    while (reprocess) {
+        while (!(uart_regs->sr & AML_UART_RX_EMPTY) && !serial_queue_full(&rx_queue_handle, rx_queue_handle.queue->tail)) {
+            char c = (char) uart_regs->rfifo;
+            serial_enqueue(&rx_queue_handle, c);
+            enqueued = true;
+        }
+
+        if (!(uart_regs->sr & AML_UART_RX_EMPTY) && serial_queue_full(&rx_queue_handle, rx_queue_handle.queue->tail)) {
+            uart_regs->cr &= ~AML_UART_RX_INT_EN;
+            serial_request_consumer_signal(&rx_queue_handle);
+        }
+        reprocess = false;
+
+        if (!(uart_regs->sr & AML_UART_RX_EMPTY) && !serial_queue_full(&rx_queue_handle, rx_queue_handle.queue->tail)) {
+            serial_cancel_consumer_signal(&rx_queue_handle);
+            uart_regs->cr |= AML_UART_RX_INT_EN;
+            reprocess = true;
+        }
+    }
+
+    if (enqueued) {
+        microkit_notify(config.rx.id);
+    }
+}
+
+static void handle_irq(void)
+{
+    uint32_t uart_sr = uart_regs->sr;
+    uint32_t uart_cr = uart_regs->cr;
+    while (uart_sr & UART_INTR_ABNORMAL || !(uart_sr & AML_UART_RX_EMPTY)
+           || (uart_cr & AML_UART_TX_INT_EN && !(uart_sr & AML_UART_TX_FULL))) {
+        if (config.rx_enabled && !(uart_sr & AML_UART_RX_EMPTY)) {
+            rx_return();
+        }
+        if (uart_cr & AML_UART_TX_INT_EN && !(uart_sr & AML_UART_TX_FULL)) {
+            tx_provide();
+        }
+        if (uart_sr & UART_INTR_ABNORMAL) {
+            sddf_dprintf("UART|ERROR: Uart device encountered an error with status register %u\n", uart_sr);
+            uart_regs->cr |= AML_UART_CLEAR_ERR;
+        }
+        uart_sr = uart_regs->sr;
+        uart_cr = uart_regs->cr;
+    }
+}
+
+void init(void)
+{
+    assert(serial_config_check_magic(&config));
+    assert(device_resources_check_magic(&device_resources));
+    assert(device_resources.num_irqs == 1);
+    assert(device_resources.num_regions == 1);
+
+    microkit_irq_ack(device_resources.irqs[0].id);
+
+    uart_setup();
+
+    if (config.rx_enabled) {
+        serial_queue_init(&rx_queue_handle, config.rx.queue.vaddr, config.rx.data.size, config.rx.data.vaddr);
+    }
+    serial_queue_init(&tx_queue_handle, config.tx.queue.vaddr, config.tx.data.size, config.tx.data.vaddr);
+}
+
+void notified(microkit_channel ch)
+{
+    if (ch == device_resources.irqs[0].id) {
+        handle_irq();
+        microkit_deferred_irq_ack(ch);
+    } else if (ch == config.tx.id) {
+        tx_provide();
+    } else if (ch == config.rx.id) {
+        uart_regs->cr |= AML_UART_RX_INT_EN;
+        rx_return();
+    } else {
+        sddf_dprintf("UART|LOG: received notification on unexpected channel: %u\n", ch);
+    }
+}
+#endif

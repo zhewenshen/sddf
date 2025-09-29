@@ -11,11 +11,6 @@
 
 #define MAX_TIMEOUTS 6
 
-// Workaround for Pancake 64-bit comparison bug: use a large but safe value
-// instead of UINT64_MAX to represent "no timeout set"
-// #define TIMEOUT_INVALID_VALUE UINT64_MAX
-#define TIMEOUT_INVALID_VALUE 9999999999999999ULL
-
 #define TIMER_REG_START   0x70    // TIMER_MUX
 
 #define TIMER_A_INPUT_CLK 0
@@ -54,12 +49,11 @@ struct timer_regs {
 
 volatile struct timer_regs *regs;
 
-/* Right now, we only service a single timeout per client.
- * This timeout array indicates when a timeout should occur,
- * indexed by client ID. */
 static uint64_t timeouts[MAX_TIMEOUTS];
 
-// Pancake runtime support
+#ifdef PANCAKE_TIMER
+#define TIMEOUT_INVALID_VALUE 9999999999999999ULL
+
 static char cml_memory[1024*20];
 extern void *cml_heap;
 extern void *cml_stack;
@@ -90,11 +84,10 @@ void init_pancake_mem() {
     cml_stackend = cml_stack + cml_stack_sz;
 }
 
-// FFI function for seL4_GetMR - stores result in scratchpad slot 3
 void ffiseL4_GetMR_timer(unsigned char *c, long clen, unsigned char *a, long alen) {
     uintptr_t *pnk_mem = (uintptr_t *) cml_heap;
     seL4_Word value = seL4_GetMR(clen);
-    pnk_mem[3] = value; // Store in SCRATCHPAD slot
+    pnk_mem[3] = value;
 }
 
 static uint64_t get_ticks(void)
@@ -113,12 +106,11 @@ static uint64_t get_ticks(void)
 static void process_timeouts(uint64_t curr_time)
 {
     uintptr_t *pnk_mem = (uintptr_t *) cml_heap;
-    
+
     for (int i = 0; i < MAX_TIMEOUTS; i++) {
         if (timeouts[i] <= curr_time) {
             microkit_notify(i);
             timeouts[i] = TIMEOUT_INVALID_VALUE;
-            // update Pancake memory
             pnk_mem[10 + i] = TIMEOUT_INVALID_VALUE;
         }
     }
@@ -137,7 +129,6 @@ static void process_timeouts(uint64_t curr_time)
     }
 }
 
-// Pancake version handles all protected calls
 extern seL4_MessageInfo_t protected(microkit_channel ch, microkit_msginfo msginfo);
 
 void init(void)
@@ -154,24 +145,118 @@ void init(void)
 
     regs = (void *)((uintptr_t)device_resources.regions[0].region.vaddr + TIMER_REG_START);
 
-    /* Start timer E acts as a clock, while timer A can be used for timeouts from clients */
     regs->mux = TIMER_A_EN | (TIMESTAMP_TIMEBASE_1_US << TIMER_E_INPUT_CLK) |
                 (TIMEOUT_TIMEBASE_1_US << TIMER_A_INPUT_CLK);
 
     regs->timer_e = 0;
 
     init_pancake_mem();
-    
+
     uintptr_t *pnk_mem = (uintptr_t *) cml_heap;
-    
-    pnk_mem[0] = device_resources.irqs[0].id;  // IRQ_CH
-    pnk_mem[1] = (uintptr_t)regs;  // TIMER_REG_BASE
-    
+
+    pnk_mem[0] = device_resources.irqs[0].id;
+    pnk_mem[1] = (uintptr_t)regs;
+
     for (int i = 0; i < MAX_TIMEOUTS; i++) {
         pnk_mem[10 + i] = TIMEOUT_INVALID_VALUE;
     }
-    
+
     cml_main();
 }
 
 extern void notified(microkit_channel ch);
+#else
+static uint64_t get_ticks(void)
+{
+    uint64_t initial_high = regs->timer_e_hi;
+    uint64_t low = regs->timer_e;
+    uint64_t high = regs->timer_e_hi;
+    if (high != initial_high) {
+        low = regs->timer_e;
+    }
+
+    uint64_t ticks = (high << 32) | low;
+    return ticks;
+}
+
+static void process_timeouts(uint64_t curr_time)
+{
+    for (int i = 0; i < MAX_TIMEOUTS; i++) {
+        if (timeouts[i] <= curr_time) {
+            microkit_notify(i);
+            timeouts[i] = UINT64_MAX;
+        }
+    }
+
+    uint64_t next_timeout = UINT64_MAX;
+    for (int i = 0; i < MAX_TIMEOUTS; i++) {
+        if (timeouts[i] < next_timeout) {
+            next_timeout = timeouts[i];
+        }
+    }
+
+    if (next_timeout != UINT64_MAX) {
+        regs->mux &= ~TIMER_A_MODE;
+        regs->timer_a = next_timeout - curr_time;
+        regs->mux |= TIMER_A_EN;
+    }
+}
+
+void notified(microkit_channel ch)
+{
+    if (ch != device_resources.irqs[0].id) {
+        sddf_dprintf("TIMER DRIVER|LOG: unexpected notification from channel %u\n", ch);
+        return;
+    }
+
+    microkit_deferred_irq_ack(ch);
+    regs->mux &= ~TIMER_A_EN;
+
+    uint64_t curr_time = get_ticks();
+    process_timeouts(curr_time);
+}
+
+seL4_MessageInfo_t protected(microkit_channel ch, microkit_msginfo msginfo)
+{
+    switch (microkit_msginfo_get_label(msginfo)) {
+    case SDDF_TIMER_GET_TIME: {
+        uint64_t time_ns = get_ticks() * NS_IN_US;
+        seL4_SetMR(0, time_ns);
+        return microkit_msginfo_new(0, 1);
+    }
+    case SDDF_TIMER_SET_TIMEOUT: {
+        uint64_t curr_time = get_ticks();
+        uint64_t offset_us = seL4_GetMR(0) / NS_IN_US;
+        timeouts[ch] = curr_time + offset_us;
+        process_timeouts(curr_time);
+        break;
+    }
+    default:
+        sddf_dprintf("TIMER DRIVER|LOG: Unknown request %lu to timer from channel %u\n", microkit_msginfo_get_label(msginfo),
+                     ch);
+        break;
+    }
+
+    return microkit_msginfo_new(0, 0);
+}
+
+void init(void)
+{
+    assert(device_resources_check_magic(&device_resources));
+    assert(device_resources.num_irqs == 1);
+    assert(device_resources.num_regions == 1);
+
+    microkit_irq_ack(device_resources.irqs[0].id);
+
+    for (int i = 0; i < MAX_TIMEOUTS; i++) {
+        timeouts[i] = UINT64_MAX;
+    }
+
+    regs = (void *)((uintptr_t)device_resources.regions[0].region.vaddr + TIMER_REG_START);
+
+    regs->mux = TIMER_A_EN | (TIMESTAMP_TIMEBASE_1_US << TIMER_E_INPUT_CLK) |
+                (TIMEOUT_TIMEBASE_1_US << TIMER_A_INPUT_CLK);
+
+    regs->timer_e = 0;
+}
+#endif
