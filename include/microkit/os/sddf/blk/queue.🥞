@@ -1,0 +1,185 @@
+/*
+ * Copyright 2025, UNSW
+ * SPDX-License-Identifier: BSD-2-Clause
+ */
+
+/* Block request/response codes */
+#define BLK_REQ_READ     0
+#define BLK_REQ_WRITE    1
+#define BLK_REQ_FLUSH    2
+#define BLK_REQ_BARRIER  3
+
+#define BLK_RESP_OK                 0
+#define BLK_RESP_ERR_UNSPEC         1
+#define BLK_RESP_ERR_INVALID_PARAM  2
+#define BLK_RESP_ERR_IO             3
+#define BLK_RESP_ERR_NO_DEVICE      4
+
+/* Size of block request and response descriptors */
+#define BLK_REQ_DESC_SIZE   32
+#define BLK_RESP_DESC_SIZE  16
+
+/////////////////// Block Request Queue functions
+
+export fun blk_req_queue_empty(1 queue_ptr, 1 capacity)
+{
+  var tail = 0;
+  var head = 0;
+  !ld32 tail, queue_ptr + 4;  /* tail at offset 4 */
+  !ld32 head, queue_ptr;      /* head at offset 0 */
+
+  var empty = ((tail - head) == 0);
+  return empty;
+}
+
+export fun blk_req_queue_full(1 queue_ptr, 1 capacity)
+{
+  var tail = 0;
+  var head = 0;
+  !ld32 tail, queue_ptr + 4;
+  !ld32 head, queue_ptr;
+
+  var full = (tail - head) == capacity;
+  return full;
+}
+
+export fun blk_req_queue_plugged(1 queue_ptr)
+{
+  var plugged = 0;
+  !ld32 plugged, queue_ptr + 8;  /* plugged flag at offset 8 */
+  return plugged;
+}
+
+export fun blk_req_queue_plug(1 queue_ptr)
+{
+  !st32 queue_ptr + 8, 1;
+  return 0;
+}
+
+export fun blk_req_queue_unplug(1 queue_ptr)
+{
+  !st32 queue_ptr + 8, 0;
+  return 0;
+}
+
+fun blk_enqueue_req(1 queue_ptr, 1 code, 1 io_or_offset_low, 1 io_or_offset_high, 1 block_number_low, 1 block_number_high, 1 count, 1 id, 1 capacity)
+{
+  var tail = 0;
+  !ld32 tail, queue_ptr + 4;
+
+  var mod_tail = tail & (capacity - 1);
+  var req_addr = queue_ptr + 12 + mod_tail * BLK_REQ_DESC_SIZE;  /* requests start at offset 12 */
+
+  /* Write request fields */
+  !st32 req_addr, code;                          /* code at offset 0 */
+  !st32 req_addr + 4, io_or_offset_low;          /* io_or_offset low 32 bits */
+  !st32 req_addr + 8, io_or_offset_high;         /* io_or_offset high 32 bits */
+  !st32 req_addr + 12, block_number_low;         /* block_number low 32 bits */
+  !st32 req_addr + 16, block_number_high;        /* block_number high 32 bits */
+  !st16 req_addr + 20, count;                    /* count at offset 20 */
+  !st32 req_addr + 24, id;                       /* id at offset 24 */
+
+  THREAD_MEMORY_RELEASE()
+  tail = tail + 1;
+  !st32 queue_ptr + 4, tail;
+  return 0;
+}
+
+export fun blk_dequeue_req(1 queue_ptr, 1 capacity)
+{
+  var head = 0;
+  !ld32 head, queue_ptr;
+
+  var mod_head = head & (capacity - 1);
+  var req_addr = queue_ptr + 12 + mod_head * BLK_REQ_DESC_SIZE;
+
+  /* Read request fields */
+  var code = 0;
+  var io_or_offset_low = 0;
+  var io_or_offset_high = 0;
+  var block_number_low = 0;
+  var block_number_high = 0;
+  var count = 0;
+  var id = 0;
+
+  !ld32 code, req_addr;
+  !ld32 io_or_offset_low, req_addr + 4;
+  !ld32 io_or_offset_high, req_addr + 8;
+  !ld32 block_number_low, req_addr + 12;
+  !ld32 block_number_high, req_addr + 16;
+  !ld16 count, req_addr + 20;
+  !ld32 id, req_addr + 24;
+
+  THREAD_MEMORY_RELEASE()
+  head = head + 1;
+  !st32 queue_ptr, head;
+
+  return <code, io_or_offset_low, io_or_offset_high, block_number_low, block_number_high, count, id>;
+}
+
+/////////////////// Block Response Queue functions
+
+export fun blk_resp_queue_empty(1 queue_ptr, 1 capacity)
+{
+  var tail = 0;
+  var head = 0;
+  !ld32 tail, queue_ptr + 4;  /* tail at offset 4 */
+  !ld32 head, queue_ptr;      /* head at offset 0 */
+
+  var empty = ((tail - head) == 0);
+  return empty;
+}
+
+export fun blk_resp_queue_full(1 queue_ptr, 1 capacity)
+{
+  var tail = 0;
+  var head = 0;
+  !ld32 tail, queue_ptr + 4;
+  !ld32 head, queue_ptr;
+
+  var full = (tail - head) == capacity;
+  return full;
+}
+
+fun blk_enqueue_resp(1 queue_ptr, 1 status, 1 success_count, 1 id, 1 capacity)
+{
+  var tail = 0;
+  !ld32 tail, queue_ptr + 4;
+
+  var mod_tail = tail & (capacity - 1);
+  var resp_addr = queue_ptr + 8 + mod_tail * BLK_RESP_DESC_SIZE;  /* responses start at offset 8 */
+
+  /* Write response fields */
+  !st32 resp_addr, status;           /* status at offset 0 */
+  !st16 resp_addr + 4, success_count; /* success_count at offset 4 */
+  !st32 resp_addr + 8, id;           /* id at offset 8 */
+
+  THREAD_MEMORY_RELEASE()
+  tail = tail + 1;
+  !st32 queue_ptr + 4, tail;
+  return 0;
+}
+
+export fun blk_dequeue_resp(1 queue_ptr, 1 capacity)
+{
+  var head = 0;
+  !ld32 head, queue_ptr;
+
+  var mod_head = head & (capacity - 1);
+  var resp_addr = queue_ptr + 8 + mod_head * BLK_RESP_DESC_SIZE;
+
+  /* Read response fields */
+  var status = 0;
+  var success_count = 0;
+  var id = 0;
+
+  !ld32 status, resp_addr;
+  !ld16 success_count, resp_addr + 4;
+  !ld32 id, resp_addr + 8;
+
+  THREAD_MEMORY_RELEASE()
+  head = head + 1;
+  !st32 queue_ptr, head;
+
+  return <status, success_count, id>;
+}
