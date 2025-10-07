@@ -1250,8 +1250,15 @@ void do_bringup(void)
     handle_client(/* was_irq: */ false);
 }
 
+#ifdef PANCAKE_BLK_DRIVER
+/* FFI function for Pancake - signature: (c, clen, a, alen) where clen = channel */
+void ffiNotified(unsigned char *c, long clen, unsigned char *a, long alen)
+{
+    microkit_channel ch = (microkit_channel)clen;
+#else
 void notified(microkit_channel ch)
 {
+#endif
     if (driver_status == DrvStatusBringup) {
         if (ch == device_resources.irqs[0].id) {
             do_bringup();
@@ -1275,6 +1282,11 @@ void notified(microkit_channel ch)
         LOG_DRIVER_ERR("notification on unknown channel: %d\n", ch);
     }
 }
+
+#ifdef PANCAKE_BLK_DRIVER
+/* Pancake provides this */
+extern void notified(microkit_channel ch);
+#endif
 
 void init()
 {

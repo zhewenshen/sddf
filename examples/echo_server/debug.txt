@@ -1,0 +1,264 @@
+fun net_queue_empty(1 queue_ptr, 1 capacity)
+{
+  var tail = 0;
+  var head = 0;
+  !ld16 tail, queue_ptr;
+  !ld16 head, queue_ptr + 2;
+  var empty = ((tail - head) == 0);
+  return empty;
+}
+fun net_queue_full(1 queue_ptr, 1 capacity)
+{
+  var tail = 0;
+  var head = 0;
+  !ld16 tail, queue_ptr;
+  !ld16 head, queue_ptr + 2;
+  var full = (tail - head) == capacity;
+  return full;
+}
+fun net_enqueue(1 queue_ptr, 1 io_addr, 1 len, 1 capacity)
+{
+  var tail = 0;
+  !ld16 tail, queue_ptr;
+  var mod_tail = tail & (capacity - 1);
+  var buff_addr = queue_ptr + @biw + mod_tail * (2*@biw);
+  !stw buff_addr, io_addr;
+  !stw buff_addr + @biw, len;
+  @THREAD_MEMORY_RELEASE(0,0,0,0);
+  tail = (tail + 1) & 65535;
+  !st16 queue_ptr, tail;
+  return 0;
+}
+fun net_dequeue(1 queue_ptr, 1 capacity)
+{
+  var head = 0;
+  !ld16 head, queue_ptr + 2;
+  var mod_head = head & (capacity - 1);
+  var buff_addr = queue_ptr + @biw + mod_head * (2*@biw);
+  var io_addr = 0;
+  var len = 0;
+  !ldw io_addr, buff_addr;
+  !ldw len, buff_addr + @biw;
+  @THREAD_MEMORY_RELEASE(0,0,0,0);
+  head = (head + 1) & 65535;
+  !st16 queue_ptr + 2, head;
+  return <io_addr, len>;
+}
+fun net_request_signal(1 queue_ptr, 1 capacity)
+{
+  !st32 queue_ptr + 4, 0;
+  return 0;
+}
+fun net_cancel_signal(1 queue_ptr)
+{
+  !st32 queue_ptr + 4, 1;
+  return 0;
+}
+fun net_require_signal(1 queue_ptr, 1 capacity)
+{
+  var signalled = 0;
+  !ld32 signalled, queue_ptr + 4;
+  var ret = !signalled;
+  return ret;
+}
+var 1 irq_ch = (lds 1 (@base + (1) * @biw));
+var 1 rx_ch = (lds 1 (@base + (2) * @biw));
+var 1 tx_ch = (lds 1 (@base + (3) * @biw));
+var 1 eth_reg = (lds 1 (@base + (0) * @biw));
+var 1 net_rx_free = (lds 1 (@base + (4) * @biw));
+var 1 net_rx_active = (lds 1 (@base + (5) * @biw));
+var 1 net_rx_capacity = (lds 1 (@base + (6) * @biw));
+var 1 net_tx_free = (lds 1 (@base + (7) * @biw));
+var 1 net_tx_active = (lds 1 (@base + (8) * @biw));
+var 1 net_tx_capacity = (lds 1 (@base + (9) * @biw));
+var 1 hw_rx_capacity = (lds 1 (@base + (12) * @biw));
+var 1 hw_tx_capacity = (lds 1 (@base + (16) * @biw));
+var 1 hw_rx_descr = (lds 1 (@base + (13) * @biw));
+var 1 hw_tx_descr = (lds 1 (@base + (17) * @biw));
+fun rx_provide()
+{
+  var reprocess = true;
+  var rx_free = net_rx_free;
+  var rx_queue_cap = net_rx_capacity;
+  var rx_hw_cap = hw_rx_capacity;
+  while (reprocess)
+  {
+    while (true)
+    {
+      var full = (((lds 1 (@base + (10) * @biw)) - (lds 1 (@base + (11) * @biw))) == hw_rx_capacity);
+      if (full) { break; }
+      var 1 empty = net_queue_empty(rx_free, rx_queue_cap);
+      if (empty) { break; }
+      var {1,1} buffer = net_dequeue(rx_free, rx_queue_cap);
+      var rx_tail = (lds 1 (@base + (10) * @biw));
+      var idx = rx_tail & (rx_hw_cap - 1);
+      var io_addr = buffer.0;
+      var stat = (1 << 15);
+      var rx_descr_base = hw_rx_descr; var rx_descr = rx_descr_base + idx * 8; var rx_stat_tmp = stat; if (idx + 1 == hw_rx_capacity) { rx_stat_tmp = rx_stat_tmp | (1 << 13); }; !st32 rx_descr + 4, io_addr; !st16 rx_descr, 1536; @THREAD_MEMORY_RELEASE(0,0,0,0); !st16 rx_descr + 2, rx_stat_tmp;
+      st (@base + (10) * @biw), (rx_tail + 1);
+      var rdar_reg_addr = eth_reg + 16; !st32 rdar_reg_addr, (1 << 24);
+    }
+    var full = (((lds 1 (@base + (10) * @biw)) - (lds 1 (@base + (11) * @biw))) == hw_rx_capacity);
+    if (!full) {
+      net_request_signal(rx_free, rx_queue_cap);
+    } else {
+      net_cancel_signal(rx_free);
+    }
+    reprocess = false;
+    var 1 empty = net_queue_empty(rx_free, rx_queue_cap);
+    if ((!empty) && (!full)) {
+      net_cancel_signal(rx_free);
+      reprocess = true;
+    }
+  }
+  return 0;
+}
+fun tx_provide()
+{
+  var reprocess = true;
+  var tx_active = net_tx_active;
+  var tx_queue_cap = net_tx_capacity;
+  var tx_hw_cap = hw_tx_capacity;
+  while (reprocess)
+  {
+    while (true)
+    {
+      var full = (((lds 1 (@base + (14) * @biw)) - (lds 1 (@base + (15) * @biw))) == hw_tx_capacity);
+      if (full) { break; }
+      var 1 empty = net_queue_empty(tx_active, tx_queue_cap);
+      if (empty) { break; }
+      var {1,1} buffer = net_dequeue(tx_active, tx_queue_cap);
+      var tx_tail = (lds 1 (@base + (14) * @biw));
+      var idx = tx_tail & (tx_hw_cap - 1);
+      var io_addr = buffer.0;
+      var len = buffer.1;
+      var stat = (1 << 15) | (1 << 10) | (1 << 11);
+      var tx_descr_base = hw_tx_descr; var tx_descr = tx_descr_base + idx * 8; var tx_stat_tmp = stat; if (idx + 1 == hw_tx_capacity) { tx_stat_tmp = tx_stat_tmp | (1 << 13); }; !st32 tx_descr + 4, io_addr; !st16 tx_descr, len; @THREAD_MEMORY_RELEASE(0,0,0,0); !st16 tx_descr + 2, tx_stat_tmp;
+      st (@base + (14) * @biw), (tx_tail + 1);
+    }
+    var 1 empty_after = net_queue_empty(tx_active, tx_queue_cap);
+    var full_after = (((lds 1 (@base + (14) * @biw)) - (lds 1 (@base + (15) * @biw))) == hw_tx_capacity);
+    if (!empty_after || !full_after) {
+      var tdar_reg_addr = eth_reg + 20; !st32 tdar_reg_addr, (1 << 24);
+    }
+    net_request_signal(tx_active, tx_queue_cap);
+    reprocess = false;
+    var full = (((lds 1 (@base + (14) * @biw)) - (lds 1 (@base + (15) * @biw))) == hw_tx_capacity);
+    var 1 empty = net_queue_empty(tx_active, tx_queue_cap);
+    if ((!empty) && (!full)) {
+      net_cancel_signal(tx_active);
+      reprocess = true;
+    }
+  }
+  return 0;
+}
+fun rx_return()
+{
+  var rx_active = net_rx_active;
+  var rx_descr = hw_rx_descr;
+  var rx_queue_cap = net_rx_capacity;
+  var rx_hw_cap = hw_rx_capacity;
+  var packets_transferred = false;
+  while (true)
+  {
+    var empty = ((lds 1 (@base + (11) * @biw)) == (lds 1 (@base + (10) * @biw)));
+    if (empty) { break; }
+    var rx_head = (lds 1 (@base + (11) * @biw));
+    var idx = rx_head & (rx_hw_cap - 1);
+    var dscr_addr = rx_descr + idx * 8;
+    var stat = 0;
+    !ld16 stat, dscr_addr + 2;
+    if (stat & (1 << 15)) { break; }
+    @THREAD_MEMORY_ACQUIRE(0,0,0,0);
+    var len = 0;
+    !ld16 len, dscr_addr;
+    var io_addr = 0;
+    !ld32 io_addr, dscr_addr + 4;
+    if (len > 0 && len <= 1536) {
+      net_enqueue(rx_active, io_addr, len, rx_queue_cap);
+      packets_transferred = true;
+    }
+    st (@base + (11) * @biw), (rx_head + 1);
+  }
+  var 1 to_signal = net_require_signal(rx_active, rx_queue_cap);
+  if (packets_transferred && to_signal) {
+    net_cancel_signal(rx_active);
+    @microkit_notify(0,rx_ch,0,0);
+  }
+  return 0;
+}
+fun tx_return()
+{
+  var tx_free = net_tx_free;
+  var tx_descr = hw_tx_descr;
+  var tx_queue_cap = net_tx_capacity;
+  var tx_hw_cap = hw_tx_capacity;
+  var enqueued = false;
+  while (true)
+  {
+    var empty = ((lds 1 (@base + (15) * @biw)) == (lds 1 (@base + (14) * @biw)));
+    if (empty) { break; }
+    var tx_head = (lds 1 (@base + (15) * @biw));
+    var idx = tx_head & (tx_hw_cap - 1);
+    var dscr_addr = tx_descr + idx * 8;
+    var stat = 0;
+    !ld16 stat, dscr_addr + 2;
+    if (stat & (1 << 15)) { break; }
+    @THREAD_MEMORY_ACQUIRE(0,0,0,0);
+    var io_addr = 0;
+    !ld32 io_addr, dscr_addr + 4;
+    net_enqueue(tx_free, io_addr, 0, tx_queue_cap);
+    enqueued = true;
+    st (@base + (15) * @biw), (tx_head + 1);
+  }
+  var 1 to_signal = net_require_signal(tx_free, tx_queue_cap);
+  if (enqueued && to_signal) {
+    net_cancel_signal(tx_free);
+    @microkit_notify(0,tx_ch,0,0);
+  }
+  return 0;
+}
+fun main() {
+  rx_provide();
+  tx_provide();
+  return 0;
+}
+fun handle_irq() {
+  var eir = 0;
+  var eir_full = 0; var get_eir_reg = eth_reg + 4; !ld32 eir_full, get_eir_reg; eir = eir_full & ((1 << 25) | (1 << 27) | (1 << 22));
+  var set_eir_reg_addr = eth_reg + 4; !st32 set_eir_reg_addr, eir;
+  while (eir & ((1 << 25) | (1 << 27) | (1 << 22)))
+  {
+    if (eir & (1 << 27)) {
+      tx_return();
+      tx_provide();
+    }
+    if (eir & (1 << 25)) {
+      rx_return();
+      rx_provide();
+    }
+    if (eir & (1 << 22)) {
+      @assert(0,0,0,0);
+    }
+    var eir_full = 0; var get_eir_reg = eth_reg + 4; !ld32 eir_full, get_eir_reg; eir = eir_full & ((1 << 25) | (1 << 27) | (1 << 22));
+    var set_eir_reg_addr = eth_reg + 4; !st32 set_eir_reg_addr, eir;
+  }
+  return 0;
+}
+export fun notified(1 ch)
+{
+  if (ch == irq_ch) {
+    handle_irq();
+    @microkit_deferred_irq_ack(0,ch,0,0);
+  }
+  if (ch == rx_ch) {
+    rx_provide();
+  }
+  if (ch == tx_ch) {
+    tx_provide();
+  }
+  if ((ch != irq_ch) && (ch != rx_ch) && (ch != tx_ch)) {
+    @assert(0,0,0,0);
+  }
+  return 0;
+}

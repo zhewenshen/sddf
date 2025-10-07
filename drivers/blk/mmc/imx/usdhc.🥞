@@ -1,0 +1,24 @@
+/*
+ * Copyright 2025, UNSW
+ * SPDX-License-Identifier: BSD-2-Clause
+ */
+
+/*
+ * PANCAKE PORT OF IMX8 uSDHC BLOCK DRIVER
+ * ========================================
+ *
+
+ * This is a minimal Pancake port that provides the notified() entry point.
+ * Most of the complex driver logic remains in C for maintainability.
+ *
+
+ * Strategy: Pancake handles the entry point, immediately calls C via FFI
+ * FFI functions use @ syntax and take 4 parameters: (c, clen, a, alen)
+ */
+
+fun main() {
+/* Main entry point - dispatch to C via FFI */
+export notified1ch)
+
+  @ffiNotified(0, ch, 0, 0);  return 0;
+}

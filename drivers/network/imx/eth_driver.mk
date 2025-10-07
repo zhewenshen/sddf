@@ -23,7 +23,7 @@ eth_driver.elf: ${BUILD_DIR}/ethernet_pnk.o imx/ethernet.o pancake_ffi.o
 
 ETHERNET_PNK = ${UTIL}/util.🥞 \
 		${SDDF}/include/sddf/network/queue.🥞 \
-		${ETHERNET_DRIVER_DIR}/ethernet.🥞
+		${ETHERNET_DRIVER_DIR}/ethernet_noglob.🥞
 
 ${BUILD_DIR}/ethernet_pnk.S: $(ETHERNET_PNK)
 	cat $(ETHERNET_PNK) | cpp -P | $(CAKE_COMPILER) --target=arm8 --pancake --main_return=true > $@
