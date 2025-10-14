@@ -1,0 +1,38 @@
+CompileFlags:
+  Add:
+    # Compiler-provided headers (for stdbool.h, stdint.h, etc.)
+    - -I/usr/lib/gcc/riscv64-unknown-elf/14.2.0/include
+
+    # Custom libc headers
+    - -I/home/zhewen/Documents/code/sddf/include/sddf/util/custom_libc
+
+    # Project includes
+    - -I/home/zhewen/Documents/code/sddf/include
+    - -I/home/zhewen/Documents/code/sddf/include/sddf
+    - -I/home/zhewen/Documents/code/sddf/include/microkit
+    - -I/home/zhewen/Documents/code/sddf/include/extern
+
+    # Driver includes
+    - -I/home/zhewen/Documents/code/sddf/drivers/network/dwmac-5.10a
+    - -I/home/zhewen/Documents/code/sddf/drivers
+
+    # Microkit SDK includes - Star64 board (RISC-V)
+    - -I/home/zhewen/Documents/code/sddf/microkit-sdk-2.0.1/board/star64/release/include
+    - -I/home/zhewen/Documents/code/sddf/microkit-sdk-2.0.1/board/star64/release/include/api
+    - -I/home/zhewen/Documents/code/sddf/microkit-sdk-2.0.1/board/star64/release/include/interfaces
+    - -I/home/zhewen/Documents/code/sddf/microkit-sdk-2.0.1/board/star64/release/include/kernel
+    - -I/home/zhewen/Documents/code/sddf/microkit-sdk-2.0.1/board/star64/release/include/sel4
+
+    # Additional project paths
+    - -I/home/zhewen/Documents/code/sddf/util
+    - -I/home/zhewen/Documents/code/sddf/network
+    - -I/home/zhewen/Documents/code/sddf/blk
+
+    - -nostdinc
+    - -ffreestanding
+    - -fno-builtin
+
+    - --target=riscv64-unknown-elf
+
+    - -D__KERNEL__
+    - -DMICROKIT

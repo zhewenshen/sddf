@@ -27,21 +27,21 @@ counter_bitfield_t benchmark_bf;
 serial_queue_handle_t serial_tx_queue_handle;
 
 char *counter_names[] = {
-    "L1 i-cache misses",
-    "L1 d-cache misses",
-    "L1 i-tlb misses",
-    "L1 d-tlb misses",
-    "Instructions",
-    "Branch mispredictions",
+    "CPU cycles",
+    "(CHAIN)",
+    "stall frontend",
+    "(CHAIN)",
+    "stall backend",
+    "(CHAIN)",
 };
 
 event_id_t benchmarking_events[] = {
-    SEL4BENCH_EVENT_CACHE_L1I_MISS,
-    SEL4BENCH_EVENT_CACHE_L1D_MISS,
-    SEL4BENCH_EVENT_TLB_L1I_MISS,
-    SEL4BENCH_EVENT_TLB_L1D_MISS,
-    SEL4BENCH_EVENT_EXECUTE_INSTRUCTION,
-    SEL4BENCH_EVENT_BRANCH_MISPREDICT,
+    0x11,
+    0x1E,
+    0xE9,
+    0x1E,
+    0x24,
+    0x1E,
 };
 
 static char *child_name(uint8_t child_id)
@@ -149,9 +149,15 @@ void notified(microkit_channel ch)
     if (ch == serial_config.tx.id) {
         return;
     } else if (ch == benchmark_config.start_ch) {
-#if defined(MICROKIT_CONFIG_benchmark) && defined(CONFIG_ARCH_ARM)
+#if ENABLE_BENCHMARKING
         sel4bench_reset_counters();
-        THREAD_MEMORY_RELEASE();
+        PMU_WRITE("PMOVSCLR_EL0", 0xFFFFFFFF);
+        // THREAD_MEMORY_RELEASE();
+        asm volatile ("isb sy" : : : "memory");
+        uint64_t value;
+        PMU_READ("PMOVSCLR_EL0", value);
+        sddf_printf("overflow flag: %jx\n", value);
+        asm volatile ("isb sy" : : : "memory");
         sel4bench_start_counters(benchmark_bf);
 
 #ifdef CONFIG_BENCHMARK_TRACK_UTILISATION
@@ -163,13 +169,23 @@ void notified(microkit_channel ch)
 #endif
 #endif
     } else if (ch == benchmark_config.stop_ch) {
-#if defined(MICROKIT_CONFIG_benchmark) && defined(CONFIG_ARCH_ARM)
-        sel4bench_get_counters(benchmark_bf, &counter_values[0]);
+#if ENABLE_BENCHMARKING
+        asm volatile ("isb sy" : : : "memory");
+        uint64_t value;
+        PMU_READ("PMOVSCLR_EL0", value);
+        sddf_printf("overflow flag: %jx\n", value);
+        value = sel4bench_get_counters(benchmark_bf, &counter_values[0]);
+        sddf_printf("cycles2: %ju\n", value);
         sel4bench_stop_counters(benchmark_bf);
 
         sddf_printf("{\n");
         for (int i = 0; i < ARRAY_SIZE(benchmarking_events); i++) {
-            sddf_printf("%s: %lu\n", counter_names[i], counter_values[i]);
+            if (i % 2 == 0 && benchmarking_events[i + 1] == 0x1E) {
+                sddf_printf("%20s: %ju\n", counter_names[i], (((uint64_t) counter_values[i + 1]) << 32) + counter_values[i]);
+                i += 1;
+            } else {
+                sddf_printf("%20s: %lu\n", counter_names[i], counter_values[i]);
+            }
         }
         sddf_printf("}\n");
 #endif
@@ -194,11 +210,8 @@ void init(void)
                       serial_config.tx.data.vaddr);
     serial_putchar_init(serial_config.tx.id, &serial_tx_queue_handle);
 
-#ifdef MICROKIT_CONFIG_benchmark
-    sddf_printf("BENCH|LOG: MICROKIT_CONFIG_benchmark defined\n");
-#ifndef CONFIG_ARCH_ARM
-    sddf_printf("BENCH|LOG: System not running on ARM, benchmarking not implemented.\n");
-#endif
+#if ENABLE_BENCHMARKING
+    sddf_printf("BENCH|LOG: ENABLE_BENCHMARKING defined\n");
 #endif
 #ifdef CONFIG_BENCHMARK_TRACK_UTILISATION
     sddf_printf("BENCH|LOG: CONFIG_BENCHMARK_TRACK_UTILISATION defined\n");
@@ -207,7 +220,7 @@ void init(void)
     sddf_printf("BENCH|LOG: CONFIG_BENCHMARK_TRACK_KERNEL_ENTRIES defined\n");
 #endif
 
-#if defined(MICROKIT_CONFIG_benchmark) && defined(CONFIG_ARCH_ARM)
+#if ENABLE_BENCHMARKING
     sel4bench_init();
     seL4_Word n_counters = sel4bench_get_num_counters();
     for (seL4_Word counter = 0; counter < MIN(n_counters, ARRAY_SIZE(benchmarking_events)); counter++) {

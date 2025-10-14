@@ -18,39 +18,39 @@ fun rx_return() {
     var client_enqueued = 0;
     var virt_enqueued = 0;
     var reprocess = 1;
-    
+
     while (reprocess) {
         var virt_active_queue = pnk_mem(VIRT_QUEUE_BASE + 1);
         var virt_capacity = pnk_mem(VIRT_QUEUE_BASE + 2);
-        
+
         var 1 virt_active_empty = net_queue_empty(virt_active_queue, virt_capacity);
-        
+
         while (virt_active_empty == 0) {
             var cli_free_queue = pnk_mem(CLI_QUEUE_BASE + 0);
             var cli_capacity = pnk_mem(CLI_QUEUE_BASE + 2);
-            
+
             var 1 cli_free_empty = net_queue_empty(cli_free_queue, cli_capacity);
-            
+
             if (cli_free_empty == 0) {
                 var {1,1} cli_buffer = net_dequeue(cli_free_queue, cli_capacity);
                 var cli_io_or_offset = cli_buffer.0;
                 var cli_len = cli_buffer.1;
-                
+
                 var buffer_mask = NET_BUFFER_SIZE - 1;
                 var cli_offset_check = cli_io_or_offset & buffer_mask;
                 var cli_num_buffers = pnk_mem(CLI_NUM_BUFFERS);
                 var max_offset = cli_num_buffers * NET_BUFFER_SIZE;
-                
+
                 if (cli_offset_check == 0 && cli_io_or_offset < max_offset) {
                     var {1,1} virt_buffer = net_dequeue(virt_active_queue, virt_capacity);
                     var virt_io_or_offset = virt_buffer.0;
                     var virt_len = virt_buffer.1;
-                    
+
                     var client_data_base = pnk_mem(CLIENT_DATA_VADDR);
                     var device_data_base = pnk_mem(DEVICE_DATA_VADDR);
                     var cli_addr = client_data_base + cli_io_or_offset;
                     var virt_addr = device_data_base + virt_io_or_offset;
-                    
+
                     // Original byte-by-byte memcpy (slow as Pancake's optimisation cannot optmise this):
                     // var copy_idx = 0;
                     // while (copy_idx < virt_len) {
@@ -59,14 +59,14 @@ fun rx_return() {
                     //     !st8 cli_addr + copy_idx, byte_val;
                     //     copy_idx = copy_idx + 1;
                     // }
-                    
+
                     // some simple alternative that is much faster
                     // but a compiler builtin would be appreciated - e.g. CompCert
-                    
+
                     // faster memcpy
                     var copy_idx = 0;
                     var remaining = virt_len;
-                    
+
                     while (remaining >= 8) {
                         var val64 = 0;
                         !ldw val64, virt_addr + copy_idx;
@@ -74,7 +74,7 @@ fun rx_return() {
                         copy_idx = copy_idx + 8;
                         remaining = remaining - 8;
                     }
-                    
+
                     while (remaining >= 4) {
                         var val32 = 0;
                         !ld32 val32, virt_addr + copy_idx;
@@ -82,7 +82,7 @@ fun rx_return() {
                         copy_idx = copy_idx + 4;
                         remaining = remaining - 4;
                     }
-                    
+
                     while (remaining >= 2) {
                         var val16 = 0;
                         !ld16 val16, virt_addr + copy_idx;
@@ -90,29 +90,29 @@ fun rx_return() {
                         copy_idx = copy_idx + 2;
                         remaining = remaining - 2;
                     }
-                    
+
                     if (remaining > 0) {
                         var byte_val = 0;
                         !ld8 byte_val, virt_addr + copy_idx;
                         !st8 cli_addr + copy_idx, byte_val;
                     }
                     // memcpy end here
-                    
+
                     cli_len = virt_len;
                     virt_len = 0;
-                    
+
                     var cli_active_queue = pnk_mem(CLI_QUEUE_BASE + 1);
                     net_enqueue(cli_active_queue, cli_io_or_offset, cli_len, cli_capacity);
-                    
+
                     var virt_free_queue = pnk_mem(VIRT_QUEUE_BASE + 0);
                     net_enqueue(virt_free_queue, virt_io_or_offset, virt_len, virt_capacity);
-                    
+
                     client_enqueued = 1;
                 } else {
                     var {1,1} virt_buffer = net_dequeue(virt_active_queue, virt_capacity);
                     var virt_io_or_offset = virt_buffer.0;
                     var virt_len = virt_buffer.1;
-                    
+
                     var virt_free_queue = pnk_mem(VIRT_QUEUE_BASE + 0);
                     net_enqueue(virt_free_queue, virt_io_or_offset, 0, virt_capacity);
                 }
@@ -120,50 +120,50 @@ fun rx_return() {
                 var {1,1} virt_buffer = net_dequeue(virt_active_queue, virt_capacity);
                 var virt_io_or_offset = virt_buffer.0;
                 var virt_len = virt_buffer.1;
-                
+
                 var virt_free_queue = pnk_mem(VIRT_QUEUE_BASE + 0);
                 net_enqueue(virt_free_queue, virt_io_or_offset, 0, virt_capacity);
             }
-            
+
             virt_enqueued = 1;
-            
+
             virt_active_empty = net_queue_empty(virt_active_queue, virt_capacity);
         }
-        
+
         net_request_signal(virt_active_queue, virt_capacity);
         reprocess = 0;
-        
+
         virt_active_empty = net_queue_empty(virt_active_queue, virt_capacity);
         if (virt_active_empty == 0) {
             net_cancel_signal(virt_active_queue);
             reprocess = 1;
         }
     }
-    
+
     if (client_enqueued) {
         var cli_active_queue = pnk_mem(CLI_QUEUE_BASE + 1);
         var cli_capacity = pnk_mem(CLI_QUEUE_BASE + 2);
         var 1 client_signal_required = net_require_signal(cli_active_queue, cli_capacity);
-        
+
         if (client_signal_required) {
             net_cancel_signal(cli_active_queue);
             var client_id = pnk_mem(CONFIG_CLIENT_ID);
             sddf_notify(client_id)
         }
     }
-    
+
     if (virt_enqueued) {
         var virt_free_queue = pnk_mem(VIRT_QUEUE_BASE + 0);
         var virt_capacity = pnk_mem(VIRT_QUEUE_BASE + 2);
         var 1 virt_signal_required = net_require_signal(virt_free_queue, virt_capacity);
-        
+
         if (virt_signal_required) {
             net_cancel_signal(virt_free_queue);
             var virt_id = pnk_mem(CONFIG_VIRT_RX_ID);
             sddf_deferred_notify(virt_id)
         }
     }
-    
+
     return 0;
 }
 

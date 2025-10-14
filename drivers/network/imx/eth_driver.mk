@@ -23,7 +23,7 @@ eth_driver.elf: ${BUILD_DIR}/ethernet_pnk.o imx/ethernet.o pancake_ffi.o
 
 ETHERNET_PNK = ${UTIL}/util.🥞 \
 		${SDDF}/include/sddf/network/queue.🥞 \
-		${ETHERNET_DRIVER_DIR}/ethernet_noglob.🥞
+		${ETHERNET_DRIVER_DIR}/ethernet_noglob_no_queue_fence.🥞
 
 ${BUILD_DIR}/ethernet_pnk.S: $(ETHERNET_PNK)
 	cat $(ETHERNET_PNK) | cpp -P | $(CAKE_COMPILER) --target=arm8 --pancake --main_return=true > $@
@@ -33,7 +33,11 @@ imx/ethernet.o: ${ETHERNET_DRIVER_DIR}/ethernet.c ${CHECK_NETDRV_FLAGS_MD5}
 	${CC} -c ${CFLAGS} ${CFLAGS_network} -DPANCAKE_NETWORK_DRIVER -I ${ETHERNET_DRIVER_DIR} -o $@ $<
 
 ${BUILD_DIR}/ethernet_pnk.o: ${BUILD_DIR}/ethernet_pnk.S
+ifeq ($(strip $(TOOLCHAIN)), clang)
 	$(CC) -c -mcpu=$(CPU) -target $(TARGET) $< -o $@
+else
+	$(CC) -c -mcpu=$(CPU) $< -o $@
+endif
 else
 eth_driver.elf: network/imx/ethernet.o
 	$(LD) $(LDFLAGS) $< $(LIBS) -o $@

@@ -58,8 +58,7 @@ NETWORK_QUEUE_INCLUDE := ${SDDF}/include/sddf/network
 
 ifeq ($(PANCAKE_NETWORK_VIRT_RX),1)
 NETWORK_VIRT_RX_PNK = ${UTIL}/util.🥞 \
-	${NETWORK_QUEUE_INCLUDE}/queue.🥞 \
-	${SDDF}/network/components/virt_rx.🥞
+	${SDDF}/network/components/virt_rx_opt_compact.🥞
 
 network_virt_rx.elf: network/components/virt_rx_pnk.o network/components/network_virt_rx.o pancake_ffi.o libsddf_util_debug.a
 	$(LD) $(LDFLAGS) $^ $(LIBS) -o $@
@@ -82,8 +81,7 @@ endif
 
 ifeq ($(PANCAKE_NETWORK_VIRT_TX),1)
 NETWORK_VIRT_TX_PNK = ${UTIL}/util.🥞 \
-	${NETWORK_QUEUE_INCLUDE}/queue.🥞 \
-	${SDDF}/network/components/virt_tx.🥞
+	${SDDF}/network/components/virt_tx_opt_compact.🥞
 
 network_virt_tx.elf: network/components/virt_tx_pnk.o network/components/network_virt_tx.o pancake_ffi.o libsddf_util_debug.a
 	$(LD) $(LDFLAGS) $^ $(LIBS) -o $@
@@ -106,8 +104,7 @@ endif
 
 ifeq ($(PANCAKE_NETWORK_COPY),1)
 NETWORK_COPY_PNK = ${UTIL}/util.🥞 \
-	${NETWORK_QUEUE_INCLUDE}/queue.🥞 \
-	${SDDF}/network/components/copy.🥞
+	${SDDF}/network/components/copy_opt_compact.🥞
 
 network_copy.elf: network/components/copy_pnk.o network/components/network_copy.o pancake_ffi.o libsddf_util_debug.a
 	$(LD) $(LDFLAGS) $^ $(LIBS) -o $@

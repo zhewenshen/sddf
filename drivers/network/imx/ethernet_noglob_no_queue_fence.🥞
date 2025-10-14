@@ -109,7 +109,7 @@ var 1 hw_tx_descr     = HW_TX_DESCR;
     tx_stat_tmp = tx_stat_tmp | WRAP; \
   } \
   !st32 tx_descr + 4, phys; \
-  !st16 tx_descr, len;
+  !st16 tx_descr, len; \
   THREAD_MEMORY_RELEASE() \
   !st16 tx_descr + 2, tx_stat_tmp
 

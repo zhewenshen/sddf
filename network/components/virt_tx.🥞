@@ -14,7 +14,7 @@
 fun extract_offset(1 phys_addr) {
     var num_clients = pnk_mem(NUM_CLIENTS);
     var client = 0;
-    
+
     while (client < num_clients) {
         var cli_data_io = pnk_mem(CLI_DATA_IO_BASE + client);
         var cli_capacity = pnk_mem(CLI_QUEUE_BASE + client * 4 + 2);
@@ -26,7 +26,7 @@ fun extract_offset(1 phys_addr) {
         }
         client = client + 1;
     }
-    
+
     return <-1, 0>;
 }
 
@@ -34,155 +34,155 @@ fun tx_provide() {
     var enqueued = 0;
     var num_clients = pnk_mem(NUM_CLIENTS);
     var client = 0;
-    
+
     while (client < num_clients) {
         var reprocess = 1;
-        
+
         while (reprocess) {
             var cli_queue_base = CLI_QUEUE_BASE + client * 4;
             var cli_active_queue = pnk_mem(cli_queue_base + 1);
             var cli_capacity = pnk_mem(cli_queue_base + 2);
-            
+
             var 1 cli_empty = net_queue_empty(cli_active_queue, cli_capacity);
-            
+
             while (1) {
-                
+
                 if (cli_empty) { break; }
                 var {1,1} buffer = net_dequeue(cli_active_queue, cli_capacity);
                 var io_offset = buffer.0;
                 var len = buffer.1;
-                
+
                 var aligned = (io_offset & 2047) == 0;
                 var in_bounds = io_offset < (cli_capacity * 2048);
-                
+
                 var is_invalid = 0;
                 if (aligned == 0) { is_invalid = 1; }
                 if (in_bounds == 0) { is_invalid = 1; }
-                
+
                 if (is_invalid) {
                     var cli_free_queue = pnk_mem(cli_queue_base);
                     net_enqueue(cli_free_queue, io_offset, len, cli_capacity);
                 } else {
                     var cli_data_vaddr = pnk_mem(cli_queue_base + 3);
                     var buffer_vaddr = cli_data_vaddr + io_offset;
-                    
+
                     cache_clean(buffer_vaddr, buffer_vaddr + len)
-                    
+
                     var cli_data_io = pnk_mem(CLI_DATA_IO_BASE + client);
                     var phys_addr = io_offset + cli_data_io;
-                    
+
                     var drv_active_queue = pnk_mem(DRV_QUEUE_BASE + 1);
                     var drv_capacity = pnk_mem(DRV_QUEUE_BASE + 2);
                     net_enqueue(drv_active_queue, phys_addr, len, drv_capacity);
                     enqueued = 1;
                 }
-                
+
                 cli_empty = net_queue_empty(cli_active_queue, cli_capacity);
             }
-            
+
             net_request_signal(cli_active_queue, cli_capacity);
             reprocess = 0;
-            
+
             cli_empty = net_queue_empty(cli_active_queue, cli_capacity);
             if (cli_empty == 0) {
                 net_cancel_signal(cli_active_queue);
                 reprocess = 1;
             }
         }
-        
+
         client = client + 1;
     }
-    
+
     if (enqueued) {
         var drv_active_queue = pnk_mem(DRV_QUEUE_BASE + 1);
         var drv_capacity = pnk_mem(DRV_QUEUE_BASE + 2);
         var 1 signal_required = net_require_signal(drv_active_queue, drv_capacity);
-        
+
         if (signal_required) {
             net_cancel_signal(drv_active_queue);
             sddf_deferred_notify(CONFIG_DRIVER_ID)
         }
     }
-    
+
     return 0;
 }
 
 fun tx_return() {
     var reprocess = 1;
     var num_clients = pnk_mem(NUM_CLIENTS);
-    
+
     var i = 0;
     while (i < num_clients) {
         var notify_addr = pnk_mem_ptr(NOTIFY_CLIENTS_BASE + i);
         !st32 notify_addr, 0;
         i = i + 1;
     }
-    
+
     while (reprocess) {
         // Get driver free queue
         var drv_free_queue = pnk_mem(DRV_QUEUE_BASE);
         var drv_capacity = pnk_mem(DRV_QUEUE_BASE + 2);
-        
+
         var 1 drv_empty = net_queue_empty(drv_free_queue, drv_capacity);
-        
+
         while (true) {
-            
+
             if (drv_empty) { break; }
             var {1,1} drv_buffer = net_dequeue(drv_free_queue, drv_capacity);
             var phys_addr = drv_buffer.0;
             var len = drv_buffer.1;
-            
+
             var {1,1} extract_result = extract_offset(phys_addr);
             var client = extract_result.0;
             var offset = extract_result.1;
-            
+
             if (client < 0) {
                 // Skip invalid buffer and break from processing
                 break;
             }
-            
+
             var cli_queue_base = CLI_QUEUE_BASE + client * 4;
             var cli_free_queue = pnk_mem(cli_queue_base);
             var cli_capacity = pnk_mem(cli_queue_base + 2);
-            
+
             net_enqueue(cli_free_queue, offset, len, cli_capacity);
-            
+
             var notify_addr = pnk_mem_ptr(NOTIFY_CLIENTS_BASE + client);
             !st32 notify_addr, 1;
-            
+
             drv_empty = net_queue_empty(drv_free_queue, drv_capacity);
         }
-        
+
         net_request_signal(drv_free_queue, drv_capacity);
         reprocess = 0;
-        
+
         drv_empty = net_queue_empty(drv_free_queue, drv_capacity);
         if (drv_empty == 0) {
             net_cancel_signal(drv_free_queue);
             reprocess = 1;
         }
     }
-    
+
     var client = 0;
     while (client < num_clients) {
         var notify_flag = pnk_mem(NOTIFY_CLIENTS_BASE + client);
-        
+
         if (notify_flag) {
             var cli_queue_base = CLI_QUEUE_BASE + client * 4;
             var cli_free_queue = pnk_mem(cli_queue_base);
             var cli_capacity = pnk_mem(cli_queue_base + 2);
             var 1 signal_required = net_require_signal(cli_free_queue, cli_capacity);
-            
+
             if (signal_required) {
                 net_cancel_signal(cli_free_queue);
                 var cli_conn_id = pnk_mem(CLI_CONN_ID_BASE + client);
                 sddf_notify(cli_conn_id)
             }
         }
-        
+
         client = client + 1;
     }
-    
+
     return 0;
 }
 
@@ -190,8 +190,5 @@ export fun notified(1 ch) {
     tx_return();
     tx_provide();
 
-    if (ch > 63) {
-        debug_print(0,ch,0,0);
-    }
     return 0;
 }

@@ -268,8 +268,18 @@ void init(void)
         for (int j = 0; j < ETH_HWADDR_LEN; j++) {
             pnk_mem[CLI_MAC_ADDR_BASE + i * ETH_HWADDR_LEN + j] = config.clients[i].mac_addr[j];
         }
+
+        /* Print MAC address for hardcoding in Pancake */
+        sddf_dprintf("VIRT_RX: Client %d MAC: %02x:%02x:%02x:%02x:%02x:%02x\n",
+                     i,
+                     config.clients[i].mac_addr[0],
+                     config.clients[i].mac_addr[1],
+                     config.clients[i].mac_addr[2],
+                     config.clients[i].mac_addr[3],
+                     config.clients[i].mac_addr[4],
+                     config.clients[i].mac_addr[5]);
     }
-    
+
     for (int i = 0; i < config.driver.num_buffers; i++) {
         pnk_mem[BUFFER_REFS_BASE + i] = 0;
     }
