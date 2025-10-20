@@ -23,11 +23,10 @@ eth_driver.elf: ${BUILD_DIR}/ethernet_pnk.o meson/ethernet.o pancake_ffi.o
 	$(LD) $(LDFLAGS) $^ $(LIBS) -o $@
 
 ETHERNET_PNK = ${UTIL}/util.🥞 \
-		${SDDF}/include/sddf/network/queue.🥞 \
-		${ETHERNET_DRIVER_DIR}/ethernet.🥞
+	${ETHERNET_DRIVER_DIR}/ethernet_opt.🥞
 
 ${BUILD_DIR}/ethernet_pnk.S: $(ETHERNET_PNK)
-	cat $(ETHERNET_PNK) | cpp -P | $(CAKE_COMPILER) --target=arm8 --pancake --main_return=true > $@
+	cat $(ETHERNET_PNK) | cpp -P | $(CAKE_COMPILER) --target=arm8 --pancake --main_return=true --gc=none --reg_alg=3 --exclude_prelude=true > $@
 
 meson/ethernet.o: ${ETHERNET_DRIVER_DIR}/ethernet.c ${CHECK_NETDRV_FLAGS_MD5}
 	mkdir -p meson
@@ -40,7 +39,7 @@ eth_driver.elf: network/meson/ethernet.o libsddf_util_debug.a
 	$(LD) $(LDFLAGS) $^ $(LIBS) -o $@
 endif
 
-network/meson/ethernet.o: ${ETHERNET_DRIVER_DIR}/ethernet.c ${CHECK_NETDRV_FLAGS_MD5}
+network/meson/ethernet.o: ${ETHERNET_DRIVER_DIR}/ethernet_nofence.c ${CHECK_NETDRV_FLAGS_MD5}
 	mkdir -p network/meson
 	${CC} -c ${CFLAGS} ${CFLAGS_network} -I ${ETHERNET_DRIVER_DIR} -o $@ $<
 

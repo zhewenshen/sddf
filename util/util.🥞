@@ -20,12 +20,6 @@
 #define sddf_notify(channel)    \
   @sddf_notify(0,channel,0,0);  \
 
-#define sddf_notify0(channel)    \
-  @sddf_notify0(0,channel,0,0);  \
-
-#define sddf_notify1(channel)    \
-  @sddf_notify1(0,channel,0,0);  \
-
 #define sddf_deferred_notify(channel)   \
   @sddf_deferred_notify(0,channel,0,0); \
 
@@ -52,5 +46,3 @@
 
 #define debug_print(c, clen, a, alen)   \
   @debug_print(c,clen,a,alen)
-
-#define unchanged(expr)     expr == old(expr)

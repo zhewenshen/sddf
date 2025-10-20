@@ -77,6 +77,9 @@ fun rx_return() {
         i = i + 1;
     }
 
+    var data_io_addr = pnk_mem(DATA_IO_ADDR);
+    var data_region_vaddr = pnk_mem(DATA_REGION_VADDR);
+
     while (reprocess) {
 
         var drv_active_queue = pnk_mem(DRV_QUEUE_BASE + 1);
@@ -89,8 +92,8 @@ fun rx_return() {
             var io_offset = buffer.0;
             var len = buffer.1;
 
-            io_offset = io_offset - pnk_mem(DATA_IO_ADDR);
-            var buffer_vaddr = io_offset + pnk_mem(DATA_REGION_VADDR);
+            io_offset = io_offset - data_io_addr;
+            var buffer_vaddr = io_offset + data_regsion_vaddr;
 
             cache_clean_and_invalidate(buffer_vaddr, buffer_vaddr + len)
 

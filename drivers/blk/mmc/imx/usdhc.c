@@ -46,12 +46,51 @@
 
 #define fallthrough __attribute__((__fallthrough__))
 
+#ifdef PANCAKE_BLK_DRIVER
+blk_queue_handle_t *blk_queue_ptr;
+#define blk_queue (*blk_queue_ptr)
+#else
 blk_queue_handle_t blk_queue;
+#endif
+
 volatile imx_usdhc_regs_t *usdhc_regs;
 
 __attribute__((__section__(".device_resources"))) device_resources_t device_resources;
 __attribute__((__section__(".blk_driver_config"))) blk_driver_config_t blk_config;
 __attribute__((__section__(".timer_client_config"))) timer_client_config_t timer_config;
+
+#ifdef PANCAKE_BLK_DRIVER
+/* Pancake runtime infrastructure */
+static char cml_memory[1024*8];
+extern void *cml_heap;
+extern void *cml_stack;
+extern void *cml_stackend;
+
+extern void cml_main(void);
+
+void cml_exit(int arg) {
+    sddf_printf("uSDHC DRIVER|ERROR: Pancake exit with code %d\n", arg);
+}
+
+void cml_err(int arg) {
+    if (arg == 3) {
+        sddf_printf("uSDHC DRIVER|ERROR: Memory not ready for entry\n");
+    }
+    cml_exit(arg);
+}
+
+void cml_clear() {
+    /* Pancake cache clear hook - not currently used */
+}
+
+void init_pancake_mem() {
+    unsigned long cml_heap_sz = 1024*4;
+    unsigned long cml_stack_sz = 1024*4;
+    cml_heap = cml_memory;
+    cml_stack = cml_heap + cml_heap_sz;
+    cml_stackend = cml_stack + cml_stack_sz;
+}
+#endif
 
 /* Make sure to update drv_to_blk_status() as well */
 typedef enum {
@@ -1251,14 +1290,28 @@ void do_bringup(void)
 }
 
 #ifdef PANCAKE_BLK_DRIVER
-/* FFI function for Pancake - signature: (c, clen, a, alen) where clen = channel */
-void ffiNotified(unsigned char *c, long clen, unsigned char *a, long alen)
+/* FFI wrapper functions for Pancake callbacks */
+
+/* Called from Pancake when bringup is needed during IRQ */
+void ffiDoBringup(unsigned char *c, long clen, unsigned char *a, long alen)
 {
-    microkit_channel ch = (microkit_channel)clen;
+    do_bringup();
+}
+
+/* Called from Pancake when client handling is needed */
+void ffiHandleClient(unsigned char *c, long clen, unsigned char *a, long alen)
+{
+    bool was_irq = (clen != 0);
+    handle_client(was_irq);
+}
+
+/* Main notified function provided by Pancake */
+extern void notified(microkit_channel ch);
+
 #else
+/* C-only version of notified */
 void notified(microkit_channel ch)
 {
-#endif
     if (driver_status == DrvStatusBringup) {
         if (ch == device_resources.irqs[0].id) {
             do_bringup();
@@ -1282,11 +1335,7 @@ void notified(microkit_channel ch)
         LOG_DRIVER_ERR("notification on unknown channel: %d\n", ch);
     }
 }
-
-#ifdef PANCAKE_BLK_DRIVER
-/* Pancake provides this */
-extern void notified(microkit_channel ch);
-#endif
+#endif /* !PANCAKE_BLK_DRIVER */
 
 void init()
 {
@@ -1304,13 +1353,61 @@ void init()
     LOG_DRIVER("Beginning driver initialisation...\n");
     stop_operations_and_clear_card_state();
 
-    /* Setup the sDDF block queue */
+#ifdef PANCAKE_BLK_DRIVER
+    /* Initialize Pancake runtime */
+    init_pancake_mem();
+
+    /* Set up Pancake memory layout */
+    uintptr_t *pnk_mem = (uintptr_t *) cml_heap;
+
+    /* Slot 0: uSDHC register base (set after usdhc_regs is initialized) */
+    /* Slot 1: IRQ channel */
+    pnk_mem[1] = device_resources.irqs[0].id;
+    /* Slot 2: Virtualizer channel */
+    pnk_mem[2] = blk_config.virt.id;
+
+    /* Slots 3-5: Block queue handle structure */
+    blk_queue_ptr = (blk_queue_handle_t *) &pnk_mem[3];
+
+    /* Initialize block queue */
+    blk_queue_init(blk_queue_ptr, blk_config.virt.req_queue.vaddr,
+                   blk_config.virt.resp_queue.vaddr, blk_config.virt.num_buffers);
+
+    /* Slots 6-11: Driver state (initialized as needed) */
+    pnk_mem[6] = 0;  /* BLK_REQ_INFLIGHT = false */
+    pnk_mem[7] = 0;  /* BLK_REQ_ID */
+    pnk_mem[8] = 0;  /* BLK_REQ_CODE */
+    pnk_mem[9] = 0;  /* BLK_REQ_PADDR */
+    pnk_mem[10] = 0; /* BLK_REQ_BLK_NUMBER */
+    pnk_mem[11] = 0; /* BLK_REQ_BLK_COUNT */
+
+    /* Slot 12: Card CCS status */
+    pnk_mem[12] = card_info.ccs ? 1 : 0;
+
+    /* Slot 13: Driver status */
+    pnk_mem[13] = driver_status;
+
+    /* Slot 0: uSDHC register base address (now that usdhc_regs is set) */
+    pnk_mem[0] = (uintptr_t) usdhc_regs;
+
+#else
+    /* C-only: Setup the sDDF block queue */
     blk_queue_init(&blk_queue, blk_config.virt.req_queue.vaddr, blk_config.virt.resp_queue.vaddr,
                    blk_config.virt.num_buffers);
+#endif
 
     /* Make sure we have DMA support. */
     assert(usdhc_regs->host_ctrl_cap & USDHC_HOST_CTRL_CAP_DMAS);
 
     driver_status = DrvStatusBringup;
+
+#ifdef PANCAKE_BLK_DRIVER
+    /* Update driver status in Pancake memory before calling cml_main */
+    pnk_mem[13] = driver_status;
+
+    /* Enter Pancake runtime - this will call main() and handle events */
+    cml_main();
+#else
     do_bringup();
+#endif
 }

@@ -1,0 +1,227 @@
+var 1 irq_ch = (lds 1 (@base + (1) * @biw));
+var 1 rx_ch = (lds 1 (@base + (2) * @biw));
+var 1 tx_ch = (lds 1 (@base + (3) * @biw));
+var 1 mac_reg_base = (lds 1 (@base + (0) * @biw));
+var 1 net_rx_free = (lds 1 (@base + (4) * @biw));
+var 1 net_rx_active = (lds 1 (@base + (5) * @biw));
+var 1 net_rx_capacity = (lds 1 (@base + (6) * @biw));
+var 1 net_tx_free = (lds 1 (@base + (7) * @biw));
+var 1 net_tx_active = (lds 1 (@base + (8) * @biw));
+var 1 net_tx_capacity = (lds 1 (@base + (9) * @biw));
+var 1 hw_rx_capacity = (lds 1 (@base + (12) * @biw));
+var 1 hw_tx_capacity = (lds 1 (@base + (16) * @biw));
+var 1 hw_rx_descr = (lds 1 (@base + (13) * @biw));
+var 1 hw_tx_descr = (lds 1 (@base + (17) * @biw));
+fun rx_provide()
+{
+  var reprocess = true;
+  var rx_free = net_rx_free;
+  var rx_queue_cap = net_rx_capacity;
+  var hw_rx_capacity = hw_rx_capacity;
+  var hw_rx_descr = hw_rx_descr;
+  var mac_reg = mac_reg_base;
+  while (reprocess)
+  {
+    while (true)
+    {
+      var full = (((lds 1 (@base + (10) * @biw)) - (lds 1 (@base + (11) * @biw))) == hw_rx_capacity);
+      if (full) { break; }
+      var empty = 0;
+      var qe_tail = 0; var qe_head = 0; !ld16 qe_tail, rx_free; !ld16 qe_head, rx_free + 2; var qe_empty_check = qe_tail - qe_head; empty = (qe_empty_check == 0);
+      if (empty) { break; }
+      var io_addr = 0;
+      var len = 0;
+      var dq_head = 0; !ld16 dq_head, rx_free + 2; var dq_mod_head = dq_head & (rx_queue_cap - 1); var dq_entry_addr = rx_free + 8 + dq_mod_head * 16; !ldw io_addr, dq_entry_addr; !ld32 len, dq_entry_addr + 8; dq_head = (dq_head + 1) & 65535; !st16 rx_free + 2, dq_head;
+      var rx_tail = (lds 1 (@base + (10) * @biw));
+      var idx = rx_tail & (hw_rx_capacity - 1);
+      var cntl = (1536 << 0) & 2047;
+      if (idx + 1 == hw_rx_capacity) {
+        cntl = cntl | 33554432;
+      }
+      var rx_descr_base = hw_rx_descr; var rx_descr = rx_descr_base + idx * 16; !st32 rx_descr + 8, io_addr; !st32 rx_descr + 12, 0; !st32 rx_descr + 4, cntl; @THREAD_MEMORY_RELEASE(0,0,0,0); !st32 rx_descr, 2147483648;
+      st (@base + (10) * @biw), (rx_tail + 1);
+      var srp_reg_addr = mac_reg + 4096 + 8; !st32 srp_reg_addr, 4294967295;
+    }
+    !st32 rx_free + 4, 0;
+    reprocess = false;
+    var empty = 0;
+    var qe_tail = 0; var qe_head = 0; !ld16 qe_tail, rx_free; !ld16 qe_head, rx_free + 2; var qe_empty_check = qe_tail - qe_head; empty = (qe_empty_check == 0);
+    var full = (((lds 1 (@base + (10) * @biw)) - (lds 1 (@base + (11) * @biw))) == hw_rx_capacity);
+    if ((!empty) && (!full)) {
+      !st32 rx_free + 4, 1;
+      reprocess = true;
+    }
+  }
+  return 0;
+}
+fun tx_provide()
+{
+  var reprocess = true;
+  var tx_active = net_tx_active;
+  var tx_queue_cap = net_tx_capacity;
+  var hw_tx_capacity = hw_tx_capacity;
+  var hw_tx_descr = hw_tx_descr;
+  var mac_reg = mac_reg_base;
+  while (reprocess)
+  {
+    while (true)
+    {
+      var full = (((lds 1 (@base + (14) * @biw)) - (lds 1 (@base + (15) * @biw))) == hw_tx_capacity);
+      if (full) { break; }
+      var empty = 0;
+      var qe_tail = 0; var qe_head = 0; !ld16 qe_tail, tx_active; !ld16 qe_head, tx_active + 2; var qe_empty_check = qe_tail - qe_head; empty = (qe_empty_check == 0);
+      if (empty) { break; }
+      var io_addr = 0;
+      var len = 0;
+      var dq_head = 0; !ld16 dq_head, tx_active + 2; var dq_mod_head = dq_head & (tx_queue_cap - 1); var dq_entry_addr = tx_active + 8 + dq_mod_head * 16; !ldw io_addr, dq_entry_addr; !ld32 len, dq_entry_addr + 8; dq_head = (dq_head + 1) & 65535; !st16 tx_active + 2, dq_head;
+      var tx_tail = (lds 1 (@base + (14) * @biw));
+      var idx = tx_tail & (hw_tx_capacity - 1);
+      var cntl = (len << 0) & 2047;
+      cntl = cntl | 1073741824 | 536870912 | 2147483648;
+      if (idx + 1 == hw_tx_capacity) {
+        cntl = cntl | 33554432;
+      }
+      var tx_descr_base = hw_tx_descr; var tx_descr = tx_descr_base + idx * 16; !st32 tx_descr + 8, io_addr; !st32 tx_descr + 12, 0; !st32 tx_descr + 4, cntl; @THREAD_MEMORY_RELEASE(0,0,0,0); !st32 tx_descr, 2147483648;
+      st (@base + (14) * @biw), (tx_tail + 1);
+    }
+    !st32 tx_active + 4, 0;
+    reprocess = false;
+    var full = (((lds 1 (@base + (14) * @biw)) - (lds 1 (@base + (15) * @biw))) == hw_tx_capacity);
+    var empty = 0;
+    var qe_tail = 0; var qe_head = 0; !ld16 qe_tail, tx_active; !ld16 qe_head, tx_active + 2; var qe_empty_check = qe_tail - qe_head; empty = (qe_empty_check == 0);
+    if ((!empty) && (!full)) {
+      !st32 tx_active + 4, 1;
+      reprocess = true;
+    }
+  }
+  var stp_reg_addr = mac_reg + 4096 + 4; !st32 stp_reg_addr, 4294967295;
+  return 0;
+}
+fun rx_return()
+{
+  var rx_active = net_rx_active;
+  var hw_rx_descr = hw_rx_descr;
+  var rx_queue_cap = net_rx_capacity;
+  var hw_rx_capacity = hw_rx_capacity;
+  var mac_reg = mac_reg_base;
+  var packets_transferred = false;
+  while (true)
+  {
+    var empty = ((lds 1 (@base + (11) * @biw)) == (lds 1 (@base + (10) * @biw)));
+    if (empty) { break; }
+    var rx_head = (lds 1 (@base + (11) * @biw));
+    var idx = rx_head & (hw_rx_capacity - 1);
+    var dscr_addr = hw_rx_descr + idx * 16;
+    var status = 0;
+    !ld32 status, dscr_addr;
+    if (status & 2147483648) { break; }
+    @THREAD_MEMORY_ACQUIRE(0,0,0,0);
+    if (status & 32768) {
+      @assert(0,0,0,0);
+      var rx_tail = (lds 1 (@base + (10) * @biw));
+      var next_idx = rx_tail & (hw_rx_capacity - 1);
+      var phys = 0;
+      !ld32 phys, dscr_addr + 8;
+      var cntl = (1536 << 0) & 2047;
+      if (next_idx + 1 == hw_rx_capacity) {
+        cntl = cntl | 33554432;
+      }
+      var rx_descr_base = hw_rx_descr; var rx_descr = rx_descr_base + next_idx * 16; !st32 rx_descr + 8, phys; !st32 rx_descr + 12, 0; !st32 rx_descr + 4, cntl; @THREAD_MEMORY_RELEASE(0,0,0,0); !st32 rx_descr, 2147483648;
+      st (@base + (10) * @biw), (rx_tail + 1);
+      var srp_reg_addr = mac_reg + 4096 + 8; !st32 srp_reg_addr, 4294967295;
+    } else {
+      var len = (status & 1073676288) >> 16;
+      var io_addr = 0;
+      !ld32 io_addr, dscr_addr + 8;
+      var eq_tail = 0; !ld16 eq_tail, rx_active; var eq_mod_tail = eq_tail & (rx_queue_cap - 1); var eq_entry_addr = rx_active + 8 + eq_mod_tail * 16; !stw eq_entry_addr, io_addr; !st32 eq_entry_addr + 8, len; eq_tail = (eq_tail + 1) & 65535; !st16 rx_active, eq_tail;
+      packets_transferred = true;
+    }
+    st (@base + (11) * @biw), (rx_head + 1);
+  }
+  var to_signal = 0;
+  var rs_signalled = 0; !ld32 rs_signalled, rx_active + 4; to_signal = !rs_signalled;
+  if (packets_transferred && to_signal) {
+    !st32 rx_active + 4, 1;
+    @microkit_notify(0,rx_ch,0,0);
+  }
+  return 0;
+}
+fun tx_return()
+{
+  var tx_free = net_tx_free;
+  var hw_tx_descr = hw_tx_descr;
+  var tx_queue_cap = net_tx_capacity;
+  var hw_tx_capacity = hw_tx_capacity;
+  var enqueued = false;
+  while (true)
+  {
+    var empty = ((lds 1 (@base + (15) * @biw)) == (lds 1 (@base + (14) * @biw)));
+    if (empty) { break; }
+    var tx_head = (lds 1 (@base + (15) * @biw));
+    var idx = tx_head & (hw_tx_capacity - 1);
+    var dscr_addr = hw_tx_descr + idx * 16;
+    var status = 0;
+    !ld32 status, dscr_addr;
+    if (status & 2147483648) { break; }
+    @THREAD_MEMORY_ACQUIRE(0,0,0,0);
+    var io_addr = 0;
+    !ld32 io_addr, dscr_addr + 8;
+    var eq_tail = 0; !ld16 eq_tail, tx_free; var eq_mod_tail = eq_tail & (tx_queue_cap - 1); var eq_entry_addr = tx_free + 8 + eq_mod_tail * 16; !stw eq_entry_addr, io_addr; !st32 eq_entry_addr + 8, 0; eq_tail = (eq_tail + 1) & 65535; !st16 tx_free, eq_tail;
+    enqueued = true;
+    st (@base + (15) * @biw), (tx_head + 1);
+  }
+  var to_signal = 0;
+  var rs_signalled = 0; !ld32 rs_signalled, tx_free + 4; to_signal = !rs_signalled;
+  if (enqueued && to_signal) {
+    !st32 tx_free + 4, 1;
+    @microkit_notify(0,tx_ch,0,0);
+  }
+  return 0;
+}
+fun main() {
+  rx_provide();
+  tx_provide();
+  @sddf_irq_ack(0,irq_ch,0,0);
+  return 0;
+}
+fun handle_irq() {
+  var mac_reg = mac_reg_base;
+  var e = 0;
+  var gds_reg_addr = mac_reg + 4096 + 20; var gds_status = 0; !ld32 gds_status, gds_reg_addr; e = gds_status;
+  var sds_reg_addr = mac_reg + 4096 + 20; !st32 sds_reg_addr, e;
+  while (e & 40897)
+  {
+    if (e & 1) {
+      tx_return();
+      tx_provide();
+    }
+    if (e & 64) {
+      rx_return();
+    }
+    if (e & 32768) {
+      if (e & 8192) {
+        @assert(0,0,0,0);
+      }
+    }
+    var gds_reg_addr = mac_reg + 4096 + 20; var gds_status = 0; !ld32 gds_status, gds_reg_addr; e = gds_status;
+    var sds_reg_addr = mac_reg + 4096 + 20; !st32 sds_reg_addr, e;
+  }
+  return 0;
+}
+export fun notified(1 ch)
+{
+  if (ch == irq_ch) {
+    handle_irq();
+    @microkit_deferred_irq_ack(0,ch,0,0);
+    return 0;
+  }
+  if (ch == rx_ch) {
+    rx_provide();
+    return 0;
+  }
+  if (ch == tx_ch) {
+    tx_provide();
+    return 0;
+  }
+  return 0;
+}

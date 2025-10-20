@@ -15,8 +15,6 @@ void ffiTHREAD_MEMORY_ACQUIRE(unsigned char *c, long clen, unsigned char *a, lon
 }
 
 void ffiassert(unsigned char *c, long clen, unsigned char *a, long alen) {
-    // clen is the condition
-    sddf_dprintf("ASSERT: c=%p clen=%ld a=%p alen=%ld\n", c, clen, a, alen);
     assert(clen);
 }
 
@@ -41,14 +39,6 @@ void ffisddf_notify(unsigned char *c, long clen, unsigned char *a, long alen) {
     sddf_notify(clen);
 }
 
-void ffisddf_notify0(unsigned char *c, long clen, unsigned char *a, long alen) {
-    sddf_notify(clen);
-}
-
-void ffisddf_notify1(unsigned char *c, long clen, unsigned char *a, long alen) {
-    sddf_notify(clen);
-}
-
 void ffisddf_deferred_notify(unsigned char *c, long clen, unsigned char *a, long alen) {
     sddf_deferred_notify(clen);
 }
@@ -59,21 +49,6 @@ void fficache_clean(unsigned char *c, long clen, unsigned char *a, long alen) {
 
 void fficache_clean_and_invalidate(unsigned char *c, long clen, unsigned char *a, long alen) {
     cache_clean_and_invalidate((unsigned long) c, (unsigned long) a);
-}
-
-void ffild16(unsigned char *c, long clen, unsigned char *a, long alen) {
-    uint16_t x = *((uint16_t *) c);
-    ((uint16_t *) a)[0] = x;
-}
-
-void ffist16(unsigned char *c, long clen, unsigned char *a, long alen) {
-    uint16_t x = (uint16_t) clen;
-    ((uint16_t *) c)[0] = x;
-}
-
-void ffimemcpy(unsigned char *c, long clen, unsigned char *a, long alen) {
-    /* c = dest, clen = src, a = size */
-    sddf_memcpy((void *)c, (void *)clen, (size_t)a);
 }
 
 void ffidebug_print(unsigned char *c, long clen, unsigned char *a, long alen) {

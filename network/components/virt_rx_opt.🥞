@@ -3,11 +3,6 @@
  * SPDX-License-Identifier: BSD-2-Clause
  */
 
-/* OPTIMIZED VERSION: virt_rx_opt
- * - Queue functions converted to macros (eliminate call overhead)
- * - Local variables shadow globals to avoid redundant pnk_mem loads
- */
-
 #define CONFIG_DRIVER_ID         pnk_mem(0)
 #define DRV_QUEUE_BASE           10
 #define CLI_QUEUE_BASE           30
@@ -33,37 +28,29 @@ var 1 drv_free_queue      = pnk_mem(DRV_QUEUE_BASE);
 var 1 data_io_addr        = pnk_mem(DATA_IO_ADDR);
 var 1 data_region_vaddr   = pnk_mem(DATA_REGION_VADDR);
 
-/* Pre-load client MAC addresses as 32-bit and 16-bit values for fast comparison */
-/* MAC address format: bytes [0,1,2,3] as 32-bit, bytes [4,5] as 16-bit */
-var 1 client_0_mac_lo     = pnk_mem(CLI_MAC_ADDR_BASE + 0);      // First 4 bytes
-var 1 client_0_mac_hi     = pnk_mem(CLI_MAC_ADDR_BASE + 4);      // Last 2 bytes
-var 1 client_1_mac_lo     = pnk_mem(CLI_MAC_ADDR_BASE + 6);      // First 4 bytes
-var 1 client_1_mac_hi     = pnk_mem(CLI_MAC_ADDR_BASE + 10);     // Last 2 bytes
-
-/* Inlined queue macros */
 #define NET_QUEUE_EMPTY(queue_ptr, capacity, result_out) \
-  var qe_tail = 0; \
-  var qe_head = 0; \
+  qe_tail = 0; \
+  qe_head = 0; \
   !ld16 qe_tail, queue_ptr; \
   !ld16 qe_head, queue_ptr + 2; \
-  var qe_empty_check = qe_tail - qe_head; \
+  qe_empty_check = qe_tail - qe_head; \
   result_out = (qe_empty_check == 0)
 
 #define NET_DEQUEUE(queue_ptr, capacity, io_out, len_out) \
-  var dq_head = 0; \
+  dq_head = 0; \
   !ld16 dq_head, queue_ptr + 2; \
-  var dq_mod_head = dq_head & (capacity - 1); \
-  var dq_entry_addr = queue_ptr + 8 + dq_mod_head * NET_BUFF_DESC_SIZE; \
+  dq_mod_head = dq_head & (capacity - 1); \
+  dq_entry_addr = queue_ptr + 8 + dq_mod_head * NET_BUFF_DESC_SIZE; \
   !ldw io_out, dq_entry_addr; \
   !ld32 len_out, dq_entry_addr + 8; \
   dq_head = (dq_head + 1) & MAX_INT16; \
   !st16 queue_ptr + 2, dq_head
 
 #define NET_ENQUEUE(queue_ptr, io_addr, len, capacity) \
-  var eq_tail = 0; \
+  eq_tail = 0; \
   !ld16 eq_tail, queue_ptr; \
-  var eq_mod_tail = eq_tail & (capacity - 1); \
-  var eq_entry_addr = queue_ptr + 8 + eq_mod_tail * NET_BUFF_DESC_SIZE; \
+  eq_mod_tail = eq_tail & (capacity - 1); \
+  eq_entry_addr = queue_ptr + 8 + eq_mod_tail * NET_BUFF_DESC_SIZE; \
   !stw eq_entry_addr, io_addr; \
   !st32 eq_entry_addr + 8, len; \
   eq_tail = (eq_tail + 1) & MAX_INT16; \
@@ -76,71 +63,36 @@ var 1 client_1_mac_hi     = pnk_mem(CLI_MAC_ADDR_BASE + 10);     // Last 2 bytes
   !st32 queue_ptr + 4, 1
 
 #define NET_REQUIRE_SIGNAL(queue_ptr, result_out) \
-  var rs_signalled = 0; \
+  rs_signalled = 0; \
   !ld32 rs_signalled, queue_ptr + 4; \
   result_out = !rs_signalled
-
-fun get_mac_addr_match(1 buffer_vaddr, 1 num_clients) {
-    var client = 0;
-
-    while (client < num_clients) {
-        var match = 1;
-        var i = 0;
-
-        while (i < 6) {
-            var dest_byte = 0;
-            var client_byte = pnk_mem(CLI_MAC_ADDR_BASE + client * 6 + i);
-            var dest_addr = buffer_vaddr + i;
-            !ld8 dest_byte, dest_addr;
-
-            if (dest_byte != client_byte) {
-                match = 0;
-            }
-            i = i + 1;
-        }
-
-        if (match) {
-            return client;
-        }
-        client = client + 1;
-    }
-
-    var broadcast = 1;
-    var i = 0;
-    while (i < 6) {
-        var dest_byte = 0;
-        var dest_addr = buffer_vaddr + i;
-        !ld8 dest_byte, dest_addr;
-
-        if (dest_byte != 255) {
-            broadcast = 0;
-        }
-        i = i + 1;
-    }
-
-    if (broadcast) {
-        return BROADCAST_ID;
-    }
-
-    return -1;
-}
 
 fun rx_return() {
     var reprocess = 1;
     var client = 0;
     var i = 0;
+    var notify_drv = 0;
 
-    /* Shadow globals with locals */
-    var num_clients        = num_clients;
-    var drv_active_queue   = drv_active_queue;
-    var drv_capacity       = drv_capacity;
-    var drv_free_queue     = drv_free_queue;
-    var data_io_addr       = data_io_addr;
-    var data_region_vaddr  = data_region_vaddr;
+    var local_num_clients        = num_clients;
+    var local_drv_active_queue   = drv_active_queue;
+    var local_drv_capacity       = drv_capacity;
+    var local_drv_free_queue     = drv_free_queue;
+    var local_data_io_addr       = data_io_addr;
+    var local_data_region_vaddr  = data_region_vaddr;
 
-    /* Initialize notify flags */
+    var qe_tail = 0;
+    var qe_head = 0;
+    var qe_empty_check = 0;
+    var dq_head = 0;
+    var dq_mod_head = 0;
+    var dq_entry_addr = 0;
+    var eq_tail = 0;
+    var eq_mod_tail = 0;
+    var eq_entry_addr = 0;
+    var rs_signalled = 0;
+
     i = 0;
-    while (i < num_clients) {
+    while (i < local_num_clients) {
         var notify_addr = pnk_mem_ptr(NOTIFY_CLIENTS_BASE + i);
         !st32 notify_addr, 0;
         i = i + 1;
@@ -148,27 +100,70 @@ fun rx_return() {
 
     while (reprocess) {
         var drv_empty = 0;
-        NET_QUEUE_EMPTY(drv_active_queue, drv_capacity, drv_empty);
+        NET_QUEUE_EMPTY(local_drv_active_queue, local_drv_capacity, drv_empty);
 
         while (drv_empty == 0) {
             var io_offset = 0;
             var len = 0;
-            NET_DEQUEUE(drv_active_queue, drv_capacity, io_offset, len);
+            NET_DEQUEUE(local_drv_active_queue, local_drv_capacity, io_offset, len);
 
-            io_offset = io_offset - data_io_addr;
-            var buffer_vaddr = io_offset + data_region_vaddr;
+            io_offset = io_offset - local_data_io_addr;
+            var buffer_vaddr = io_offset + local_data_region_vaddr;
 
             cache_clean_and_invalidate(buffer_vaddr, buffer_vaddr + len)
 
-            var 1 client = get_mac_addr_match(buffer_vaddr, num_clients);
+            client = 0;
+            var mac_matched = 0;
+
+            while (client < local_num_clients && mac_matched == 0) {
+                var match = 1;
+                var mac_i = 0;
+
+                while (mac_i < 6 && match) {
+                    var dest_byte = 0;
+                    var client_byte = pnk_mem(CLI_MAC_ADDR_BASE + client * 6 + mac_i);
+                    !ld8 dest_byte, buffer_vaddr + mac_i;
+
+                    if (dest_byte != client_byte) {
+                        match = 0;
+                    }
+                    mac_i = mac_i + 1;
+                }
+
+                if (match) {
+                    mac_matched = 1;
+                } else {
+                    client = client + 1;
+                }
+            }
+
+            if (mac_matched == 0) {
+                var broadcast = 1;
+                var mac_i = 0;
+                while (mac_i < 6 && broadcast) {
+                    var dest_byte = 0;
+                    !ld8 dest_byte, buffer_vaddr + mac_i;
+
+                    if (dest_byte != 255) {
+                        broadcast = 0;
+                    }
+                    mac_i = mac_i + 1;
+                }
+
+                if (broadcast) {
+                    client = BROADCAST_ID;
+                } else {
+                    client = -1;
+                }
+            }
 
             if (client == BROADCAST_ID) {
                 var ref_index = io_offset >> 11;
                 var ref_addr = pnk_mem_ptr(BUFFER_REFS_BASE + ref_index);
-                !st32 ref_addr, num_clients;
+                !st32 ref_addr, local_num_clients;
 
                 i = 0;
-                while (i < num_clients) {
+                while (i < local_num_clients) {
                     var cli_queue_base = CLI_QUEUE_BASE + i * 4;
                     var cli_active_queue = pnk_mem(cli_queue_base + 1);
                     var cli_capacity = pnk_mem(cli_queue_base + 2);
@@ -192,29 +187,28 @@ fun rx_return() {
                     var notify_addr = pnk_mem_ptr(NOTIFY_CLIENTS_BASE + client);
                     !st32 notify_addr, 1;
                 } else {
-                    io_offset = io_offset + data_io_addr;
-                    NET_ENQUEUE(drv_free_queue, io_offset, len, drv_capacity);
+                    io_offset = io_offset + local_data_io_addr;
+                    NET_ENQUEUE(local_drv_free_queue, io_offset, len, local_drv_capacity);
 
-                    var notify_addr = pnk_mem_ptr(NOTIFY_DRV_FLAG);
-                    !st32 notify_addr, 1;
+                    notify_drv = 1;
                 }
             }
 
-            NET_QUEUE_EMPTY(drv_active_queue, drv_capacity, drv_empty);
+            NET_QUEUE_EMPTY(local_drv_active_queue, local_drv_capacity, drv_empty);
         }
 
-        NET_REQUEST_SIGNAL(drv_active_queue);
+        NET_REQUEST_SIGNAL(local_drv_active_queue);
         reprocess = 0;
 
-        NET_QUEUE_EMPTY(drv_active_queue, drv_capacity, drv_empty);
+        NET_QUEUE_EMPTY(local_drv_active_queue, local_drv_capacity, drv_empty);
         if (drv_empty == 0) {
-            NET_CANCEL_SIGNAL(drv_active_queue);
+            NET_CANCEL_SIGNAL(local_drv_active_queue);
             reprocess = 1;
         }
     }
 
     client = 0;
-    while (client < num_clients) {
+    while (client < local_num_clients) {
         var notify_flag = pnk_mem(NOTIFY_CLIENTS_BASE + client);
 
         if (notify_flag) {
@@ -233,22 +227,42 @@ fun rx_return() {
         client = client + 1;
     }
 
+    if (notify_drv) {
+        var signal_required = 0;
+        NET_REQUIRE_SIGNAL(local_drv_free_queue, signal_required);
+
+        if (signal_required) {
+            NET_CANCEL_SIGNAL(local_drv_free_queue);
+            sddf_deferred_notify(config_driver_id)
+        }
+    }
+
     return 0;
 }
 
 fun rx_provide() {
     var client = 0;
+    var notify_drv = 0;
 
-    /* Shadow globals with locals */
-    var num_clients        = num_clients;
-    var drv_free_queue     = drv_free_queue;
-    var drv_capacity       = drv_capacity;
-    var data_io_addr       = data_io_addr;
+    var local_num_clients        = num_clients;
+    var local_drv_free_queue     = drv_free_queue;
+    var local_drv_capacity       = drv_capacity;
+    var local_data_io_addr       = data_io_addr;
 
-    while (client < num_clients) {
+    var qe_tail = 0;
+    var qe_head = 0;
+    var qe_empty_check = 0;
+    var dq_head = 0;
+    var dq_mod_head = 0;
+    var dq_entry_addr = 0;
+    var eq_tail = 0;
+    var eq_mod_tail = 0;
+    var eq_entry_addr = 0;
+    var rs_signalled = 0;
+
+    while (client < local_num_clients) {
         var reprocess = 1;
 
-        /* Load client queue info once per client */
         var cli_queue_base = CLI_QUEUE_BASE + client * 4;
         var cli_free_queue = pnk_mem(cli_queue_base);
         var cli_capacity = pnk_mem(cli_queue_base + 2);
@@ -262,8 +276,7 @@ fun rx_provide() {
                 var len = 0;
                 NET_DEQUEUE(cli_free_queue, cli_capacity, io_offset, len);
 
-                // Validate buffer
-                var aligned = (io_offset & 2047) == 0;  // 2048-byte aligned
+                var aligned = (io_offset & 2047) == 0;
                 var in_bounds = io_offset < (cli_capacity * 2048);
 
                 if (aligned && in_bounds) {
@@ -276,12 +289,10 @@ fun rx_provide() {
                         !st32 ref_addr, ref_count;
 
                         if (ref_count == 0) {
-                            // Return to driver
-                            io_offset = io_offset + data_io_addr;
-                            NET_ENQUEUE(drv_free_queue, io_offset, len, drv_capacity);
+                            io_offset = io_offset + local_data_io_addr;
+                            NET_ENQUEUE(local_drv_free_queue, io_offset, len, local_drv_capacity);
 
-                            var notify_addr = pnk_mem_ptr(NOTIFY_DRV_FLAG);
-                            !st32 notify_addr, 1;
+                            notify_drv = 1;
                         }
                     }
                 }
@@ -301,17 +312,13 @@ fun rx_provide() {
         client = client + 1;
     }
 
-    var notify_drv = pnk_mem(NOTIFY_DRV_FLAG);
     if (notify_drv) {
         var signal_required = 0;
-        NET_REQUIRE_SIGNAL(drv_free_queue, signal_required);
+        NET_REQUIRE_SIGNAL(local_drv_free_queue, signal_required);
 
         if (signal_required) {
-            NET_CANCEL_SIGNAL(drv_free_queue);
+            NET_CANCEL_SIGNAL(local_drv_free_queue);
             sddf_deferred_notify(config_driver_id)
-
-            var notify_addr = pnk_mem_ptr(NOTIFY_DRV_FLAG);
-            !st32 notify_addr, 0;
         }
     }
 
