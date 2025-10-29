@@ -66,63 +66,54 @@ var 1 hw_tx_capacity  = HW_TX_CAPACITY;
 var 1 hw_rx_descr     = HW_RX_DESCR;
 var 1 hw_tx_descr     = HW_TX_DESCR;
 
-fun rx_hw_ring_empty() {
-  var ret = (HW_RX_HEAD == HW_RX_TAIL);
-  return ret;
+inline fun rx_hw_ring_empty() {
+  return (HW_RX_HEAD == HW_RX_TAIL);
 }
 
-fun tx_hw_ring_empty() {
-  var ret = (HW_TX_HEAD == HW_TX_TAIL);
-  return ret;
+inline fun tx_hw_ring_empty() {
+  return (HW_TX_HEAD == HW_TX_TAIL);
 }
 
-fun rx_hw_ring_full() {
-  var ret = (HW_RX_TAIL - HW_RX_HEAD) == hw_rx_capacity;
-  return ret;
+inline fun rx_hw_ring_full() {
+  return (HW_RX_TAIL - HW_RX_HEAD) == hw_rx_capacity;
 }
 
-fun tx_hw_ring_full() {
-  var ret = (HW_TX_TAIL - HW_TX_HEAD) == hw_tx_capacity;
-  return ret;
+inline fun tx_hw_ring_full() {
+  return (HW_TX_TAIL - HW_TX_HEAD) == hw_tx_capacity;
 }
 
-fun set_rdar()
+inline fun set_rdar()
 {
-  var reg_addr = eth_reg + RDAR_OFFSET;
-  !st32 reg_addr, RDAR_RDAR;
+  !st32 eth_reg + RDAR_OFFSET, RDAR_RDAR;
   return 0;
 }
 
-fun set_tdar()
+inline fun set_tdar()
 {
-  var reg_addr = eth_reg + TDAR_OFFSET;
-  !st32 reg_addr, TDAR_TDAR;
+  !st32  eth_reg + TDAR_OFFSET, TDAR_TDAR;
   return 0;
 }
 
-fun get_eir_status()
+inline fun get_eir_status()
 {
-  var reg_addr = eth_reg + EIR_OFFSET;
   var eir = 0;
-  !ld32 eir, reg_addr;
+  !ld32 eir, eth_reg + EIR_OFFSET;
   return eir;
 }
 
-fun get_eir()
+inline fun get_eir()
 {
   var 1 eir_full = get_eir_status();
-  var eir = eir_full & IRQ_MASK;
-  return eir;
+  return eir_full & IRQ_MASK;
 }
 
-fun set_eir(1 eir)
+inline fun set_eir(1 eir)
 {
-  var reg_addr = eth_reg + EIR_OFFSET;
-  !st32 reg_addr, eir;
+  !st32 eth_reg + EIR_OFFSET, eir;
   return 0;
 }
 
-fun rx_update_ring_slot(1 ring_addr, 1 idx, 1 phys, 1 len, 1 stat)
+inline fun rx_update_ring_slot(1 ring_addr, 1 idx, 1 phys, 1 len, 1 stat)
 {
   var descr_base = hw_rx_descr;
   var descr = descr_base + idx * 8;
@@ -130,7 +121,7 @@ fun rx_update_ring_slot(1 ring_addr, 1 idx, 1 phys, 1 len, 1 stat)
   if (idx + 1 == hw_rx_capacity) {
     stat = stat | WRAP;
   }
-  
+
   !st32 descr + 4, phys;
   !st16 descr, len;
   THREAD_MEMORY_RELEASE()
@@ -138,7 +129,7 @@ fun rx_update_ring_slot(1 ring_addr, 1 idx, 1 phys, 1 len, 1 stat)
   return 0;
 }
 
-fun tx_update_ring_slot(1 ring_addr, 1 idx, 1 phys, 1 len, 1 stat)
+inline fun tx_update_ring_slot(1 ring_addr, 1 idx, 1 phys, 1 len, 1 stat)
 {
   var descr_base = hw_tx_descr;
   var descr = descr_base + idx * 8;
@@ -146,7 +137,7 @@ fun tx_update_ring_slot(1 ring_addr, 1 idx, 1 phys, 1 len, 1 stat)
   if (idx + 1 == hw_tx_capacity) {
     stat = stat | WRAP;
   }
-  
+
   !st32 descr + 4, phys;
   !st16 descr, len;
   THREAD_MEMORY_RELEASE()
@@ -177,7 +168,7 @@ fun rx_provide()
 
       var io_addr = buffer.0;
       var stat = RXD_EMPTY;
-      rx_update_ring_slot(HW_RX_PTR, idx, io_addr, 1536, stat);
+      rx_update_ring_slot(HW_RX_PTR, idx, io_addr, 0, stat);
 
       st HW_RX_TAIL_SLOT, (rx_tail + 1);
       set_rdar();
@@ -227,11 +218,6 @@ fun tx_provide()
       tx_update_ring_slot(HW_TX_PTR, idx, io_addr, len, stat);
 
       st HW_TX_TAIL_SLOT, (tx_tail + 1);
-    }
-    
-    var 1 empty_after = net_queue_empty(tx_active, tx_queue_cap);
-    var 1 full_after = tx_hw_ring_full();
-    if (!empty_after || !full_after) {
       set_tdar();
     }
 
@@ -277,11 +263,9 @@ fun rx_return()
     var io_addr = 0;
     !ld32 io_addr, dscr_addr + 4;
 
-    if (len > 0 && len <= 1536) {
-      net_enqueue(rx_active, io_addr, len, rx_queue_cap);
-      packets_transferred = true;
-    }
-    
+    net_enqueue(rx_active, io_addr, len, rx_queue_cap);
+    packets_transferred = true;
+
     st HW_RX_HEAD_SLOT, (rx_head + 1);
   }
 
@@ -380,4 +364,3 @@ export fun notified(1 ch)
   }
   return 0;
 }
-

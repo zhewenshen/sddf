@@ -611,6 +611,23 @@ static void eth_init()
     *DMA_REG(DMA_CH0_RX_CONTROL) &= ~(DMA_CH0_RX_RBSZ_MASK);
     *DMA_REG(DMA_CH0_RX_CONTROL) |= (MAX_RX_FRAME_SZ << DMA_CH0_RX_RBSZ_POS);
 
+#if defined(CONFIG_PLAT_IMX8MP_EVK)
+    // i.MX 8M PLUS has 32-bit AHB bus and 8 KB TX/RX Queue size.
+    // Here we use the maximum allowed PBL value here (256 = 32 * 8).
+    *DMA_REG(DMA_CH0_CONTROL) |= DMA_CH0_CONTROL_PBLx8;
+    *DMA_REG(DMA_CH0_TX_CONTROL) |= (32 << DMA_CH0_TX_CONTROL_PBL_POS) & DMA_CH0_TX_CONTROL_PBL_MASK;
+    *DMA_REG(DMA_CH0_RX_CONTROL) |= (32 << DMA_CH0_RX_CONTROL_PBL_POS) & DMA_CH0_RX_CONTROL_PBL_MASK;
+#elif defined(CONFIG_PLAT_STAR64)
+    // We follow the dts and set PBL to 16.
+    *DMA_REG(DMA_CH0_TX_CONTROL) |= (16 << DMA_CH0_TX_CONTROL_PBL_POS) & DMA_CH0_TX_CONTROL_PBL_MASK;
+    *DMA_REG(DMA_CH0_RX_CONTROL) |= (16 << DMA_CH0_RX_CONTROL_PBL_POS) & DMA_CH0_RX_CONTROL_PBL_MASK;
+#elif defined(CONFIG_PLAT_HIFIVE_P550)
+    // Preliminary.
+    *DMA_REG(DMA_CH0_CONTROL) |= DMA_CH0_CONTROL_PBLx8;
+    *DMA_REG(DMA_CH0_TX_CONTROL) |= (8 << DMA_CH0_TX_CONTROL_PBL_POS) & DMA_CH0_TX_CONTROL_PBL_MASK;
+    *DMA_REG(DMA_CH0_RX_CONTROL) |= (8 << DMA_CH0_RX_CONTROL_PBL_POS) & DMA_CH0_RX_CONTROL_PBL_MASK;
+#endif
+
     // Program the descriptor length. This is to tell the device that when
     // we reach the base addr + count, we should then wrap back around to
     // the base.
@@ -752,7 +769,7 @@ void init(void)
     net_queue_init(&tx_queue, config.virt_tx.free_queue.vaddr, config.virt_tx.active_queue.vaddr,
                    config.virt_tx.num_buffers);
     eth_setup();
-    
+
     sddf_irq_ack(device_resources.irqs[0].id);
 
     rx_provide();

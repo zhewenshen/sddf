@@ -48,8 +48,8 @@ def patch_binary():
 
 def main():
     print("building echo_server...")
-    run_cmd("make clean >/dev/null 2>&1")
-    run_cmd("make -j$(nproc)")
+    run_cmd("make CONFIG_FILE=pancake.config.inline clean >/dev/null 2>&1")
+    run_cmd("make CONFIG_FILE=pancake.config.inline -j$(nproc)")
 
     print("\npatching eth_driver.elf...")
     if not patch_binary():

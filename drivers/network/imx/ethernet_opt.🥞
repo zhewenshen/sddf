@@ -88,7 +88,6 @@ var 1 hw_tx_descr     = HW_TX_DESCR;
   var set_eir_reg_addr = eth_reg + EIR_OFFSET; \
   !st32 set_eir_reg_addr, eir
 
-
 #define RX_UPDATE_RING_SLOT(ring_addr, idx, phys, len, stat) \
   var rx_descr_base = hw_rx_descr; \
   var rx_descr = rx_descr_base + idx * DESCR_SIZE; \
@@ -158,10 +157,11 @@ var 1 hw_tx_descr     = HW_TX_DESCR;
 fun rx_provide()
 {
   var reprocess = true;
-
   var rx_free = net_rx_free;
   var rx_queue_cap = net_rx_capacity;
-  var rx_hw_cap = hw_rx_capacity;
+  var rx_hw_capacity = hw_rx_capacity;
+  var rx_hw_descr = hw_rx_descr;
+  var rx_eth_reg = eth_reg;
 
   while (reprocess)
   {
@@ -179,9 +179,9 @@ fun rx_provide()
       NET_DEQUEUE(rx_free, rx_queue_cap, io_addr, len);
 
       var rx_tail = HW_RX_TAIL;
-      var idx = rx_tail & (rx_hw_cap - 1);
+      var idx = rx_tail & (rx_hw_capacity - 1);
 
-      RX_UPDATE_RING_SLOT(HW_RX_PTR, idx, io_addr, MAX_PKT_SIZE, RXD_EMPTY);
+      RX_UPDATE_RING_SLOT(HW_RX_PTR, idx, io_addr, 0, RXD_EMPTY);
 
       st HW_RX_TAIL_SLOT, (rx_tail + 1);
       SET_RDAR();
@@ -197,6 +197,7 @@ fun rx_provide()
 
     var empty = 0;
     NET_QUEUE_EMPTY(rx_free, rx_queue_cap, empty);
+    var full = RX_HW_RING_FULL();
     if ((!empty) && (!full)) {
       NET_CANCEL_SIGNAL(rx_free);
       reprocess = true;
@@ -208,10 +209,11 @@ fun rx_provide()
 fun tx_provide()
 {
   var reprocess = true;
-
   var tx_active = net_tx_active;
   var tx_queue_cap = net_tx_capacity;
-  var tx_hw_cap = hw_tx_capacity;
+  var tx_hw_capacity = hw_tx_capacity;
+  var tx_hw_descr = hw_tx_descr;
+  var tx_eth_reg = eth_reg;
 
   while (reprocess)
   {
@@ -229,17 +231,11 @@ fun tx_provide()
       NET_DEQUEUE(tx_active, tx_queue_cap, io_addr, len);
 
       var tx_tail = HW_TX_TAIL;
-      var idx = tx_tail & (tx_hw_cap - 1);
+      var idx = tx_tail & (tx_hw_capacity - 1);
 
       TX_UPDATE_RING_SLOT(HW_TX_PTR, idx, io_addr, len, TXD_READY | TXD_ADDCRC | TXD_LAST);
 
       st HW_TX_TAIL_SLOT, (tx_tail + 1);
-    }
-
-    var empty_after = 0;
-    NET_QUEUE_EMPTY(tx_active, tx_queue_cap, empty_after);
-    var full_after = TX_HW_RING_FULL();
-    if (!empty_after || !full_after) {
       SET_TDAR();
     }
 
@@ -260,9 +256,9 @@ fun tx_provide()
 fun rx_return()
 {
   var rx_active = net_rx_active;
-  var rx_descr = hw_rx_descr;
+  var rx_hw_descr = hw_rx_descr;
   var rx_queue_cap = net_rx_capacity;
-  var rx_hw_cap = hw_rx_capacity;
+  var rx_hw_capacity = hw_rx_capacity;
 
   var packets_transferred = false;
 
@@ -272,24 +268,21 @@ fun rx_return()
     if (empty) { break; }
 
     var rx_head = HW_RX_HEAD;
-    var idx = rx_head & (rx_hw_cap - 1);
+    var idx = rx_head & (rx_hw_capacity - 1);
 
-    var dscr_addr = rx_descr + idx * DESCR_SIZE;
+    var dscr_addr = rx_hw_descr + idx * DESCR_SIZE;
     var stat = 0;
     !ld16 stat, dscr_addr + 2;
     if (stat & RXD_EMPTY) { break; }
 
     THREAD_MEMORY_ACQUIRE()
-
     var len = 0;
     !ld16 len, dscr_addr;
     var io_addr = 0;
     !ld32 io_addr, dscr_addr + 4;
 
-    if (len > 0 && len <= MAX_PKT_SIZE) {
-      NET_ENQUEUE(rx_active, io_addr, len, rx_queue_cap);
-      packets_transferred = true;
-    }
+    NET_ENQUEUE(rx_active, io_addr, len, rx_queue_cap);
+    packets_transferred = true;
 
     st HW_RX_HEAD_SLOT, (rx_head + 1);
   }
@@ -307,9 +300,9 @@ fun rx_return()
 fun tx_return()
 {
   var tx_free = net_tx_free;
-  var tx_descr = hw_tx_descr;
+  var tx_hw_descr = hw_tx_descr;
   var tx_queue_cap = net_tx_capacity;
-  var tx_hw_cap = hw_tx_capacity;
+  var tx_hw_capacity = hw_tx_capacity;
 
   var enqueued = false;
 
@@ -319,9 +312,9 @@ fun tx_return()
     if (empty) { break; }
 
     var tx_head = HW_TX_HEAD;
-    var idx = tx_head & (tx_hw_cap - 1);
+    var idx = tx_head & (tx_hw_capacity - 1);
 
-    var dscr_addr = tx_descr + idx * DESCR_SIZE;
+    var dscr_addr = tx_hw_descr + idx * DESCR_SIZE;
     var stat = 0;
     !ld16 stat, dscr_addr + 2;
     if (stat & TXD_READY) { break; }
@@ -353,6 +346,7 @@ fun main() {
 }
 
 fun handle_irq() {
+  var irq_eth_reg = eth_reg;
   var eir = 0;
   GET_EIR(eir);
   SET_EIR(eir);

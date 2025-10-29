@@ -114,6 +114,7 @@ var 1 hw_tx_descr     = HW_TX_DESCR;
   !st32 rx_descr + 8, phys; \
   !st32 rx_descr + 12, next; \
   !st32 rx_descr + 4, cntl; \
+  THREAD_MEMORY_RELEASE() \
   !st32 rx_descr, status
 
 #define TX_UPDATE_RING_SLOT(ring_addr, idx, status, cntl, phys, next) \
@@ -122,6 +123,7 @@ var 1 hw_tx_descr     = HW_TX_DESCR;
   !st32 tx_descr + 8, phys; \
   !st32 tx_descr + 12, next; \
   !st32 tx_descr + 4, cntl; \
+  THREAD_MEMORY_RELEASE() \
   !st32 tx_descr, status
 
 #define NET_QUEUE_EMPTY(queue_ptr, capacity, result_out) \
@@ -196,8 +198,9 @@ fun rx_provide()
       }
       RX_UPDATE_RING_SLOT(HW_RX_PTR, idx, DESC_RXSTS_OWNBYDMA, cntl, io_addr, 0);
 
-      st HW_RX_TAIL_SLOT, (rx_tail + 1);
       SET_RX_POLL();
+
+      st HW_RX_TAIL_SLOT, (rx_tail + 1);
     }
 
     NET_REQUEST_SIGNAL(rx_free);
@@ -246,6 +249,7 @@ fun tx_provide()
       if (idx + 1 == hw_tx_capacity) {
         cntl = cntl | DESC_TXCTRL_TXRINGEND;
       }
+      cntl = cntl | (3 << 27); // DESC_TXCTRL_TXCIC
       TX_UPDATE_RING_SLOT(HW_TX_PTR, idx, DESC_TXSTS_OWNBYDMA, cntl, io_addr, 0);
 
       st HW_TX_TAIL_SLOT, (tx_tail + 1);
@@ -289,6 +293,8 @@ fun rx_return()
     !ld32 status, dscr_addr;
     if (status & DESC_RXSTS_OWNBYDMA) { break; }
 
+    THREAD_MEMORY_ACQUIRE()
+
     if (status & DESC_RXSTS_ERROR) {
       var rx_tail = HW_RX_TAIL;
       var next_idx = rx_tail & (hw_rx_capacity - 1);
@@ -299,8 +305,8 @@ fun rx_return()
         cntl = cntl | DESC_RXCTRL_RXRINGEND;
       }
       RX_UPDATE_RING_SLOT(HW_RX_PTR, next_idx, DESC_RXSTS_OWNBYDMA, cntl, phys, 0);
-      st HW_RX_TAIL_SLOT, (rx_tail + 1);
       SET_RX_POLL();
+      st HW_RX_TAIL_SLOT, (rx_tail + 1);
     } else {
       var len = (status & DESC_RXSTS_LENMSK) >> DESC_RXSTS_LENSHFT;
       var io_addr = 0;
@@ -342,6 +348,8 @@ fun tx_return()
     var status = 0;
     !ld32 status, dscr_addr;
     if (status & DESC_TXSTS_OWNBYDMA) { break; }
+
+    THREAD_MEMORY_ACQUIRE()
 
     var io_addr = 0;
     !ld32 io_addr, dscr_addr + 8;

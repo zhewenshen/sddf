@@ -26,7 +26,7 @@ ETHERNET_PNK = ${UTIL}/util.🥞 \
 		${ETHERNET_DRIVER_DIR}/ethernet.🥞
 
 ${BUILD_DIR}/ethernet_pnk.S: $(ETHERNET_PNK)
-	cat $(ETHERNET_PNK) | cpp -P | $(CAKE_COMPILER) --target=riscv --pancake --main_return=true > $@
+	cat $(ETHERNET_PNK) | cpp -P | $(CAKE_COMPILER) --target=riscv --reg_alg=0 --pancake --main_return=true > $@
 
 dwmac-5.10a/ethernet.o: ${ETHERNET_DRIVER_DIR}/ethernet.c ${CHECK_NETDRV_FLAGS_MD5}
 	mkdir -p dwmac-5.10a

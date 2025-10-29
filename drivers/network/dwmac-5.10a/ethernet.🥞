@@ -79,40 +79,40 @@ var 1 hw_tx_meta       = HW_TX_META;
 var 1 rx_desc_base     = RX_DESC_BASE;
 var 1 tx_desc_base     = TX_DESC_BASE;
 
-fun rx_hw_ring_empty() {
+inline fun rx_hw_ring_empty() {
   var ret = (HW_RX_HEAD == HW_RX_TAIL);
   return ret;
 }
 
-fun tx_hw_ring_empty() {
+inline fun tx_hw_ring_empty() {
   var ret = (HW_TX_HEAD == HW_TX_TAIL);
   return ret;
 }
 
-fun rx_hw_ring_full() {
+inline fun rx_hw_ring_full() {
   var ret = (HW_RX_TAIL - HW_RX_HEAD) == hw_rx_capacity;
   return ret;
 }
 
-fun tx_hw_ring_full() {
+inline fun tx_hw_ring_full() {
   var ret = (HW_TX_TAIL - HW_TX_HEAD) == hw_tx_capacity;
   return ret;
 }
 
-fun get_dma_reg(1 offset) {
+inline fun get_dma_reg(1 offset) {
   var reg_addr = eth_regs + offset;
   var val = 0;
   !ld32 val, reg_addr;
   return val;
 }
 
-fun set_dma_reg(1 offset, 1 value) {
+inline fun set_dma_reg(1 offset, 1 value) {
   var reg_addr = eth_regs + offset;
   !st32 reg_addr, value;
   return 0;
 }
 
-fun rx_update_ring_slot(1 idx, 1 addr_low, 1 addr_high, 1 des2, 1 des3) {
+inline fun rx_update_ring_slot(1 idx, 1 addr_low, 1 addr_high, 1 des2, 1 des3) {
   var descr = hw_rx_descr + idx * 16;
 
   !st32 descr, addr_low;
@@ -123,7 +123,7 @@ fun rx_update_ring_slot(1 idx, 1 addr_low, 1 addr_high, 1 des2, 1 des3) {
   return 0;
 }
 
-fun tx_update_ring_slot(1 idx, 1 addr_low, 1 addr_high, 1 des2, 1 des3) {
+inline fun tx_update_ring_slot(1 idx, 1 addr_low, 1 addr_high, 1 des2, 1 des3) {
   var descr = hw_tx_descr + idx * 16;
 
   !st32 descr, addr_low;
@@ -156,7 +156,7 @@ fun rx_provide() {
       var rx_tail = HW_RX_TAIL;
       // var idx = rx_tail & (hw_rx_capacity - 1);
       var idx = rx_tail;
-      idx = idx & (hw_rx_capacity - 1); 
+      idx = idx & (hw_rx_capacity - 1);
 
       st hw_rx_meta + idx * @biw, io_addr;
 
@@ -202,7 +202,7 @@ fun rx_return() {
     // debug_print(0,rx_head,0,1111);
     // debug_print(0,idx,0,2222);
     // debug_print(0, idx, 0, 0987654321);
-    
+
     var descr = hw_rx_descr + idx * 16;
     var des3 = 0;
     !ld32 des3, descr + 12;
@@ -262,7 +262,7 @@ fun tx_provide() {
       var idx = tx_tail & (hw_tx_capacity - 1);
 
       st hw_tx_meta + idx * @biw, io_addr;
-      
+
       var addr_low = io_addr;
       var addr_high = io_addr >> 32;
 
@@ -335,10 +335,7 @@ fun main() {
 }
 
 fun handle_irq_set_dma(1 ee) {
-  var 1 e = get_dma_reg(DMA_CH0_STATUS);
-  e = e & ee;
-  set_dma_reg(DMA_CH0_STATUS, e & e);
-
+  set_dma_reg(DMA_CH0_STATUS, ee);
   return 0;
 }
 

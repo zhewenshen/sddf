@@ -38,7 +38,7 @@
 #define DMA_INTR_RXF                64
 #define DMA_INTR_FBE                8192
 #define DMA_INTR_ABNORMAL           32768
-#define DMA_INTR_MASK               40897
+#define DMA_INTR_MASK               106561
 
 #define POLL_DATA                   4294967295
 
@@ -83,27 +83,26 @@ var 1 hw_tx_capacity  = HW_TX_CAPACITY;
 var 1 hw_rx_descr     = HW_RX_DESCR;
 var 1 hw_tx_descr     = HW_TX_DESCR;
 
-fun rx_hw_ring_empty() {
-  var ret = (HW_RX_HEAD == HW_RX_TAIL);
-  return ret;
+inline fun rx_hw_ring_empty() {
+  return (HW_RX_HEAD == HW_RX_TAIL);
 }
 
-fun tx_hw_ring_empty() {
+inline fun tx_hw_ring_empty() {
   var ret = (HW_TX_HEAD == HW_TX_TAIL);
   return ret;
 }
 
-fun rx_hw_ring_full() {
+inline fun rx_hw_ring_full() {
   var ret = (HW_RX_TAIL - HW_RX_HEAD) == hw_rx_capacity;
   return ret;
 }
 
-fun tx_hw_ring_full() {
+inline fun tx_hw_ring_full() {
   var ret = (HW_TX_TAIL - HW_TX_HEAD) == hw_tx_capacity;
   return ret;
 }
 
-fun get_dma_status()
+inline fun get_dma_status()
 {
   var reg_addr = mac_reg_base + DMA_REG_OFFSET + DMA_STATUS_OFFSET;
   var status = 0;
@@ -111,32 +110,32 @@ fun get_dma_status()
   return status;
 }
 
-fun set_dma_status(1 status)
+inline fun set_dma_status(1 status)
 {
   var reg_addr = mac_reg_base + DMA_REG_OFFSET + DMA_STATUS_OFFSET;
   !st32 reg_addr, status;
   return 0;
 }
 
-fun set_rx_poll()
+inline fun set_rx_poll()
 {
   var reg_addr = mac_reg_base + DMA_REG_OFFSET + DMA_RXPOLLDEMAND_OFFSET;
   !st32 reg_addr, POLL_DATA;
   return 0;
 }
 
-fun set_tx_poll()
+inline fun set_tx_poll()
 {
   var reg_addr = mac_reg_base + DMA_REG_OFFSET + DMA_TXPOLLDEMAND_OFFSET;
   !st32 reg_addr, POLL_DATA;
   return 0;
 }
 
-fun rx_update_ring_slot(1 ring_addr, 1 idx, 1 status, 1 cntl, 1 phys, 1 next)
+inline fun rx_update_ring_slot(1 ring_addr, 1 idx, 1 status, 1 cntl, 1 phys, 1 next)
 {
   var descr_base = hw_rx_descr;
   var descr = descr_base + idx * 16;
-  
+
   !st32 descr + 8, phys;
   !st32 descr + 12, next;
   !st32 descr + 4, cntl;
@@ -145,11 +144,11 @@ fun rx_update_ring_slot(1 ring_addr, 1 idx, 1 status, 1 cntl, 1 phys, 1 next)
   return 0;
 }
 
-fun tx_update_ring_slot(1 ring_addr, 1 idx, 1 status, 1 cntl, 1 phys, 1 next)
+inline fun tx_update_ring_slot(1 ring_addr, 1 idx, 1 status, 1 cntl, 1 phys, 1 next)
 {
   var descr_base = hw_tx_descr;
   var descr = descr_base + idx * 16;
-  
+
   !st32 descr + 8, phys;
   !st32 descr + 12, next;
   !st32 descr + 4, cntl;
@@ -186,8 +185,9 @@ fun rx_provide()
       }
       rx_update_ring_slot(HW_RX_PTR, idx, DESC_RXSTS_OWNBYDMA, cntl, io_addr, 0);
 
-      st HW_RX_TAIL_SLOT, (rx_tail + 1);
       set_rx_poll();
+
+      st HW_RX_TAIL_SLOT, (rx_tail + 1);
     }
 
     net_request_signal(rx_free, rx_queue_cap);
@@ -231,10 +231,10 @@ fun tx_provide()
       if (idx + 1 == tx_hw_cap) {
         cntl = cntl | DESC_TXCTRL_TXRINGEND;
       }
+      cntl = cntl | (3 << 27); // DESC_TXCTRL_TXCIC
       tx_update_ring_slot(HW_TX_PTR, idx, DESC_TXSTS_OWNBYDMA, cntl, io_addr, 0);
 
       st HW_TX_TAIL_SLOT, (tx_tail + 1);
-      set_tx_poll();
     }
 
     net_request_signal(tx_active, tx_queue_cap);
@@ -247,6 +247,7 @@ fun tx_provide()
       reprocess = true;
     }
   }
+  set_tx_poll();
   return 0;
 }
 
@@ -284,8 +285,8 @@ fun rx_return()
         cntl = cntl | DESC_RXCTRL_RXRINGEND;
       }
       rx_update_ring_slot(HW_RX_PTR, next_idx, DESC_RXSTS_OWNBYDMA, cntl, phys, 0);
-      st HW_RX_TAIL_SLOT, (rx_tail + 1);
       set_rx_poll();
+      st HW_RX_TAIL_SLOT, (rx_tail + 1);
     } else {
       var len = (status & DESC_RXSTS_LENMSK) >> DESC_RXSTS_LENSHFT;
       var io_addr = 0;
@@ -337,7 +338,7 @@ fun tx_return()
     st HW_TX_HEAD_SLOT, (tx_head + 1);
   }
 
-  var 1 to_signal = net_require_signal(tx_free, tx_queue_cap);  
+  var 1 to_signal = net_require_signal(tx_free, tx_queue_cap);
   if (enqueued && to_signal) {
     net_cancel_signal(tx_free);
     microkit_notify(tx_ch)
@@ -350,7 +351,6 @@ fun tx_return()
 fun main() {
   rx_provide();
   tx_provide();
-  sddf_irq_ack(irq_ch)
   return 0;
 }
 
@@ -383,15 +383,15 @@ export fun notified(1 ch)
   if (ch == irq_ch) {
     handle_irq();
     microkit_deferred_irq_ack(ch)
+    return 0;
   }
   if (ch == rx_ch) {
     rx_provide();
+    return 0;
   }
   if (ch == tx_ch) {
     tx_provide();
-  }
-  if ((ch != irq_ch) && (ch != rx_ch) && (ch != tx_ch)) {
-    @assert(0,0,0,0);
+    return 0;
   }
   return 0;
 }
