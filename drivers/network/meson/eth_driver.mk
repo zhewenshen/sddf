@@ -27,7 +27,7 @@ ETHERNET_PNK = ${UTIL}/util.🥞 \
 	${ETHERNET_DRIVER_DIR}/ethernet.🥞
 
 ${BUILD_DIR}/ethernet_pnk.S: $(ETHERNET_PNK)
-	cat $(ETHERNET_PNK) | cpp -P | $(CAKE_COMPILER) --target=arm8 --pancake --main_return=true --gc=none --reg_alg=3 --exclude_prelude=true > $@
+	cat $(ETHERNET_PNK) | cpp -P | $(CAKE_COMPILER) --target=arm8 --pancake --main_return=true > $@
 
 meson/ethernet.o: ${ETHERNET_DRIVER_DIR}/ethernet.c ${CHECK_NETDRV_FLAGS_MD5}
 	mkdir -p meson
