@@ -1,0 +1,248 @@
+co
+^Eco
+[Enter `^Ec?' for help]
+[connecting...up]
+
+U-Boot SPL 2018.03 (Jan 14 2020 - 02:43:08 +0000)
+power_bd71837_init
+set buck8 to 1.2v for DDR4
+DDRINFO: start lpddr4 ddr init
+DRAM PHY training for 2400MTS
+check ddr4_pmu_train_imem code
+check ddr4_pmu_train_imem code pass
+check ddr4_pmu_train_dmem code
+check ddr4_pmu_train_dmem code pass
+Training PASS
+DRAM PHY training for 1600MTS
+check ddr4_pmu_train_imem code
+check ddr4_pmu_train_imem code pass
+check ddr4_pmu_train_dmem code
+check ddr4_pmu_train_dmem code pass
+Training PASS
+DRAM PHY training for 1064MTS
+check ddr4_pmu_train_imem code
+check ddr4_pmu_train_imem code pass
+check ddr4_pmu_train_dmem code
+check ddr4_pmu_train_dmem code pass
+Training PASS
+DRAM PHY training for 2400MTS
+check ddr4_pmu_train_imem code
+check ddr4_pmu_train_imem code pass
+check ddr4_pmu_train_dmem code
+check ddr4_pmu_train_dmem code pass
+Training PASS
+DDRINFO:ddrphy calibration done
+DDRINFO: ddrmix config done
+Normal Boot
+Trying to boot from MMC1
+
+
+U-Boot 2018.03 (Jan 14 2020 - 02:43:08 +0000)
+
+CPU:   Freescale i.MX8MQ rev2.1 1500 MHz (running at 1000 MHz)
+CPU:   Commercial temperature grade (0C to 95C) at 41C
+Reset cause: POR
+Model: Freescale i.MX8MQ EVK
+DRAM:  2 GiB
+MMC:   FSL_SDHC: 0
+Loading Environment from MMC... OK
+No panel detected: default to HDMI
+Display: HDMI (1280x720)
+In:    serial
+Out:   serial
+Err:   serial
+
+ BuildInfo:
+  - ATF d6451cc
+  - U-Boot 2018.03
+
+switch to partitions #0, OK
+mmc0 is current device
+flash target is MMC:0
+Net:   
+Warning: ethernet@30be0000 (eth0) using random MAC address - 7a:16:9d:40:15:68
+eth0: ethernet@30be0000
+Fastboot: Normal
+Normal Boot
+Hit any key to stop autoboot:  2  
+ 0 
+u-boot=> 
+setenv loadaddr 0x50000000
+dhcp
+u-boot=> setenv loadaddr 0x50000000
+u-boot=> dhcp
+ethernet@30be0000 Waiting for PHY auto negotiation to complete.... done
+BOOTP broadcast 1
+BOOTP broadcast 2
+BOOTP broadcast 3
+BOOTP broadcast 4
+BOOTP broadcast 5
+BOOTP broadcast 6
+DHCP client bound to address 172.16.1.31 (5765 ms)
+*** Warning: no boot file name; using 'AC10011F.img'
+Using ethernet@30be0000 device
+TFTP from server 172.16.0.2; our IP address is 172.16.1.31
+Filename 'AC10011F.img'.
+Load address: 0x50000000
+Loading: *
+TFTP error: 'File not found' (1)
+Not retrying...
+u-boot=> tftp ${loadaddr} /maaxboard2/sel4-image
+tftp ${loadaddr} /maaxboard2/sel4-image
+Using ethernet@30be0000 device
+TFTP from server 172.16.0.2; our IP address is 172.16.1.31
+Filename '/maaxboard2/sel4-image'.
+Load address: 0x50000000
+Loading: *#################################################################
+	 #################################################################
+	 #################################################################
+	 #################################################################
+	 #################################################################
+	 #################################################################
+	 #################################################################
+	 ##########################################
+	 12.6 MiB/s
+done
+Bytes transferred = 7282640 (6f1fd0 hex)
+u-boot=> go ${loadaddr}
+go ${loadaddr}
+## Starting application at 0x50000000 ...
+LDR|INFO: altloader for seL4 starting
+LDR|INFO: Flags:                0x0000000000000001
+             seL4 configured as hypervisor
+LDR|INFO: Kernel:      entry:   0x0000008040000000
+LDR|INFO: Root server: physmem: 0x00000000406e4000 -- 0x00000000406ee000
+LDR|INFO:              virtmem: 0x000000008a000000 -- 0x000000008a00a000
+LDR|INFO:              entry  : 0x000000008a000000
+LDR|INFO: region: 0x00000000   addr: 0x0000000040000000   size: 0x0000000000246000   offset: 0x0000000000000000   type: 0x0000000000000001
+LDR|INFO: region: 0x00000001   addr: 0x00000000406e4000   size: 0x0000000000009780   offset: 0x0000000000246000   type: 0x0000000000000001
+LDR|INFO: region: 0x00000002   addr: 0x0000000040246000   size: 0x000000000002be88   offset: 0x000000000024f780   type: 0x0000000000000001
+LDR|INFO: region: 0x00000003   addr: 0x0000000040272000   size: 0x0000000000002b78   offset: 0x000000000027b608   type: 0x0000000000000001
+LDR|INFO: region: 0x00000004   addr: 0x0000000040275000   size: 0x0000000000002000   offset: 0x000000000027e180   type: 0x0000000000000001
+LDR|INFO: region: 0x00000005   addr: 0x0000000040277000   size: 0x00000000000033e0   offset: 0x0000000000280180   type: 0x0000000000000001
+LDR|INFO: region: 0x00000006   addr: 0x000000004027b000   size: 0x0000000000002000   offset: 0x0000000000283560   type: 0x0000000000000001
+LDR|INFO: region: 0x00000007   addr: 0x000000004027d000   size: 0x00000000000032d8   offset: 0x0000000000285560   type: 0x0000000000000001
+LDR|INFO: region: 0x00000008   addr: 0x0000000040281000   size: 0x0000000000002000   offset: 0x0000000000288838   type: 0x0000000000000001
+LDR|INFO: region: 0x00000009   addr: 0x0000000040283000   size: 0x0000000000004490   offset: 0x000000000028a838   type: 0x0000000000000001
+LDR|INFO: region: 0x0000000a   addr: 0x0000000040288000   size: 0x0000000000004000   offset: 0x000000000028ecc8   type: 0x0000000000000001
+LDR|INFO: region: 0x0000000b   addr: 0x000000004028c000   size: 0x0000000000007968   offset: 0x0000000000292cc8   type: 0x0000000000000001
+LDR|INFO: region: 0x0000000c   addr: 0x0000000040294000   size: 0x0000000000004000   offset: 0x000000000029a630   type: 0x0000000000000001
+LDR|INFO: region: 0x0000000d   addr: 0x0000000040298000   size: 0x0000000000003550   offset: 0x000000000029e630   type: 0x0000000000000001
+LDR|INFO: region: 0x0000000e   addr: 0x000000004029c000   size: 0x0000000000003000   offset: 0x00000000002a1b80   type: 0x0000000000000001
+LDR|INFO: region: 0x0000000f   addr: 0x000000004029f000   size: 0x0000000000003a28   offset: 0x00000000002a4b80   type: 0x0000000000000001
+LDR|INFO: region: 0x00000010   addr: 0x00000000402a3000   size: 0x0000000000003000   offset: 0x00000000002a85a8   type: 0x0000000000000001
+LDR|INFO: region: 0x00000011   addr: 0x00000000402a6000   size: 0x000000000001e5b4   offset: 0x00000000002ab5a8   type: 0x0000000000000001
+LDR|INFO: region: 0x00000012   addr: 0x00000000402c5000   size: 0x00000000001f7000   offset: 0x00000000002c9b5c   type: 0x0000000000000001
+LDR|INFO: region: 0x00000013   addr: 0x00000000404bc000   size: 0x0000000000003340   offset: 0x00000000004c0b5c   type: 0x0000000000000001
+LDR|INFO: region: 0x00000014   addr: 0x00000000404c0000   size: 0x0000000000002000   offset: 0x00000000004c3e9c   type: 0x0000000000000001
+LDR|INFO: region: 0x00000015   addr: 0x00000000404c2000   size: 0x000000000001e5b4   offset: 0x00000000004c5e9c   type: 0x0000000000000001
+LDR|INFO: region: 0x00000016   addr: 0x00000000404e1000   size: 0x00000000001f7000   offset: 0x00000000004e4450   type: 0x0000000000000001
+LDR|INFO: region: 0x00000017   addr: 0x00000000406d8000   size: 0x0000000000003340   offset: 0x00000000006db450   type: 0x0000000000000001
+LDR|INFO: region: 0x00000018   addr: 0x00000000406dc000   size: 0x0000000000002000   offset: 0x00000000006de790   type: 0x0000000000000001
+LDR|INFO: region: 0x00000019   addr: 0x00000000406de000   size: 0x0000000000003488   offset: 0x00000000006e0790   type: 0x0000000000000001
+LDR|INFO: region: 0x0000001a   addr: 0x00000000406e2000   size: 0x0000000000002000   offset: 0x00000000006e3c18   type: 0x0000000000000001
+LDR|INFO: copying region 0x00000000
+LDR|INFO: copying region 0x00000001
+LDR|INFO: copying region 0x00000002
+LDR|INFO: copying region 0x00000003
+LDR|INFO: copying region 0x00000004
+LDR|INFO: copying region 0x00000005
+LDR|INFO: copying region 0x00000006
+LDR|INFO: copying region 0x00000007
+LDR|INFO: copying region 0x00000008
+LDR|INFO: copying region 0x00000009
+LDR|INFO: copying region 0x0000000a
+LDR|INFO: copying region 0x0000000b
+LDR|INFO: copying region 0x0000000c
+LDR|INFO: copying region 0x0000000d
+LDR|INFO: copying region 0x0000000e
+LDR|INFO: copying region 0x0000000f
+LDR|INFO: copying region 0x00000010
+LDR|INFO: copying region 0x00000011
+LDR|INFO: copying region 0x00000012
+LDR|INFO: copying region 0x00000013
+LDR|INFO: copying region 0x00000014
+LDR|INFO: copying region 0x00000015
+LDR|INFO: copying region 0x00000016
+LDR|INFO: copying region 0x00000017
+LDR|INFO: copying region 0x00000018
+LDR|INFO: copying region 0x00000019
+LDR|INFO: copying region 0x0000001a
+LDR|INFO: CurrentEL=EL2
+LDR|INFO: Resetting CNTVOFF
+LDR|INFO: enabling MMU
+LDR|INFO: jumping to kernel
+Warning:  gpt_cntfrq 8333333, expected 8000000
+Bootstrapping kernel
+available phys memory regions: 1
+  [40000000..c0000000]
+reserved virt address space regions: 3
+  [8040000000..8040246000]
+  [8040246000..80406e4000]
+  [80406e4000..80406ee000]
+Booting all finished, dropped to user space
+MON|INFO: Microkit Bootstrap
+MON|INFO: bootinfo untyped list matches expected list
+MON|INFO: Number of bootstrap invocations: 0x0000000c
+MON|INFO: Number of system invocations:    0x00000975
+MON|INFO: completed bootstrap invocations
+MON|INFO: completed system invocations
+MON|INFO: PD 'timer_driver' is now passive!
+'client0' is client 0
+'client1' is client 1
+'bench' is client 2
+BENCH|LOG: Bench running in debug mode, no access to counters
+DHCP request finished, IP address for netif client1 is: 172.16.1.29
+DHCP request finished, IP address for netif client0 is: 172.16.1.30
+Utilization connection established!
+client0 measurement starting...
+client0 measurement finished 
+Utilization connection established!
+client0 measurement starting...
+client0 measurement finished 
+Utilization connection established!
+client0 measurement starting...
+client0 measurement finished 
+Utilization connection established!
+client0 measurement starting...
+<<seL4(CPU 0) [handleInterruptEntry/56 T0x8040004400 "ethernet_driver" @206f60]: Spurious interrupt!>>
+<<seL4(CPU 0) [handleInterruptEntry/56 T0x8040004400 "ethernet_driver" @206f60]: Spurious interrupt!>>
+client0 measurement finished 
+Utilization connection established!
+client0 measurement starting...
+<<seL4(CPU 0) [handleInterruptEntry/56 T0x8040005c00 "client0" @21a59c]: Spurious interrupt!>>
+<<seL4(CPU 0) [handleInterruptEntry/56 T0x8040004400 "ethernet_driver" @206ebc]: Spurious interrupt!>>
+<<seL4(CPU 0) [handleInterruptEntry/56 T0x8040004400 "ethernet_driver" @206f60]: Spurious interrupt!>>
+client0 measurement finished 
+Utilization connection established!
+client0 measurement starting...
+<<seL4(CPU 0) [handleInterruptEntry/56 T0x8040004400 "ethernet_driver" @2045b8]: Spurious interrupt!>>
+<<seL4(CPU 0) [handleInterruptEntry/56 T0x8040004400 "ethernet_driver" @2045b8]: Spurious interrupt!>>
+client0 measurement finished 
+Utilization connection established!
+client0 measurement starting...
+<<seL4(CPU 0) [handleInterruptEntry/56 T0x8040004400 "ethernet_driver" @2045b8]: Spurious interrupt!>>
+client0 measurement finished 
+Utilization connection established!
+client0 measurement starting...
+client0 measurement finished 
+Utilization connection established!
+client0 measurement starting...
+<<seL4(CPU 0) [handleInterruptEntry/56 T0x8040004400 "ethernet_driver" @2045b8]: Spurious interrupt!>>
+client0 measurement finished 
+Utilization connection established!
+client0 measurement starting...
+<<seL4(CPU 0) [handleInterruptEntry/56 T0x8040004400 "ethernet_driver" @2045b8]: Spurious interrupt!>>
+<<seL4(CPU 0) [handleInterruptEntry/56 T0x8040004400 "ethernet_driver" @206f60]: Spurious interrupt!>>
+client0 measurement finished 
+Utilization connection established!
+client0 measurement starting...
+<<seL4(CPU 0) [handleInterruptEntry/56 T0x8040004400 "ethernet_driver" @206f60]: Spurious interrupt!>>
+client0 measurement finished 
+Utilization connection established!
+client0 measurement starting...
+<<seL4(CPU 0) [handleInterruptEntry/56 T0x8040004400 "ethernet_driver" @206f60]: Spurious interrupt!>>
+client0 measurement finished 
+Utilization connection established!
+client0 measurement starting...
+client0 measurement finished 

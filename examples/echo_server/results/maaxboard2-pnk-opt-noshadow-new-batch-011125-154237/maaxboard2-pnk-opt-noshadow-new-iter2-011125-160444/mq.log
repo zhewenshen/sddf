@@ -1,0 +1,1257 @@
+co
+^Eco
+[Enter `^Ec?' for help]
+[connecting...up]
+
+U-Boot SPL 2018.03 (Jan 14 2020 - 02:43:08 +0000)
+power_bd71837_init
+set buck8 to 1.2v for DDR4
+DDRINFO: start lpddr4 ddr init
+DRAM PHY training for 2400MTS
+check ddr4_pmu_train_imem code
+check ddr4_pmu_train_imem code pass
+check ddr4_pmu_train_dmem code
+check ddr4_pmu_train_dmem code pass
+Training PASS
+DRAM PHY training for 1600MTS
+check ddr4_pmu_train_imem code
+check ddr4_pmu_train_imem code pass
+check ddr4_pmu_train_dmem code
+check ddr4_pmu_train_dmem code pass
+Training PASS
+DRAM PHY training for 1064MTS
+check ddr4_pmu_train_imem code
+check ddr4_pmu_train_imem code pass
+check ddr4_pmu_train_dmem code
+check ddr4_pmu_train_dmem code pass
+Training PASS
+DRAM PHY training for 2400MTS
+check ddr4_pmu_train_imem code
+check ddr4_pmu_train_imem code pass
+check ddr4_pmu_train_dmem code
+check ddr4_pmu_train_dmem code pass
+Training PASS
+DDRINFO:ddrphy calibration done
+DDRINFO: ddrmix config done
+Normal Boot
+Trying to boot from MMC1
+
+
+U-Boot 2018.03 (Jan 14 2020 - 02:43:08 +0000)
+
+CPU:   Freescale i.MX8MQ rev2.1 1500 MHz (running at 1000 MHz)
+CPU:   Commercial temperature grade (0C to 95C) at 42C
+Reset cause: POR
+Model: Freescale i.MX8MQ EVK
+DRAM:  2 GiB
+MMC:   FSL_SDHC: 0
+Loading Environment from MMC... OK
+No panel detected: default to HDMI
+Display: HDMI (1280x720)
+In:    serial
+Out:   serial
+Err:   serial
+
+ BuildInfo:
+  - ATF d6451cc
+  - U-Boot 2018.03
+
+switch to partitions #0, OK
+mmc0 is current device
+flash target is MMC:0
+Net:   
+Warning: ethernet@30be0000 (eth0) using random MAC address - 7a:16:9d:40:15:68
+eth0: ethernet@30be0000
+Fastboot: Normal
+Normal Boot
+Hit any key to stop autoboot:  2  
+ 0 
+u-boot=> 
+u-boot=> setenv loadaddr 0x50000000
+dhcp
+setenv loadaddr 0x50000000
+u-boot=> dhcp
+ethernet@30be0000 Waiting for PHY auto negotiation to complete.... done
+BOOTP broadcast 1
+BOOTP broadcast 2
+BOOTP broadcast 3
+BOOTP broadcast 4
+BOOTP broadcast 5
+BOOTP broadcast 6
+DHCP client bound to address 172.16.1.10 (5766 ms)
+*** Warning: no boot file name; using 'AC10010A.img'
+Using ethernet@30be0000 device
+TFTP from server 172.16.0.2; our IP address is 172.16.1.10
+Filename 'AC10010A.img'.
+Load address: 0x50000000
+Loading: *
+TFTP error: 'File not found' (1)
+Not retrying...
+u-boot=> tftp ${loadaddr} /maaxboard2/sel4-image
+tftp ${loadaddr} /maaxboard2/sel4-image
+Using ethernet@30be0000 device
+TFTP from server 172.16.0.2; our IP address is 172.16.1.10
+Filename '/maaxboard2/sel4-image'.
+Load address: 0x50000000
+Loading: *#################################################################
+	 #################################################################
+	 #################################################################
+	 #################################################################
+	 #################################################################
+	 #################################################################
+	 #################################################################
+	 #########################
+	 13.8 MiB/s
+done
+Bytes transferred = 7033624 (6b5318 hex)
+u-boot=> go ${loadaddr}
+go ${loadaddr}
+## Starting application at 0x50000000 ...
+BENCH|LOG: MICROKIT_CONFIG_benchmark defined
+BENCH|LOG: CONFIG_BENCHMARK_TRACK_UTILISATION defined
+DHCP request finished, IP address for netif client1 is: 172.16.1.12
+DHCP request finished, IP address for netif client0 is: 172.16.1.11
+Utilization connection established!
+client0 measurement starting...
+client0 measurement finished 
+{
+L1 i-cache misses: 49947105
+L1 d-cache misses: 42890127
+L1 i-tlb misses: 2208181
+L1 d-tlb misses: 5691502
+Instructions: 3512732502
+Branch mispredictions: 16085037
+}
+Total utilisation details: 
+{
+KernelUtilisation: 3174989261
+KernelEntries: 4738686
+NumberSchedules: 3644749
+TotalUtilisation: 255798896119
+}
+Utilisation details for PD: serial_driver (0)
+{
+KernelUtilisation: 2698
+KernelEntries: 2
+NumberSchedules: 2
+TotalUtilisation: 30290
+}
+Utilisation details for PD: serial_virt_tx (1)
+{
+KernelUtilisation: 4467
+KernelEntries: 3
+NumberSchedules: 2
+TotalUtilisation: 13029
+}
+Utilisation details for PD: ethernet_driver (2)
+{
+KernelUtilisation: 944163013
+KernelEntries: 1239311
+NumberSchedules: 1234290
+TotalUtilisation: 2490194935
+}
+Utilisation details for PD: net_virt_tx (3)
+{
+KernelUtilisation: 447439794
+KernelEntries: 623453
+NumberSchedules: 405159
+TotalUtilisation: 1007412714
+}
+Utilisation details for PD: net_virt_rx (4)
+{
+KernelUtilisation: 666197991
+KernelEntries: 1087744
+NumberSchedules: 654506
+TotalUtilisation: 1271227739
+}
+Utilisation details for PD: client0 (5)
+{
+KernelUtilisation: 217979359
+KernelEntries: 446038
+NumberSchedules: 230085
+TotalUtilisation: 1041446507
+}
+Utilisation details for PD: client0_net_copier (6)
+{
+KernelUtilisation: 363292445
+KernelEntries: 650779
+NumberSchedules: 433086
+TotalUtilisation: 1017232354
+}
+Utilisation details for PD: client1 (7)
+{
+KernelUtilisation: 6143053
+KernelEntries: 12023
+NumberSchedules: 12023
+TotalUtilisation: 15077663
+}
+Utilisation details for PD: client1_net_copier (8)
+{
+KernelUtilisation: 229824
+KernelEntries: 255
+NumberSchedules: 170
+TotalUtilisation: 698787
+}
+Utilisation details for PD: timer_driver (9)
+{
+KernelUtilisation: 15336720
+KernelEntries: 33313
+NumberSchedules: 29668
+TotalUtilisation: 74373277
+}
+Utilization connection established!
+client0 measurement starting...
+client0 measurement finished 
+{
+L1 i-cache misses: 51615506
+L1 d-cache misses: 44540028
+L1 i-tlb misses: 2272375
+L1 d-tlb misses: 5945044
+Instructions: 947733463
+Branch mispredictions: 16411300
+}
+Total utilisation details: 
+{
+KernelUtilisation: 3170490296
+KernelEntries: 4771777
+NumberSchedules: 3601793
+TotalUtilisation: 138032719755
+}
+Utilisation details for PD: serial_driver (0)
+{
+KernelUtilisation: 2841
+KernelEntries: 2
+NumberSchedules: 2
+TotalUtilisation: 28149
+}
+Utilisation details for PD: serial_virt_tx (1)
+{
+KernelUtilisation: 4354
+KernelEntries: 3
+NumberSchedules: 2
+TotalUtilisation: 15325
+}
+Utilisation details for PD: ethernet_driver (2)
+{
+KernelUtilisation: 970168378
+KernelEntries: 1273343
+NumberSchedules: 1264002
+TotalUtilisation: 2582409966
+}
+Utilisation details for PD: net_virt_tx (3)
+{
+KernelUtilisation: 448362947
+KernelEntries: 632216
+NumberSchedules: 401335
+TotalUtilisation: 1020996846
+}
+Utilisation details for PD: net_virt_rx (4)
+{
+KernelUtilisation: 716172154
+KernelEntries: 1167301
+NumberSchedules: 701738
+TotalUtilisation: 1362596002
+}
+Utilisation details for PD: client0 (5)
+{
+KernelUtilisation: 226378228
+KernelEntries: 462769
+NumberSchedules: 236023
+TotalUtilisation: 1099112683
+}
+Utilisation details for PD: client0_net_copier (6)
+{
+KernelUtilisation: 389647941
+KernelEntries: 700647
+NumberSchedules: 465512
+TotalUtilisation: 1091597204
+}
+Utilisation details for PD: client1 (7)
+{
+KernelUtilisation: 3641094
+KernelEntries: 6456
+NumberSchedules: 6456
+TotalUtilisation: 10481066
+}
+Utilisation details for PD: client1_net_copier (8)
+{
+KernelUtilisation: 275601
+KernelEntries: 320
+NumberSchedules: 214
+TotalUtilisation: 818895
+}
+Utilisation details for PD: timer_driver (9)
+{
+KernelUtilisation: 8325311
+KernelEntries: 18266
+NumberSchedules: 16062
+TotalUtilisation: 41597106
+}
+Utilization connection established!
+client0 measurement starting...
+client0 measurement finished 
+{
+L1 i-cache misses: 61610478
+L1 d-cache misses: 52684899
+L1 i-tlb misses: 2616887
+L1 d-tlb misses: 7019544
+Instructions: 2034156580
+Branch mispredictions: 20012855
+}
+Total utilisation details: 
+{
+KernelUtilisation: 3728425808
+KernelEntries: 5670126
+NumberSchedules: 4190995
+TotalUtilisation: 67537874395
+}
+Utilisation details for PD: serial_driver (0)
+{
+KernelUtilisation: 2831
+KernelEntries: 2
+NumberSchedules: 2
+TotalUtilisation: 28652
+}
+Utilisation details for PD: serial_virt_tx (1)
+{
+KernelUtilisation: 4707
+KernelEntries: 3
+NumberSchedules: 2
+TotalUtilisation: 14058
+}
+Utilisation details for PD: ethernet_driver (2)
+{
+KernelUtilisation: 1173587693
+KernelEntries: 1552017
+NumberSchedules: 1523369
+TotalUtilisation: 3133303325
+}
+Utilisation details for PD: net_virt_tx (3)
+{
+KernelUtilisation: 545899648
+KernelEntries: 797167
+NumberSchedules: 477823
+TotalUtilisation: 1242446087
+}
+Utilisation details for PD: net_virt_rx (4)
+{
+KernelUtilisation: 879955931
+KernelEntries: 1426275
+NumberSchedules: 860205
+TotalUtilisation: 1666909922
+}
+Utilisation details for PD: client0 (5)
+{
+KernelUtilisation: 274135175
+KernelEntries: 553773
+NumberSchedules: 285226
+TotalUtilisation: 1314649360
+}
+Utilisation details for PD: client0_net_copier (6)
+{
+KernelUtilisation: 481319219
+KernelEntries: 873573
+NumberSchedules: 578581
+TotalUtilisation: 1342935291
+}
+Utilisation details for PD: client1 (7)
+{
+KernelUtilisation: 2104824
+KernelEntries: 3333
+NumberSchedules: 3333
+TotalUtilisation: 8495575
+}
+Utilisation details for PD: client1_net_copier (8)
+{
+KernelUtilisation: 196305
+KernelEntries: 225
+NumberSchedules: 150
+TotalUtilisation: 562001
+}
+Utilisation details for PD: timer_driver (9)
+{
+KernelUtilisation: 7525575
+KernelEntries: 9395
+NumberSchedules: 7960
+TotalUtilisation: 25155205
+}
+Utilization connection established!
+client0 measurement starting...
+client0 measurement finished 
+{
+L1 i-cache misses: 74170393
+L1 d-cache misses: 64102726
+L1 i-tlb misses: 3060426
+L1 d-tlb misses: 8174358
+Instructions: 3007702687
+Branch mispredictions: 24366384
+}
+Total utilisation details: 
+{
+KernelUtilisation: 4250793723
+KernelEntries: 6523481
+NumberSchedules: 4666177
+TotalUtilisation: 43912445596
+}
+Utilisation details for PD: serial_driver (0)
+{
+KernelUtilisation: 2837
+KernelEntries: 2
+NumberSchedules: 2
+TotalUtilisation: 30476
+}
+Utilisation details for PD: serial_virt_tx (1)
+{
+KernelUtilisation: 4427
+KernelEntries: 3
+NumberSchedules: 2
+TotalUtilisation: 13592
+}
+Utilisation details for PD: ethernet_driver (2)
+{
+KernelUtilisation: 1288702370
+KernelEntries: 1709694
+NumberSchedules: 1618025
+TotalUtilisation: 3540686721
+}
+Utilisation details for PD: net_virt_tx (3)
+{
+KernelUtilisation: 606816523
+KernelEntries: 878937
+NumberSchedules: 520156
+TotalUtilisation: 1418383900
+}
+Utilisation details for PD: net_virt_rx (4)
+{
+KernelUtilisation: 1064309851
+KernelEntries: 1760714
+NumberSchedules: 1063617
+TotalUtilisation: 2047829785
+}
+Utilisation details for PD: client0 (5)
+{
+KernelUtilisation: 335588979
+KernelEntries: 670133
+NumberSchedules: 338095
+TotalUtilisation: 1659074122
+}
+Utilisation details for PD: client0_net_copier (6)
+{
+KernelUtilisation: 593734014
+KernelEntries: 1062734
+NumberSchedules: 704281
+TotalUtilisation: 1681450959
+}
+Utilisation details for PD: client1 (7)
+{
+KernelUtilisation: 1341476
+KernelEntries: 2227
+NumberSchedules: 2226
+TotalUtilisation: 6740203
+}
+Utilisation details for PD: client1_net_copier (8)
+{
+KernelUtilisation: 161259
+KernelEntries: 174
+NumberSchedules: 117
+TotalUtilisation: 442064
+}
+Utilisation details for PD: timer_driver (9)
+{
+KernelUtilisation: 5630794
+KernelEntries: 6707
+NumberSchedules: 5344
+TotalUtilisation: 18355055
+}
+Utilization connection established!
+client0 measurement starting...
+client0 measurement finished 
+{
+L1 i-cache misses: 58455654
+L1 d-cache misses: 60012346
+L1 i-tlb misses: 2392360
+L1 d-tlb misses: 7093878
+Instructions: 2653457800
+Branch mispredictions: 25027686
+}
+Total utilisation details: 
+{
+KernelUtilisation: 3426619375
+KernelEntries: 5262650
+NumberSchedules: 3704618
+TotalUtilisation: 32226203530
+}
+Utilisation details for PD: serial_driver (0)
+{
+KernelUtilisation: 2911
+KernelEntries: 2
+NumberSchedules: 2
+TotalUtilisation: 28619
+}
+Utilisation details for PD: serial_virt_tx (1)
+{
+KernelUtilisation: 4572
+KernelEntries: 3
+NumberSchedules: 2
+TotalUtilisation: 13415
+}
+Utilisation details for PD: ethernet_driver (2)
+{
+KernelUtilisation: 1060878382
+KernelEntries: 1445228
+NumberSchedules: 1306540
+TotalUtilisation: 3507705991
+}
+Utilisation details for PD: net_virt_tx (3)
+{
+KernelUtilisation: 415560120
+KernelEntries: 586309
+NumberSchedules: 349138
+TotalUtilisation: 1154960477
+}
+Utilisation details for PD: net_virt_rx (4)
+{
+KernelUtilisation: 975608260
+KernelEntries: 1564080
+NumberSchedules: 956384
+TotalUtilisation: 1960979636
+}
+Utilisation details for PD: client0 (5)
+{
+KernelUtilisation: 239290168
+KernelEntries: 466986
+NumberSchedules: 241145
+TotalUtilisation: 1738610200
+}
+Utilisation details for PD: client0_net_copier (6)
+{
+KernelUtilisation: 503336033
+KernelEntries: 921423
+NumberSchedules: 590405
+TotalUtilisation: 1779911842
+}
+Utilisation details for PD: client1 (7)
+{
+KernelUtilisation: 894874
+KernelEntries: 1571
+NumberSchedules: 1571
+TotalUtilisation: 4662023
+}
+Utilisation details for PD: client1_net_copier (8)
+{
+KernelUtilisation: 76807
+KernelEntries: 83
+NumberSchedules: 56
+TotalUtilisation: 202968
+}
+Utilisation details for PD: timer_driver (9)
+{
+KernelUtilisation: 3993461
+KernelEntries: 5058
+NumberSchedules: 3930
+TotalUtilisation: 12904965
+}
+Utilization connection established!
+client0 measurement starting...
+client0 measurement finished 
+{
+L1 i-cache misses: 59393763
+L1 d-cache misses: 65957463
+L1 i-tlb misses: 2292460
+L1 d-tlb misses: 7496866
+Instructions: 3215433847
+Branch mispredictions: 26685398
+}
+Total utilisation details: 
+{
+KernelUtilisation: 3366247525
+KernelEntries: 5146310
+NumberSchedules: 3599570
+TotalUtilisation: 28290190986
+}
+Utilisation details for PD: serial_driver (0)
+{
+KernelUtilisation: 2911
+KernelEntries: 2
+NumberSchedules: 2
+TotalUtilisation: 28555
+}
+Utilisation details for PD: serial_virt_tx (1)
+{
+KernelUtilisation: 4505
+KernelEntries: 3
+NumberSchedules: 2
+TotalUtilisation: 13366
+}
+Utilisation details for PD: ethernet_driver (2)
+{
+KernelUtilisation: 1042319725
+KernelEntries: 1410851
+NumberSchedules: 1269033
+TotalUtilisation: 3907442436
+}
+Utilisation details for PD: net_virt_tx (3)
+{
+KernelUtilisation: 404759553
+KernelEntries: 558013
+NumberSchedules: 339112
+TotalUtilisation: 1234321389
+}
+Utilisation details for PD: net_virt_rx (4)
+{
+KernelUtilisation: 963095520
+KernelEntries: 1538498
+NumberSchedules: 933614
+TotalUtilisation: 2037723296
+}
+Utilisation details for PD: client0 (5)
+{
+KernelUtilisation: 248149515
+KernelEntries: 486471
+NumberSchedules: 247874
+TotalUtilisation: 2107988782
+}
+Utilisation details for PD: client0_net_copier (6)
+{
+KernelUtilisation: 505240587
+KernelEntries: 915914
+NumberSchedules: 583110
+TotalUtilisation: 2044222228
+}
+Utilisation details for PD: client1 (7)
+{
+KernelUtilisation: 869061
+KernelEntries: 1435
+NumberSchedules: 1431
+TotalUtilisation: 4345678
+}
+Utilisation details for PD: client1_net_copier (8)
+{
+KernelUtilisation: 83144
+KernelEntries: 91
+NumberSchedules: 61
+TotalUtilisation: 215940
+}
+Utilisation details for PD: timer_driver (9)
+{
+KernelUtilisation: 3700167
+KernelEntries: 4345
+NumberSchedules: 3444
+TotalUtilisation: 12015978
+}
+Utilization connection established!
+client0 measurement starting...
+client0 measurement finished 
+{
+L1 i-cache misses: 45276107
+L1 d-cache misses: 61981439
+L1 i-tlb misses: 1652031
+L1 d-tlb misses: 6593373
+Instructions: 1981028692
+Branch mispredictions: 25903659
+}
+Total utilisation details: 
+{
+KernelUtilisation: 2683637805
+KernelEntries: 4133149
+NumberSchedules: 2801427
+TotalUtilisation: 26288859993
+}
+Utilisation details for PD: serial_driver (0)
+{
+KernelUtilisation: 5653
+KernelEntries: 3
+NumberSchedules: 3
+TotalUtilisation: 31773
+}
+Utilisation details for PD: serial_virt_tx (1)
+{
+KernelUtilisation: 4233
+KernelEntries: 3
+NumberSchedules: 2
+TotalUtilisation: 13588
+}
+Utilisation details for PD: ethernet_driver (2)
+{
+KernelUtilisation: 902044335
+KernelEntries: 1282948
+NumberSchedules: 1053263
+TotalUtilisation: 4085740411
+}
+Utilisation details for PD: net_virt_tx (3)
+{
+KernelUtilisation: 297623842
+KernelEntries: 384102
+NumberSchedules: 252681
+TotalUtilisation: 1130668631
+}
+Utilisation details for PD: net_virt_rx (4)
+{
+KernelUtilisation: 817425229
+KernelEntries: 1279884
+NumberSchedules: 789983
+TotalUtilisation: 1874418037
+}
+Utilisation details for PD: client0 (5)
+{
+KernelUtilisation: 174677378
+KernelEntries: 333579
+NumberSchedules: 171558
+TotalUtilisation: 2232166300
+}
+Utilisation details for PD: client0_net_copier (6)
+{
+KernelUtilisation: 401151050
+KernelEntries: 751181
+NumberSchedules: 446074
+TotalUtilisation: 2138029426
+}
+Utilisation details for PD: client1 (7)
+{
+KernelUtilisation: 858160
+KernelEntries: 1300
+NumberSchedules: 1287
+TotalUtilisation: 4137778
+}
+Utilisation details for PD: client1_net_copier (8)
+{
+KernelUtilisation: 89662
+KernelEntries: 99
+NumberSchedules: 67
+TotalUtilisation: 228514
+}
+Utilisation details for PD: timer_driver (9)
+{
+KernelUtilisation: 3422514
+KernelEntries: 3969
+NumberSchedules: 3184
+TotalUtilisation: 11025287
+}
+Utilization connection established!
+client0 measurement starting...
+client0 measurement finished 
+{
+L1 i-cache misses: 32943764
+L1 d-cache misses: 58474758
+L1 i-tlb misses: 1262996
+L1 d-tlb misses: 6107594
+Instructions: 1160659523
+Branch mispredictions: 24278185
+}
+Total utilisation details: 
+{
+KernelUtilisation: 2035140033
+KernelEntries: 3105915
+NumberSchedules: 2110169
+TotalUtilisation: 25087166358
+}
+Utilisation details for PD: serial_driver (0)
+{
+KernelUtilisation: 3209
+KernelEntries: 2
+NumberSchedules: 2
+TotalUtilisation: 28515
+}
+Utilisation details for PD: serial_virt_tx (1)
+{
+KernelUtilisation: 4493
+KernelEntries: 3
+NumberSchedules: 2
+TotalUtilisation: 13334
+}
+Utilisation details for PD: ethernet_driver (2)
+{
+KernelUtilisation: 731308544
+KernelEntries: 1009720
+NumberSchedules: 851293
+TotalUtilisation: 4315185136
+}
+Utilisation details for PD: net_virt_tx (3)
+{
+KernelUtilisation: 167162052
+KernelEntries: 242127
+NumberSchedules: 132540
+TotalUtilisation: 1016507243
+}
+Utilisation details for PD: net_virt_rx (4)
+{
+KernelUtilisation: 623994077
+KernelEntries: 957311
+NumberSchedules: 592167
+TotalUtilisation: 1633967750
+}
+Utilisation details for PD: client0 (5)
+{
+KernelUtilisation: 131435625
+KernelEntries: 229347
+NumberSchedules: 125015
+TotalUtilisation: 2436897435
+}
+Utilisation details for PD: client0_net_copier (6)
+{
+KernelUtilisation: 307758634
+KernelEntries: 595238
+NumberSchedules: 337924
+TotalUtilisation: 2321487820
+}
+Utilisation details for PD: client1 (7)
+{
+KernelUtilisation: 752100
+KernelEntries: 1198
+NumberSchedules: 1198
+TotalUtilisation: 3824776
+}
+Utilisation details for PD: client1_net_copier (8)
+{
+KernelUtilisation: 106762
+KernelEntries: 114
+NumberSchedules: 80
+TotalUtilisation: 285536
+}
+Utilisation details for PD: timer_driver (9)
+{
+KernelUtilisation: 3399099
+KernelEntries: 3921
+NumberSchedules: 3021
+TotalUtilisation: 11020419
+}
+Utilization connection established!
+client0 measurement starting...
+client0 measurement finished 
+{
+L1 i-cache misses: 26588619
+L1 d-cache misses: 59481209
+L1 i-tlb misses: 1082709
+L1 d-tlb misses: 6349930
+Instructions: 449917854
+Branch mispredictions: 24261537
+}
+Total utilisation details: 
+{
+KernelUtilisation: 1728363888
+KernelEntries: 2574277
+NumberSchedules: 1770910
+TotalUtilisation: 24264736324
+}
+Utilisation details for PD: serial_driver (0)
+{
+KernelUtilisation: 3820
+KernelEntries: 3
+NumberSchedules: 3
+TotalUtilisation: 31958
+}
+Utilisation details for PD: serial_virt_tx (1)
+{
+KernelUtilisation: 4698
+KernelEntries: 3
+NumberSchedules: 2
+TotalUtilisation: 13541
+}
+Utilisation details for PD: ethernet_driver (2)
+{
+KernelUtilisation: 632092582
+KernelEntries: 877934
+NumberSchedules: 735011
+TotalUtilisation: 4390559944
+}
+Utilisation details for PD: net_virt_tx (3)
+{
+KernelUtilisation: 151339475
+KernelEntries: 178648
+NumberSchedules: 121525
+TotalUtilisation: 1088477528
+}
+Utilisation details for PD: net_virt_rx (4)
+{
+KernelUtilisation: 498766108
+KernelEntries: 765536
+NumberSchedules: 464008
+TotalUtilisation: 1587072331
+}
+Utilisation details for PD: client0 (5)
+{
+KernelUtilisation: 61312334
+KernelEntries: 116691
+NumberSchedules: 58139
+TotalUtilisation: 2656954014
+}
+Utilisation details for PD: client0_net_copier (6)
+{
+KernelUtilisation: 307885381
+KernelEntries: 562796
+NumberSchedules: 320368
+TotalUtilisation: 2539580083
+}
+Utilisation details for PD: client1 (7)
+{
+KernelUtilisation: 864294
+KernelEntries: 1129
+NumberSchedules: 1129
+TotalUtilisation: 3685049
+}
+Utilisation details for PD: client1_net_copier (8)
+{
+KernelUtilisation: 25010
+KernelEntries: 23
+NumberSchedules: 16
+TotalUtilisation: 66550
+}
+Utilisation details for PD: timer_driver (9)
+{
+KernelUtilisation: 3726930
+KernelEntries: 3710
+NumberSchedules: 2912
+TotalUtilisation: 11498831
+}
+Utilization connection established!
+client0 measurement starting...
+client0 measurement finished 
+{
+L1 i-cache misses: 25497569
+L1 d-cache misses: 62703980
+L1 i-tlb misses: 1016950
+L1 d-tlb misses: 6822443
+Instructions: 4111449063
+Branch mispredictions: 25696186
+}
+Total utilisation details: 
+{
+KernelUtilisation: 1512674459
+KernelEntries: 2223403
+NumberSchedules: 1523830
+TotalUtilisation: 23817043239
+}
+Utilisation details for PD: serial_driver (0)
+{
+KernelUtilisation: 2931
+KernelEntries: 2
+NumberSchedules: 2
+TotalUtilisation: 30781
+}
+Utilisation details for PD: serial_virt_tx (1)
+{
+KernelUtilisation: 4319
+KernelEntries: 3
+NumberSchedules: 2
+TotalUtilisation: 13148
+}
+Utilisation details for PD: ethernet_driver (2)
+{
+KernelUtilisation: 503753087
+KernelEntries: 719795
+NumberSchedules: 567086
+TotalUtilisation: 4513294127
+}
+Utilisation details for PD: net_virt_tx (3)
+{
+KernelUtilisation: 155349164
+KernelEntries: 184153
+NumberSchedules: 125959
+TotalUtilisation: 1238159407
+}
+Utilisation details for PD: net_virt_rx (4)
+{
+KernelUtilisation: 442829866
+KernelEntries: 668257
+NumberSchedules: 425398
+TotalUtilisation: 1562635028
+}
+Utilisation details for PD: client0 (5)
+{
+KernelUtilisation: 61373648
+KernelEntries: 117340
+NumberSchedules: 59165
+TotalUtilisation: 2996222198
+}
+Utilisation details for PD: client0_net_copier (6)
+{
+KernelUtilisation: 271032778
+KernelEntries: 460942
+NumberSchedules: 274307
+TotalUtilisation: 2786776815
+}
+Utilisation details for PD: client1 (7)
+{
+KernelUtilisation: 907914
+KernelEntries: 1126
+NumberSchedules: 1126
+TotalUtilisation: 3971886
+}
+Utilisation details for PD: client1_net_copier (8)
+{
+KernelUtilisation: 131608
+KernelEntries: 146
+NumberSchedules: 105
+TotalUtilisation: 346050
+}
+Utilisation details for PD: timer_driver (9)
+{
+KernelUtilisation: 4091987
+KernelEntries: 3847
+NumberSchedules: 2896
+TotalUtilisation: 12301240
+}
+Utilization connection established!
+client0 measurement starting...
+client0 measurement finished 
+{
+L1 i-cache misses: 23438392
+L1 d-cache misses: 63818568
+L1 i-tlb misses: 921412
+L1 d-tlb misses: 7121042
+Instructions: 3708267566
+Branch mispredictions: 25901463
+}
+Total utilisation details: 
+{
+KernelUtilisation: 1161129197
+KernelEntries: 1670883
+NumberSchedules: 1126980
+TotalUtilisation: 23394154856
+}
+Utilisation details for PD: serial_driver (0)
+{
+KernelUtilisation: 3049
+KernelEntries: 2
+NumberSchedules: 2
+TotalUtilisation: 30951
+}
+Utilisation details for PD: serial_virt_tx (1)
+{
+KernelUtilisation: 4170
+KernelEntries: 3
+NumberSchedules: 2
+TotalUtilisation: 13025
+}
+Utilisation details for PD: ethernet_driver (2)
+{
+KernelUtilisation: 338553818
+KernelEntries: 523089
+NumberSchedules: 360441
+TotalUtilisation: 4631115892
+}
+Utilisation details for PD: net_virt_tx (3)
+{
+KernelUtilisation: 178077059
+KernelEntries: 213816
+NumberSchedules: 142974
+TotalUtilisation: 1409093820
+}
+Utilisation details for PD: net_virt_rx (4)
+{
+KernelUtilisation: 336167971
+KernelEntries: 492111
+NumberSchedules: 330806
+TotalUtilisation: 1444990229
+}
+Utilisation details for PD: client0 (5)
+{
+KernelUtilisation: 65522955
+KernelEntries: 119657
+NumberSchedules: 60366
+TotalUtilisation: 3340956301
+}
+Utilisation details for PD: client0_net_copier (6)
+{
+KernelUtilisation: 165646074
+KernelEntries: 249772
+NumberSchedules: 160811
+TotalUtilisation: 2827644919
+}
+Utilisation details for PD: client1 (7)
+{
+KernelUtilisation: 899564
+KernelEntries: 1111
+NumberSchedules: 1111
+TotalUtilisation: 3977167
+}
+Utilisation details for PD: client1_net_copier (8)
+{
+KernelUtilisation: 102170
+KernelEntries: 90
+NumberSchedules: 60
+TotalUtilisation: 281031
+}
+Utilisation details for PD: timer_driver (9)
+{
+KernelUtilisation: 3942965
+KernelEntries: 3721
+NumberSchedules: 2903
+TotalUtilisation: 11988597
+}
+Utilization connection established!
+client0 measurement starting...
+client0 measurement finished 
+{
+L1 i-cache misses: 21559787
+L1 d-cache misses: 67150058
+L1 i-tlb misses: 872568
+L1 d-tlb misses: 7563898
+Instructions: 3238202959
+Branch mispredictions: 26816827
+}
+Total utilisation details: 
+{
+KernelUtilisation: 922171529
+KernelEntries: 1326053
+NumberSchedules: 838742
+TotalUtilisation: 23069605242
+}
+Utilisation details for PD: serial_driver (0)
+{
+KernelUtilisation: 3841
+KernelEntries: 3
+NumberSchedules: 3
+TotalUtilisation: 31902
+}
+Utilisation details for PD: serial_virt_tx (1)
+{
+KernelUtilisation: 5130
+KernelEntries: 3
+NumberSchedules: 2
+TotalUtilisation: 14755
+}
+Utilisation details for PD: ethernet_driver (2)
+{
+KernelUtilisation: 249281003
+KernelEntries: 409918
+NumberSchedules: 230905
+TotalUtilisation: 4790709446
+}
+Utilisation details for PD: net_virt_tx (3)
+{
+KernelUtilisation: 171544466
+KernelEntries: 201035
+NumberSchedules: 136342
+TotalUtilisation: 1494786387
+}
+Utilisation details for PD: net_virt_rx (4)
+{
+KernelUtilisation: 223749253
+KernelEntries: 338451
+NumberSchedules: 217121
+TotalUtilisation: 1423279573
+}
+Utilisation details for PD: client0 (5)
+{
+KernelUtilisation: 63508345
+KernelEntries: 122630
+NumberSchedules: 61891
+TotalUtilisation: 3688112130
+}
+Utilisation details for PD: client0_net_copier (6)
+{
+KernelUtilisation: 137420278
+KernelEntries: 182018
+NumberSchedules: 121283
+TotalUtilisation: 3005550367
+}
+Utilisation details for PD: client1 (7)
+{
+KernelUtilisation: 957219
+KernelEntries: 1082
+NumberSchedules: 1082
+TotalUtilisation: 3844538
+}
+Utilisation details for PD: client1_net_copier (8)
+{
+KernelUtilisation: 50205
+KernelEntries: 42
+NumberSchedules: 28
+TotalUtilisation: 132803
+}
+Utilisation details for PD: timer_driver (9)
+{
+KernelUtilisation: 3866569
+KernelEntries: 3456
+NumberSchedules: 2678
+TotalUtilisation: 11758564
+}
+Utilization connection established!
+client0 measurement starting...
+client0 measurement finished 
+{
+L1 i-cache misses: 21232874
+L1 d-cache misses: 69287167
+L1 i-tlb misses: 833146
+L1 d-tlb misses: 7904018
+Instructions: 2868801413
+Branch mispredictions: 27286802
+}
+Total utilisation details: 
+{
+KernelUtilisation: 860927283
+KernelEntries: 1259893
+NumberSchedules: 765528
+TotalUtilisation: 22857283271
+}
+Utilisation details for PD: serial_driver (0)
+{
+KernelUtilisation: 3904
+KernelEntries: 3
+NumberSchedules: 3
+TotalUtilisation: 30512
+}
+Utilisation details for PD: serial_virt_tx (1)
+{
+KernelUtilisation: 4176
+KernelEntries: 3
+NumberSchedules: 2
+TotalUtilisation: 12756
+}
+Utilisation details for PD: ethernet_driver (2)
+{
+KernelUtilisation: 220425311
+KernelEntries: 373844
+NumberSchedules: 191342
+TotalUtilisation: 4899631584
+}
+Utilisation details for PD: net_virt_tx (3)
+{
+KernelUtilisation: 156639738
+KernelEntries: 187880
+NumberSchedules: 125388
+TotalUtilisation: 1499382889
+}
+Utilisation details for PD: net_virt_rx (4)
+{
+KernelUtilisation: 199335684
+KernelEntries: 313021
+NumberSchedules: 188827
+TotalUtilisation: 1448517455
+}
+Utilisation details for PD: client0 (5)
+{
+KernelUtilisation: 63960415
+KernelEntries: 125141
+NumberSchedules: 63207
+TotalUtilisation: 3898477878
+}
+Utilisation details for PD: client0_net_copier (6)
+{
+KernelUtilisation: 141434287
+KernelEntries: 186659
+NumberSchedules: 124245
+TotalUtilisation: 3188142487
+}
+Utilisation details for PD: client1 (7)
+{
+KernelUtilisation: 1015767
+KernelEntries: 1072
+NumberSchedules: 1072
+TotalUtilisation: 3835176
+}
+Utilisation details for PD: client1_net_copier (8)
+{
+KernelUtilisation: 35299
+KernelEntries: 27
+NumberSchedules: 18
+TotalUtilisation: 97429
+}
+Utilisation details for PD: timer_driver (9)
+{
+KernelUtilisation: 3891077
+KernelEntries: 3423
+NumberSchedules: 2647
+TotalUtilisation: 11882836
+}

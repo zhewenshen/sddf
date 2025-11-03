@@ -1,0 +1,59 @@
+2025-10-28 00:37:05,629 - INFO - ============================================================
+2025-10-28 00:37:05,629 - INFO - starting benchmark iteration (FULL RUN, UDP)
+2025-10-28 00:37:05,629 - INFO - ============================================================
+2025-10-28 00:37:05,629 - INFO - results will be saved to: /home/zhewen/Documents/code/sddf/examples/echo_server/results/maaxboard2-c-baseline-batch-251027-122153/maaxboard2-c-baseline-iter5-251027-133705
+2025-10-28 00:37:05,629 - INFO - 
+2025-10-28 00:37:05,629 - INFO - ============================================================
+2025-10-28 00:37:05,629 - INFO - starting mq server...
+2025-10-28 00:37:05,629 - INFO - ============================================================
+2025-10-28 00:37:05,631 - INFO - 
+2025-10-28 00:37:05,631 - INFO - waiting for dhcp...
+2025-10-28 00:37:36,442 - INFO - 
+2025-10-28 00:37:36,442 - INFO - dhcp complete, ip address: 172.16.1.196
+2025-10-28 00:37:36,442 - INFO - 
+2025-10-28 00:37:36,442 - INFO - ============================================================
+2025-10-28 00:37:36,442 - INFO - starting iq benchmark client...
+2025-10-28 00:37:36,442 - INFO - ============================================================
+2025-10-28 00:37:36,442 - INFO - protocol: UDP
+2025-10-28 00:37:36,442 - INFO - testing throughputs: 0.0Gbps, 0.0Gbps, 0.1Gbps, 0.1Gbps, 0.2Gbps, 0.3Gbps, 0.4Gbps, 0.5Gbps, 0.6Gbps, 0.7Gbps, 0.8Gbps, 0.9Gbps, 1.0Gbps
+2025-10-28 00:37:36,445 - INFO - monitoring iq client output...
+2025-10-28 00:55:14,744 - INFO - iq client finished
+2025-10-28 00:55:14,744 - INFO - 
+2025-10-28 00:55:14,744 - INFO - ============================================================
+2025-10-28 00:55:14,744 - INFO - shutting down mq server...
+2025-10-28 00:55:14,744 - INFO - ============================================================
+2025-10-28 00:55:17,911 - INFO - server shut down gracefully
+2025-10-28 00:55:17,911 - INFO - 
+2025-10-28 00:55:17,911 - INFO - ============================================================
+2025-10-28 00:55:17,911 - INFO - processing logs...
+2025-10-28 00:55:17,911 - INFO - ============================================================
+2025-10-28 00:55:17,911 - INFO - extracting csv results from iq.log...
+2025-10-28 00:55:17,911 - WARNING - no result summary found in iq.log
+2025-10-28 00:55:17,911 - INFO - stripping ansi escape codes from mq log...
+2025-10-28 00:55:17,913 - INFO - clean mq log saved to: /home/zhewen/Documents/code/sddf/examples/echo_server/results/maaxboard2-c-baseline-batch-251027-122153/maaxboard2-c-baseline-iter5-251027-133705/mq.log
+2025-10-28 00:55:17,913 - INFO - processing mq.log to extract json metrics...
+2025-10-28 00:55:17,949 - ERROR - failed to process mq.log: Command '['python3', '/home/zhewen/Documents/code/sddf_benchmarking/process_microkit_output.py', '-j', '/home/zhewen/Documents/code/sddf/examples/echo_server/results/maaxboard2-c-baseline-batch-251027-122153/maaxboard2-c-baseline-iter5-251027-133705/mq.log']' returned non-zero exit status 1.
+2025-10-28 00:55:17,949 - ERROR - stderr: Traceback (most recent call last):
+  File "/home/zhewen/Documents/code/sddf_benchmarking/process_microkit_output.py", line 332, in <module>
+    output_and_reset()
+    ~~~~~~~~~~~~~~~~^^
+  File "/home/zhewen/Documents/code/sddf_benchmarking/process_microkit_output.py", line 168, in output_and_reset
+    test["active"] * test["system"]["pd_total"] / total_board_cycles,
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~~~~~~~~~
+ZeroDivisionError: division by zero
+
+2025-10-28 00:55:17,949 - INFO - 
+2025-10-28 00:55:17,949 - INFO - ============================================================
+2025-10-28 00:55:17,949 - INFO - benchmark complete
+2025-10-28 00:55:17,949 - INFO - ============================================================
+2025-10-28 00:55:17,949 - INFO - benchmark name: maaxboard2-c-baseline
+2025-10-28 00:55:17,949 - INFO - mode: FULL RUN
+2025-10-28 00:55:17,949 - INFO - protocol: UDP
+2025-10-28 00:55:17,949 - INFO - results directory: /home/zhewen/Documents/code/sddf/examples/echo_server/results/maaxboard2-c-baseline-batch-251027-122153/maaxboard2-c-baseline-iter5-251027-133705
+2025-10-28 00:55:17,949 - INFO - ip address obtained: 172.16.1.196
+2025-10-28 00:55:17,949 - INFO - throughputs tested: 13
+2025-10-28 00:55:17,949 - INFO - logs and results saved:
+2025-10-28 00:55:17,949 - INFO -   - benchmark script log: /home/zhewen/Documents/code/sddf/examples/echo_server/results/maaxboard2-c-baseline-batch-251027-122153/maaxboard2-c-baseline-iter5-251027-133705/autobench.log
+2025-10-28 00:55:17,949 - INFO -   - mq/iq output: /home/zhewen/Documents/code/sddf/examples/echo_server/results/maaxboard2-c-baseline-batch-251027-122153/maaxboard2-c-baseline-iter5-251027-133705/pexpect_output.log
+2025-10-28 00:55:17,949 - INFO -   - mq clean log: /home/zhewen/Documents/code/sddf/examples/echo_server/results/maaxboard2-c-baseline-batch-251027-122153/maaxboard2-c-baseline-iter5-251027-133705/mq.log
+2025-10-28 00:55:17,949 - INFO -   - iq full log: /home/zhewen/Documents/code/sddf/examples/echo_server/results/maaxboard2-c-baseline-batch-251027-122153/maaxboard2-c-baseline-iter5-251027-133705/iq.log
