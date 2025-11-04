@@ -14,7 +14,7 @@ from datetime import datetime
 from zoneinfo import ZoneInfo
 import pexpect
 
-CONFIG_FILE = "pancake.config.inline"
+CONFIG_FILE = "pancake.config"
 BOARD = "maaxboard2"
 DHCP_TIMEOUT = 120  # Increased to account for potential lock waiting with -w flag
 SHUTDOWN_TIMEOUT = 10
