@@ -1,0 +1,397 @@
+/*
+ * Copyright 2025, UNSW
+ * SPDX-License-Identifier: BSD-2-Clause
+ */
+
+#define IRQ_CH                      pnk_mem(1)
+#define RX_CH                       pnk_mem(2)
+#define TX_CH                       pnk_mem(3)
+
+#define NET_RX_FREE                 pnk_mem(4)
+#define NET_RX_ACTIVE               pnk_mem(5)
+#define NET_RX_CAPACITY             pnk_mem(6)
+#define NET_TX_FREE                 pnk_mem(7)
+#define NET_TX_ACTIVE               pnk_mem(8)
+#define NET_TX_CAPACITY             pnk_mem(9)
+
+#define HW_RX_TAIL_SLOT             pnk_mem_ptr(10)
+#define HW_RX_HEAD_SLOT             pnk_mem_ptr(11)
+#define HW_RX_TAIL                  pnk_mem(10)
+#define HW_RX_HEAD                  pnk_mem(11)
+#define HW_RX_CAPACITY              pnk_mem(12)
+#define HW_RX_DESCR                 pnk_mem(13)
+#define HW_RX_PTR                   pnk_mem_ptr(10)
+
+#define HW_TX_TAIL_SLOT             pnk_mem_ptr(14)
+#define HW_TX_HEAD_SLOT             pnk_mem_ptr(15)
+#define HW_TX_TAIL                  pnk_mem(14)
+#define HW_TX_HEAD                  pnk_mem(15)
+#define HW_TX_CAPACITY              pnk_mem(16)
+#define HW_TX_DESCR                 pnk_mem(17)
+#define HW_TX_PTR                   pnk_mem_ptr(14)
+
+#define DMA_REG_OFFSET              4096
+
+#define MAX_RX_FRAME_SZ             1536
+
+#define DMA_INTR_TXF                1
+#define DMA_INTR_RXF                64
+#define DMA_INTR_FBE                8192
+#define DMA_INTR_ABNORMAL           32768
+#define DMA_INTR_MASK               106561
+
+#define POLL_DATA                   4294967295
+
+#define DESC_RXSTS_OWNBYDMA         2147483648
+#define DESC_RXSTS_ERROR            32768
+#define DESC_RXSTS_LENMSK           1073676288
+#define DESC_RXSTS_LENSHFT          16
+
+#define DESC_TXSTS_OWNBYDMA         2147483648
+
+/* Descriptor control bits */
+#define DESC_RXCTRL_SIZE1MASK       2047
+#define DESC_RXCTRL_SIZE1SHFT       0
+#define DESC_RXCTRL_RXRINGEND       33554432
+
+#define DESC_TXCTRL_SIZE1MASK       2047
+#define DESC_TXCTRL_SIZE1SHFT       0
+#define DESC_TXCTRL_TXLAST          1073741824
+#define DESC_TXCTRL_TXFIRST         536870912
+#define DESC_TXCTRL_TXINT           2147483648
+#define DESC_TXCTRL_TXRINGEND       33554432
+
+#define MAC_REG_BASE                pnk_mem(0)
+#define DMA_BASE                    (MAC_REG_BASE + DMA_REG_OFFSET)
+
+#define DMA_STATUS_OFFSET           20
+#define DMA_RXPOLLDEMAND_OFFSET     8
+#define DMA_TXPOLLDEMAND_OFFSET     4
+
+var 1 irq_ch          = IRQ_CH;
+var 1 rx_ch           = RX_CH;
+var 1 tx_ch           = TX_CH;
+var 1 mac_reg_base    = MAC_REG_BASE;
+var 1 net_rx_free     = NET_RX_FREE;
+var 1 net_rx_active   = NET_RX_ACTIVE;
+var 1 net_rx_capacity = NET_RX_CAPACITY;
+var 1 net_tx_free     = NET_TX_FREE;
+var 1 net_tx_active   = NET_TX_ACTIVE;
+var 1 net_tx_capacity = NET_TX_CAPACITY;
+var 1 hw_rx_capacity  = HW_RX_CAPACITY;
+var 1 hw_tx_capacity  = HW_TX_CAPACITY;
+var 1 hw_rx_descr     = HW_RX_DESCR;
+var 1 hw_tx_descr     = HW_TX_DESCR;
+
+inline fun rx_hw_ring_empty() {
+  return (HW_RX_HEAD == HW_RX_TAIL);
+}
+
+inline fun tx_hw_ring_empty() {
+  var ret = (HW_TX_HEAD == HW_TX_TAIL);
+  return ret;
+}
+
+inline fun rx_hw_ring_full() {
+  var ret = (HW_RX_TAIL - HW_RX_HEAD) == hw_rx_capacity;
+  return ret;
+}
+
+inline fun tx_hw_ring_full() {
+  var ret = (HW_TX_TAIL - HW_TX_HEAD) == hw_tx_capacity;
+  return ret;
+}
+
+inline fun get_dma_status()
+{
+  var reg_addr = mac_reg_base + DMA_REG_OFFSET + DMA_STATUS_OFFSET;
+  var status = 0;
+  !ld32 status, reg_addr;
+  return status;
+}
+
+inline fun set_dma_status(1 status)
+{
+  var reg_addr = mac_reg_base + DMA_REG_OFFSET + DMA_STATUS_OFFSET;
+  !st32 reg_addr, status;
+  return 0;
+}
+
+inline fun set_rx_poll()
+{
+  var reg_addr = mac_reg_base + DMA_REG_OFFSET + DMA_RXPOLLDEMAND_OFFSET;
+  !st32 reg_addr, POLL_DATA;
+  return 0;
+}
+
+inline fun set_tx_poll()
+{
+  var reg_addr = mac_reg_base + DMA_REG_OFFSET + DMA_TXPOLLDEMAND_OFFSET;
+  !st32 reg_addr, POLL_DATA;
+  return 0;
+}
+
+inline fun rx_update_ring_slot(1 ring_addr, 1 idx, 1 status, 1 cntl, 1 phys, 1 next)
+{
+  var descr_base = hw_rx_descr;
+  var descr = descr_base + idx * 16;
+
+  !st32 descr + 8, phys;
+  !st32 descr + 12, next;
+  !st32 descr + 4, cntl;
+  THREAD_MEMORY_RELEASE()
+  !st32 descr, status;
+  return 0;
+}
+
+inline fun tx_update_ring_slot(1 ring_addr, 1 idx, 1 status, 1 cntl, 1 phys, 1 next)
+{
+  var descr_base = hw_tx_descr;
+  var descr = descr_base + idx * 16;
+
+  !st32 descr + 8, phys;
+  !st32 descr + 12, next;
+  !st32 descr + 4, cntl;
+  THREAD_MEMORY_RELEASE()
+  !st32 descr, status;
+  return 0;
+}
+
+fun rx_provide()
+{
+  var reprocess = true;
+  var rx_free = net_rx_free;
+  var rx_queue_cap = net_rx_capacity;
+  var rx_hw_cap = hw_rx_capacity;
+
+  while (reprocess)
+  {
+    while (true)
+    {
+      var 1 full = rx_hw_ring_full();
+      if (full) { break; }
+      var 1 empty = net_queue_empty(rx_free, rx_queue_cap);
+      if (empty) { break; }
+
+      var {1,1} buffer = net_dequeue(rx_free, rx_queue_cap);
+
+      var rx_tail = HW_RX_TAIL;
+      var idx = rx_tail & (rx_hw_cap - 1);
+
+      var io_addr = buffer.0;
+      var cntl = (MAX_RX_FRAME_SZ << DESC_RXCTRL_SIZE1SHFT) & DESC_RXCTRL_SIZE1MASK;
+      if (idx + 1 == rx_hw_cap) {
+        cntl = cntl | DESC_RXCTRL_RXRINGEND;
+      }
+      rx_update_ring_slot(HW_RX_PTR, idx, DESC_RXSTS_OWNBYDMA, cntl, io_addr, 0);
+
+      set_rx_poll();
+
+      st HW_RX_TAIL_SLOT, (rx_tail + 1);
+    }
+
+    net_request_signal(rx_free, rx_queue_cap);
+    reprocess = false;
+
+    var 1 empty = net_queue_empty(rx_free, rx_queue_cap);
+    var 1 full = rx_hw_ring_full();
+    if ((!empty) && (!full)) {
+      net_cancel_signal(rx_free);
+      reprocess = true;
+    }
+  }
+  return 0;
+}
+
+fun tx_provide()
+{
+  var reprocess = true;
+  var tx_active = net_tx_active;
+  var tx_queue_cap = net_tx_capacity;
+  var tx_hw_cap = hw_tx_capacity;
+
+  while (reprocess)
+  {
+    while (true)
+    {
+      var 1 full = tx_hw_ring_full();
+      if (full) { break; }
+      var 1 empty = net_queue_empty(tx_active, tx_queue_cap);
+      if (empty) { break; }
+
+      var {1,1} buffer = net_dequeue(tx_active, tx_queue_cap);
+
+      var tx_tail = HW_TX_TAIL;
+      var idx = tx_tail & (tx_hw_cap - 1);
+
+      var io_addr = buffer.0;
+      var len = buffer.1;
+      var cntl = (len << DESC_TXCTRL_SIZE1SHFT) & DESC_TXCTRL_SIZE1MASK;
+      cntl = cntl | DESC_TXCTRL_TXLAST | DESC_TXCTRL_TXFIRST | DESC_TXCTRL_TXINT;
+      if (idx + 1 == tx_hw_cap) {
+        cntl = cntl | DESC_TXCTRL_TXRINGEND;
+      }
+      cntl = cntl | (3 << 27); // DESC_TXCTRL_TXCIC
+      tx_update_ring_slot(HW_TX_PTR, idx, DESC_TXSTS_OWNBYDMA, cntl, io_addr, 0);
+
+      st HW_TX_TAIL_SLOT, (tx_tail + 1);
+    }
+
+    net_request_signal(tx_active, tx_queue_cap);
+    reprocess = false;
+
+    var 1 full = tx_hw_ring_full();
+    var 1 empty = net_queue_empty(tx_active, tx_queue_cap);
+    if ((!empty) && (!full)) {
+      net_cancel_signal(tx_active);
+      reprocess = true;
+    }
+  }
+  set_tx_poll();
+  return 0;
+}
+
+fun rx_return()
+{
+  var rx_active = net_rx_active;
+  var rx_descr = hw_rx_descr;
+  var rx_queue_cap = net_rx_capacity;
+  var rx_hw_cap = hw_rx_capacity;
+
+  var packets_transferred = false;
+
+  while (true)
+  {
+    var 1 empty = rx_hw_ring_empty();
+    if (empty) { break; }
+
+    var rx_head = HW_RX_HEAD;
+    var idx = rx_head & (rx_hw_cap - 1);
+
+    var dscr_addr = rx_descr + idx * 16;
+    var status = 0;
+    !ld32 status, dscr_addr;
+    if (status & DESC_RXSTS_OWNBYDMA) { break; }
+
+    THREAD_MEMORY_ACQUIRE()
+
+    if (status & DESC_RXSTS_ERROR) {
+      var rx_tail = HW_RX_TAIL;
+      var next_idx = rx_tail & (rx_hw_cap - 1);
+      var phys = 0;
+      !ld32 phys, dscr_addr + 8;
+      var cntl = (MAX_RX_FRAME_SZ << DESC_RXCTRL_SIZE1SHFT) & DESC_RXCTRL_SIZE1MASK;
+      if (next_idx + 1 == rx_hw_cap) {
+        cntl = cntl | DESC_RXCTRL_RXRINGEND;
+      }
+      rx_update_ring_slot(HW_RX_PTR, next_idx, DESC_RXSTS_OWNBYDMA, cntl, phys, 0);
+      set_rx_poll();
+      st HW_RX_TAIL_SLOT, (rx_tail + 1);
+    } else {
+      var len = (status & DESC_RXSTS_LENMSK) >> DESC_RXSTS_LENSHFT;
+      var io_addr = 0;
+      !ld32 io_addr, dscr_addr + 8;
+      net_enqueue(rx_active, io_addr, len, rx_queue_cap);
+      packets_transferred = true;
+    }
+    st HW_RX_HEAD_SLOT, (rx_head + 1);
+  }
+
+  var 1 to_signal = net_require_signal(rx_active, rx_queue_cap);
+  if (packets_transferred && to_signal) {
+    net_cancel_signal(rx_active);
+    microkit_notify(rx_ch)
+  }
+
+  return 0;
+}
+
+fun tx_return()
+{
+  var tx_free = net_tx_free;
+  var tx_descr = hw_tx_descr;
+  var tx_queue_cap = net_tx_capacity;
+  var tx_hw_cap = hw_tx_capacity;
+
+  var enqueued = false;
+
+  while (true)
+  {
+    var 1 empty = tx_hw_ring_empty();
+    if (empty) { break; }
+
+    var tx_head = HW_TX_HEAD;
+    var idx = tx_head & (tx_hw_cap - 1);
+
+    var dscr_addr = tx_descr + idx * 16;
+    var status = 0;
+    !ld32 status, dscr_addr;
+    if (status & DESC_TXSTS_OWNBYDMA) { break; }
+
+    THREAD_MEMORY_ACQUIRE()
+
+    var io_addr = 0;
+    !ld32 io_addr, dscr_addr + 8;
+    net_enqueue(tx_free, io_addr, 0, tx_queue_cap);
+
+    enqueued = true;
+    st HW_TX_HEAD_SLOT, (tx_head + 1);
+  }
+
+  var 1 to_signal = net_require_signal(tx_free, tx_queue_cap);
+  if (enqueued && to_signal) {
+    net_cancel_signal(tx_free);
+    microkit_notify(tx_ch)
+  }
+
+  return 0;
+}
+
+
+fun main() {
+  rx_provide();
+  tx_provide();
+  return 0;
+}
+
+fun handle_irq() {
+  var 1 e = get_dma_status();
+  set_dma_status(e);
+
+  while (e & DMA_INTR_MASK)
+  {
+    if (e & DMA_INTR_TXF) {
+      tx_return();
+      tx_provide();
+    }
+    if (e & DMA_INTR_RXF) {
+      rx_return();
+    }
+    if (e & DMA_INTR_ABNORMAL) {
+      if (e & DMA_INTR_FBE) {
+        @assert(0,0,0,0);
+      }
+    }
+    e = get_dma_status();
+    set_dma_status(e);
+  }
+  return 0;
+}
+
+export fun notified(1 ch)
+{
+  if (ch == irq_ch) {
+    handle_irq();
+    microkit_deferred_irq_ack(ch)
+    return 0;
+  }
+  if (ch == rx_ch) {
+    rx_provide();
+    return 0;
+  }
+  if (ch == tx_ch) {
+    tx_provide();
+    return 0;
+  }
+  return 0;
+}

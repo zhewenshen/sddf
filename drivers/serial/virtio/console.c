@@ -27,11 +27,53 @@
 __attribute__((__section__(".device_resources"))) device_resources_t device_resources;
 __attribute__((__section__(".serial_driver_config"))) serial_driver_config_t config;
 
+#ifdef PANCAKE_SERIAL
+/* Queues for communicating with the virtualizers */
+serial_queue_handle_t *rx_queue_handle;
+serial_queue_handle_t *tx_queue_handle;
+
+static char cml_memory[1024*40];  // Increased for ialloc structures
+extern void *cml_heap;
+extern void *cml_stack;
+extern void *cml_stackend;
+
+extern void cml_main(void);
+extern void console_setup(void);
+
+void cml_exit(int arg) {
+    microkit_dbg_puts("ERROR! We should not be getting here\n");
+}
+
+void cml_err(int arg) {
+    if (arg == 3) {
+        microkit_dbg_puts("Memory not ready for entry. You may have not run the init code yet, or be trying to enter during an FFI call.\n");
+    }
+    cml_exit(arg);
+}
+
+void cml_clear() {
+    microkit_dbg_puts("Trying to clear cache\n");
+}
+
+void init_pancake_mem() {
+    unsigned long cml_heap_sz = 1024*10;
+    unsigned long cml_stack_sz = 1024*10;
+    cml_heap = cml_memory;
+    cml_stack = cml_heap + cml_heap_sz;
+    cml_stackend = cml_stack + cml_stack_sz;
+}
+
+#else
 /*
  * The 'hardware' ring buffer region is used to store the virtIO virtqs
  */
 uintptr_t hw_ring_buffer_vaddr;
 uintptr_t hw_ring_buffer_paddr;
+
+/* Queues for communicating with the virtualizers */
+serial_queue_handle_t rx_queue_handle;
+serial_queue_handle_t tx_queue_handle;
+#endif
 
 /* The number of entries in each virtqueue */
 #define RX_COUNT 512
@@ -40,9 +82,14 @@ uintptr_t hw_ring_buffer_paddr;
 #define VIRTIO_SERIAL_RX_QUEUE 0
 #define VIRTIO_SERIAL_TX_QUEUE 1
 
-/* Queues for communicating with the virtualizers */
-serial_queue_handle_t rx_queue_handle;
-serial_queue_handle_t tx_queue_handle;
+#ifdef PANCAKE_SERIAL
+// Pancake-specific variables are defined in Pancake code
+#else
+/*
+ * The 'hardware' ring buffer region is used to store the virtIO virtqs
+ */
+uintptr_t hw_ring_buffer_vaddr;
+uintptr_t hw_ring_buffer_paddr;
 
 serial_queue_t *rx_queue;
 serial_queue_t *tx_queue;
@@ -80,7 +127,13 @@ uint32_t rx_char_desc[RX_COUNT];
 
 int rx_last_desc_idx = 0;
 int tx_last_desc_idx = 0;
+#endif
 
+volatile virtio_mmio_regs_t *uart_regs;
+
+#ifdef PANCAKE_SERIAL
+// Pancake-specific functions are defined in Pancake code
+#else
 static inline bool virtio_avail_full_rx(struct virtq *virtq)
 {
     return rx_last_desc_idx >= rx_virtq.num;
@@ -90,8 +143,6 @@ static inline bool virtio_avail_full_tx(struct virtq *virtq)
 {
     return tx_last_desc_idx >= tx_virtq.num;
 }
-
-volatile virtio_mmio_regs_t *uart_regs;
 
 static void tx_provide(void)
 {
@@ -385,6 +436,7 @@ static void handle_irq()
         LOG_DRIVER_ERR("unexpected change in configuration %u\n", irq_status);
     }
 }
+#endif
 
 void init()
 {
@@ -393,10 +445,99 @@ void init()
     assert(device_resources.num_irqs == 1);
     assert(device_resources.num_regions == 4);
 
+    uart_regs = (volatile virtio_mmio_regs_t *)device_resources.regions[0].region.vaddr;
+
+#ifdef PANCAKE_SERIAL
+    init_pancake_mem();
+
+    uintptr_t *pnk_mem = (uintptr_t *) cml_heap;
+
+    // Basic configuration
+    pnk_mem[1] = device_resources.irqs[0].id;
+    pnk_mem[2] = config.rx.id;
+    pnk_mem[3] = config.tx.id;
+    pnk_mem[1024] = config.rx_enabled;
+
+    // VirtIO register base
+    pnk_mem[0] = (volatile uintptr_t) uart_regs;
+
+    // Memory regions
+    pnk_mem[10] = (uintptr_t)device_resources.regions[1].region.vaddr;  // hw_ring_buffer_vaddr
+    pnk_mem[11] = device_resources.regions[1].io_addr;                  // hw_ring_buffer_paddr
+    pnk_mem[12] = (uintptr_t)device_resources.regions[2].region.vaddr;  // virtio_rx_char_vaddr
+    pnk_mem[13] = device_resources.regions[2].io_addr;                  // virtio_rx_char_paddr
+    pnk_mem[14] = (uintptr_t)device_resources.regions[3].region.vaddr;  // virtio_tx_char_vaddr
+    pnk_mem[15] = device_resources.regions[3].io_addr;                  // virtio_tx_char_paddr
+
+    // Initialize VirtIO queue state
+    pnk_mem[16] = 0; // RX_LAST_SEEN_USED
+    pnk_mem[17] = 0; // TX_LAST_SEEN_USED
+    pnk_mem[18] = 0; // RX_LAST_DESC_IDX
+    pnk_mem[19] = 0; // TX_LAST_DESC_IDX
+
+    // Calculate VirtQ offsets (from original console_setup logic)
+    size_t rx_desc_off = 0;
+    size_t rx_avail_off = ((rx_desc_off + (16 * RX_COUNT)) + 1) & ~1;           // ALIGN(rx_desc_off + (16 * RX_COUNT), 2)
+    size_t rx_used_off = ((rx_avail_off + (6 + 2 * RX_COUNT)) + 3) & ~3;       // ALIGN(rx_avail_off + (6 + 2 * RX_COUNT), 4)
+    size_t tx_desc_off = ((rx_used_off + (6 + 8 * RX_COUNT)) + 15) & ~15;      // ALIGN(rx_used_off + (6 + 8 * RX_COUNT), 16)
+    size_t tx_avail_off = ((tx_desc_off + (16 * TX_COUNT)) + 1) & ~1;          // ALIGN(tx_desc_off + (16 * TX_COUNT), 2)
+    size_t tx_used_off = ((tx_avail_off + (6 + 2 * TX_COUNT)) + 3) & ~3;       // ALIGN(tx_avail_off + (6 + 2 * TX_COUNT), 4)
+
+    pnk_mem[20] = rx_desc_off;   // RX_VIRTQ_DESC_OFF
+    pnk_mem[21] = rx_avail_off;  // RX_VIRTQ_AVAIL_OFF
+    pnk_mem[22] = rx_used_off;   // RX_VIRTQ_USED_OFF
+    pnk_mem[23] = tx_desc_off;   // TX_VIRTQ_DESC_OFF
+    pnk_mem[24] = tx_avail_off;  // TX_VIRTQ_AVAIL_OFF
+    pnk_mem[25] = tx_used_off;   // TX_VIRTQ_USED_OFF
+
+    // Initialize allocator state (full ialloc implementation)
+    // Each ialloc needs: idxlist array + ialloc structure
+    // Place these after the main pancake memory (starting at offset 2048)
+    
+    // RX Descriptor allocator
+    uint32_t *rx_desc_idxlist = (uint32_t *)&cml_memory[2048];
+    ialloc_t *rx_desc_ialloc = (ialloc_t *)&cml_memory[2048 + RX_COUNT * 4];
+    ialloc_init(rx_desc_ialloc, rx_desc_idxlist, RX_COUNT);
+    pnk_mem[30] = (uintptr_t)rx_desc_ialloc; // RX_DESC_IALLOC_PTR
+    
+    // TX Descriptor allocator  
+    uint32_t *tx_desc_idxlist = (uint32_t *)&cml_memory[4096];
+    ialloc_t *tx_desc_ialloc = (ialloc_t *)&cml_memory[4096 + TX_COUNT * 4];
+    ialloc_init(tx_desc_ialloc, tx_desc_idxlist, TX_COUNT);
+    pnk_mem[31] = (uintptr_t)tx_desc_ialloc; // TX_DESC_IALLOC_PTR
+    
+    // RX Character allocator
+    uint32_t *rx_char_idxlist = (uint32_t *)&cml_memory[6144];
+    ialloc_t *rx_char_ialloc = (ialloc_t *)&cml_memory[6144 + RX_COUNT * 4];
+    ialloc_init(rx_char_ialloc, rx_char_idxlist, RX_COUNT);
+    pnk_mem[32] = (uintptr_t)rx_char_ialloc; // RX_CHAR_IALLOC_PTR
+    
+    // TX Character allocator
+    uint32_t *tx_char_idxlist = (uint32_t *)&cml_memory[8192];
+    ialloc_t *tx_char_ialloc = (ialloc_t *)&cml_memory[8192 + TX_COUNT * 4];
+    ialloc_init(tx_char_ialloc, tx_char_idxlist, TX_COUNT);
+    pnk_mem[33] = (uintptr_t)tx_char_ialloc; // TX_CHAR_IALLOC_PTR
+
+    // Set up queue handles
+    rx_queue_handle = (serial_queue_handle_t *) &pnk_mem[4];
+    tx_queue_handle = (serial_queue_handle_t *) &pnk_mem[7];
+
+    // VirtIO hardware setup
+    console_setup();
+
+    // Initialize queue handles
+    if (config.rx_enabled) {
+        serial_queue_init(rx_queue_handle, config.rx.queue.vaddr, config.rx.data.size, config.rx.data.vaddr);
+    }
+    serial_queue_init(tx_queue_handle, config.tx.queue.vaddr, config.tx.data.size, config.tx.data.vaddr);
+
+    microkit_irq_ack(device_resources.irqs[0].id);
+
+    cml_main();
+#else
     /* Ack any IRQs that were delivered before the driver started. */
     sddf_irq_ack(device_resources.irqs[0].id);
 
-    uart_regs = (volatile virtio_mmio_regs_t *)device_resources.regions[0].region.vaddr;
     hw_ring_buffer_vaddr = (uintptr_t)device_resources.regions[1].region.vaddr;
     hw_ring_buffer_paddr = device_resources.regions[1].io_addr;
     virtio_rx_char = device_resources.regions[2].region.vaddr;
@@ -415,8 +556,12 @@ void init()
         serial_queue_init(&rx_queue_handle, config.rx.queue.vaddr, config.rx.data.size, config.rx.data.vaddr);
     }
     serial_queue_init(&tx_queue_handle, config.tx.queue.vaddr, config.tx.data.size, config.tx.data.vaddr);
+#endif
 }
 
+#ifdef PANCAKE_SERIAL
+extern void notified(microkit_channel ch);
+#else
 void notified(sddf_channel ch)
 {
     if (ch == device_resources.irqs[0].id) {
@@ -430,3 +575,4 @@ void notified(sddf_channel ch)
         LOG_DRIVER_ERR("received notification on unexpected channel: %u\n", ch);
     }
 }
+#endif

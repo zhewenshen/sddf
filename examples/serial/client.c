@@ -22,6 +22,9 @@ void init(void)
 
     serial_putchar_init(config.tx.id, &tx_queue_handle);
     sddf_printf("Hello world! I am %s.\nPlease give me character!\n", microkit_name);
+    for (int i = 0; i < 100; i++) {
+        sddf_printf("Hello world! I am %s.\nPlease give me character!\n", microkit_name);
+    }
 }
 
 uint16_t char_count;

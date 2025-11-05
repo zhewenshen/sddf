@@ -15,9 +15,12 @@
 #error "ARM generic timer is not exported by seL4"
 #endif
 
+#ifndef PANCAKE_TIMER
 static uint64_t timer_freq;
+#endif
 
 #define MAX_TIMEOUTS 6
+#define TIMEOUT_BASE 10
 
 #define GENERIC_TIMER_ENABLE (1 << 0)
 #define GENERIC_TIMER_IMASK  (1 << 1)
@@ -39,25 +42,96 @@ static uint64_t timer_freq;
 /* frequency of the timer */
 #define CNTFRQ "cntfrq_el0"
 
-__attribute__((__section__(".device_resources"))) device_resources_t device_resources;
+#ifdef PANCAKE_TIMER
+static char cml_memory[1024*20];
+extern void *cml_heap, *cml_stack, *cml_stackend;
+extern void cml_main(void);
 
-static inline uint64_t get_ticks(void)
-{
+// FFI function for seL4_GetMR - stores result in scratchpad slot 3
+void ffiseL4_GetMR_timer(unsigned char *c, long clen, unsigned char *a, long alen) {
+    uintptr_t *pnk_mem = (uintptr_t *) cml_heap;
+    seL4_Word value = sddf_get_mr(clen);
+    pnk_mem[3] = value; // Store in SCRATCHPAD slot
+}
+
+void init_pancake_mem() {
+    unsigned long cml_heap_sz = 1024*10;
+    unsigned long cml_stack_sz = 1024*10;
+    cml_heap = cml_memory;
+    cml_stack = cml_heap + cml_heap_sz;
+    cml_stackend = cml_stack + cml_stack_sz;
+}
+
+void cml_exit(int arg) {
+    sddf_dprintf("ERROR! We should not be getting here\n");
+}
+
+void cml_err(int arg, char* filename, char* funcname, int lineno) {
+    if (filename == NULL) {
+        sddf_dprintf("Memory not ready for entry. You may have not run the init code yet, or be trying to enter during an FFI call.\n");
+    }
+    cml_exit(arg);
+}
+
+void ffiget_ticks(unsigned char *c, long clen, unsigned char *a, long alen) {
     uint64_t time;
     COPROC_READ_64(CNTPCT, time);
-    return time;
+    *(uint64_t*)a = time;
 }
 
-static inline void generic_timer_set_compare(uint64_t ticks)
-{
-    COPROC_WRITE_64(CNTP_CVAL, ticks);
+void ffigeneric_timer_set_compare(unsigned char *c, long clen, unsigned char *a, long alen) {
+    COPROC_WRITE_64(CNTP_CVAL, clen);
 }
+
+void ffigeneric_timer_read_ctrl(unsigned char *c, long clen, unsigned char *a, long alen) {
+    uintptr_t ctrl;
+    COPROC_READ_WORD(CNTP_CTL, ctrl);
+    *(uint32_t*)a = ctrl;
+}
+
+void ffigeneric_timer_write_ctrl(unsigned char *c, long clen, unsigned char *a, long alen) {
+    COPROC_WRITE_WORD(CNTP_CTL, clen);
+}
+
+void ffifreq_ns_and_hz_to_cycles(unsigned char *c, long clen, unsigned char *a, long alen) {
+    uint64_t ns = *(uint64_t*)c;
+    uint64_t hz = clen;
+    __uint128_t calc = ((__uint128_t)ns * (__uint128_t)hz);
+    uint64_t rem = 0;
+    uint64_t res = udiv128by64to64(HIGH_WORD(calc), LOW_WORD(calc), 1000000000ULL, &rem);
+    *(uint64_t*)a = res;
+}
+
+void ffifreq_cycles_and_hz_to_ns(unsigned char *c, long clen, unsigned char *a, long alen) {
+    uint64_t ncycles = *(uint64_t*)c;
+    uint64_t hz = clen;
+    if (hz % 1000000000ULL == 0) {
+        *(uint64_t*)a = ncycles / (hz / 1000000000ULL);
+    } else if (hz % 1000000ULL == 0) {
+        *(uint64_t*)a = ncycles * 1000ULL / (hz / 1000000ULL);
+    } else if (hz % 1000ULL == 0) {
+        *(uint64_t*)a = ncycles * 1000000ULL / (hz / 1000ULL);
+    } else {
+        __uint128_t ncycles_in_s = (__uint128_t)ncycles * 1000000000ULL;
+        uint64_t rem = 0;
+        uint64_t res = udiv128by64to64(HIGH_WORD(ncycles_in_s), LOW_WORD(ncycles_in_s), hz, &rem);
+        *(uint64_t*)a = res;
+    }
+}
+#endif
+
+__attribute__((__section__(".device_resources"))) device_resources_t device_resources;
 
 static inline uint32_t generic_timer_get_freq(void)
 {
     uintptr_t freq;
     COPROC_READ_WORD(CNTFRQ, freq);
     return (uint32_t) freq;
+}
+
+static inline void generic_timer_set_compare(uint64_t ticks)
+{
+    COPROC_WRITE_64(CNTP_CVAL, ticks);
 }
 
 static inline uint32_t generic_timer_read_ctrl(void)
@@ -86,6 +160,14 @@ static inline void generic_timer_enable(void)
 static inline void generic_timer_disable(void)
 {
     generic_timer_or_ctrl(~GENERIC_TIMER_ENABLE);
+}
+
+#ifndef PANCAKE_TIMER
+static inline uint64_t get_ticks(void)
+{
+    uint64_t time;
+    COPROC_READ_64(CNTPCT, time);
+    return time;
 }
 
 #define KHZ (1000)
@@ -148,6 +230,12 @@ static void process_timeouts(uint64_t curr_time)
     }
 
 }
+#endif
+
+#ifdef PANCAKE_TIMER
+extern uint64_t get_ticks_in_ns(void);
+extern void process_timeouts(uint64_t curr_time);
+#endif
 
 void init()
 {
@@ -155,9 +243,26 @@ void init()
     assert(device_resources.num_irqs == 1);
     assert(device_resources.num_regions == 0);
 
-    /* Ack any IRQs that were delivered before the driver started. */
     sddf_irq_ack(device_resources.irqs[0].id);
 
+#ifdef PANCAKE_TIMER
+    init_pancake_mem();
+    
+    uintptr_t *pnk_mem = (uintptr_t *) cml_heap;
+    
+    pnk_mem[0] = device_resources.irqs[0].id;
+    pnk_mem[1] = generic_timer_get_freq();
+    pnk_mem[2] = 0;
+    
+    for (int i = 0; i < MAX_TIMEOUTS; i++) {
+        pnk_mem[TIMEOUT_BASE + i] = 9223372036854775807ULL;
+    }
+    
+    generic_timer_set_compare(UINT64_MAX);
+    generic_timer_enable();
+    
+    cml_main();
+#else
     for (int i = 0; i < MAX_TIMEOUTS; i++) {
         timeouts[i] = UINT64_MAX;
     }
@@ -165,8 +270,12 @@ void init()
     generic_timer_set_compare(UINT64_MAX);
     generic_timer_enable();
     timer_freq = generic_timer_get_freq();
+#endif
 }
 
+#ifdef PANCAKE_TIMER
+extern void notified(sddf_channel ch);
+#else
 void notified(sddf_channel ch)
 {
     assert(ch == device_resources.irqs[0].id);
@@ -176,7 +285,12 @@ void notified(sddf_channel ch)
     uint64_t curr_time = freq_cycles_and_hz_to_ns(get_ticks(), timer_freq);
     process_timeouts(curr_time);
 }
+#endif
 
+#ifdef PANCAKE_TIMER
+// Pancake version handles all protected calls
+extern seL4_MessageInfo_t protected(sddf_channel ch, seL4_MessageInfo_t msginfo);
+#else
 seL4_MessageInfo_t protected(sddf_channel ch, seL4_MessageInfo_t msginfo)
 {
     switch (seL4_MessageInfo_get_label(msginfo)) {
@@ -200,3 +314,4 @@ seL4_MessageInfo_t protected(sddf_channel ch, seL4_MessageInfo_t msginfo)
 
     return seL4_MessageInfo_new(0, 0, 0, 0);
 }
+#endif

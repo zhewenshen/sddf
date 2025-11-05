@@ -1,0 +1,168 @@
+/*
+ * Copyright 2024, UNSW
+ * SPDX-License-Identifier: BSD-2-Clause
+ */
+
+#define CURRENT_MODE        pnk_mem(0)
+#define CURRENT_CLIENT      pnk_mem(1)
+#define NEXT_CLIENT_INDEX   pnk_mem(2)
+
+#define DRV_QUEUE_BASE      10
+#define CLI_QUEUE_BASE      20
+
+// Constants
+#define NORMAL 0
+#define SWITCHED 1
+#define NUMBER 2
+
+#define DRIVER_CH 0
+
+#define CLIENT_OFFSET 1
+#define MAX_CLI_BASE_10 4
+#define SERIAL_SWITCH_CHAR 28
+#define SERIAL_TERMINATE_CHAR 13
+
+fun rx_return() {
+    var transferred = false;
+
+    var current_client = CURRENT_CLIENT;
+
+    var drv_queue_ptr = pnk_mem(10);
+    var drv_capacity = pnk_mem(11);
+    var drv_data_ptr = pnk_mem(12);
+
+    var cli_offset = CLI_QUEUE_BASE + current_client * 3;
+    var cli_queue_ptr = pnk_mem(cli_offset);
+    var cli_capacity = pnk_mem(cli_offset + 1);
+    var cli_data_ptr = pnk_mem(cli_offset + 2);
+
+    var 1 local_tail = serial_queue_get_tail(cli_queue_ptr);
+
+    while (true) {
+        var 1 drv_empty = serial_queue_is_empty(drv_queue_ptr);
+        if (drv_empty) {
+            break;
+        }
+
+        var 1 c = serial_queue_dequeue_char(drv_queue_ptr, drv_capacity, drv_data_ptr);
+
+        var current_mode = CURRENT_MODE;
+        if (current_mode == NORMAL) {
+            if (c == SERIAL_SWITCH_CHAR) {
+                var addr = @base + 0 * @biw;
+                !stw addr, SWITCHED;
+            }
+            var 1 cli_head = serial_queue_get_head(cli_queue_ptr);
+            var cli_used = local_tail - cli_head;
+
+            if (cli_used < cli_capacity) {
+                var cli_pos = local_tail & (cli_capacity - 1);
+                !st8 cli_data_ptr + cli_pos, c;
+                local_tail = local_tail + 1;
+                transferred = true;
+            }
+        }
+
+        if (current_mode == SWITCHED) {
+            if (c >= 48 && c <= 57) {
+                var next_client_index = NEXT_CLIENT_INDEX;
+                var next_client_addr = @base + 3 * @biw;
+                !st8 next_client_addr + next_client_index, c;
+
+                var addr = @base + 2 * @biw;
+                !stw addr, next_client_index + 1;
+
+                var addr = @base + 0 * @biw;
+                !stw addr, NUMBER;
+            } else {
+                if (c == SERIAL_SWITCH_CHAR) {
+                    var 1 cli_head = serial_queue_get_head(cli_queue_ptr);
+                    var cli_used = local_tail - cli_head;
+                    if (cli_used < cli_capacity) {
+                        var cli_pos = local_tail & (cli_capacity - 1);
+                        !st8 cli_data_ptr + cli_pos, c;
+                        local_tail = local_tail + 1;
+                        transferred = true;
+                    }
+                }
+                @reset_state(0, 0, 0, 0);
+            }
+        }
+
+        if (current_mode == NUMBER) {
+            if (c == SERIAL_TERMINATE_CHAR) {
+                var next_client_addr = @base + 3 * @biw;
+                var next_client_index = NEXT_CLIENT_INDEX;
+                var result_addr = @base + 502 * @biw;
+                @simple_atoi(next_client_addr, next_client_index, result_addr, 4);
+                var input_number = 0;
+                !ld32 input_number, result_addr;
+
+                if (input_number >= 0 && input_number < 2) {
+                    if (transferred) {
+                        serial_queue_set_tail(cli_queue_ptr, local_tail);
+                        var ch = current_client + 1;
+                        microkit_notify(ch)
+                    }
+
+                    var addr = @base + 1 * @biw;
+                    !stw addr, input_number;
+
+                    current_client = input_number;
+                    cli_offset = CLI_QUEUE_BASE + current_client * 3;
+                    cli_queue_ptr = pnk_mem(cli_offset);
+                    cli_capacity = pnk_mem(cli_offset + 1);
+                    cli_data_ptr = pnk_mem(cli_offset + 2);
+
+                    local_tail = serial_queue_get_tail(cli_queue_ptr);
+                    transferred = false;
+                }
+                @reset_state(0, 0, 0, 0);
+            }
+
+            if (c != SERIAL_TERMINATE_CHAR && c >= 48 && c <= 57) {
+                var next_client_index = NEXT_CLIENT_INDEX;
+                if (next_client_index < 4) {
+                    var next_client_addr = @base + 3 * @biw;
+                    !st8 next_client_addr + next_client_index, c;
+
+                    var addr = @base + 2 * @biw;
+                    !stw addr, next_client_index + 1;
+                } else {
+                    @reset_state(0, 0, 0, 0);
+                }
+            }
+
+            if (c != SERIAL_TERMINATE_CHAR && (c < 48 || c > 57)) {
+                @reset_state(0, 0, 0, 0);
+            }
+        }
+    }
+
+    serial_queue_set_tail(cli_queue_ptr, local_tail);
+
+    var 1 drv_used = serial_queue_get_used(drv_queue_ptr);
+
+    if (drv_used < drv_capacity) {
+        var 1 signal_required = serial_queue_require_signal(drv_queue_ptr);
+        if (signal_required) {
+            serial_queue_cancel_signal(drv_queue_ptr);
+            microkit_notify(DRIVER_CH)
+        }
+    }
+
+    if (transferred) {
+        var current_client = CURRENT_CLIENT;
+        var ch = current_client + 1;
+        microkit_notify(ch)
+    }
+
+    return 0;
+}
+
+export fun notified(1 ch) {
+    if (ch == DRIVER_CH) {
+        rx_return();
+    }
+    return 0;
+}

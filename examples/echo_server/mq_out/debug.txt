@@ -1,0 +1,256 @@
+var 1 config_driver_id = (lds 1 (@base + ((lds 1 (@base + (0) * @biw))) * @biw));
+var 1 num_clients = (lds 1 (@base + (200) * @biw));
+var 1 drv_active_queue = (lds 1 (@base + (10 + 1) * @biw));
+var 1 drv_capacity = (lds 1 (@base + (10 + 2) * @biw));
+var 1 drv_free_queue = (lds 1 (@base + (10) * @biw));
+fun tx_provide() {
+    var enqueued = 0;
+    var client = 0;
+    var num_clients = num_clients;
+    var drv_active_queue = drv_active_queue;
+    var drv_capacity = drv_capacity;
+    while (client < num_clients) {
+        var reprocess = 1;
+        var cli_queue_base = 30 + client * 4;
+        var cli_active_queue = (lds 1 (@base + (cli_queue_base + 1) * @biw));
+        var cli_capacity = (lds 1 (@base + (cli_queue_base + 2) * @biw));
+        var cli_free_queue = (lds 1 (@base + (cli_queue_base) * @biw));
+        var cli_data_vaddr = (lds 1 (@base + (cli_queue_base + 3) * @biw));
+        var cli_data_io = (lds 1 (@base + (100 + client) * @biw));
+        while (reprocess) {
+            var cli_empty = 0;
+            var qe_tail = 0; var qe_head = 0; !ld16 qe_tail, cli_active_queue; !ld16 qe_head, cli_active_queue + 2; var qe_empty_check = qe_tail - qe_head; cli_empty = (qe_empty_check == 0);
+            while (1) {
+                if (cli_empty) { break; }
+                var io_offset = 0;
+                var len = 0;
+                var dq_head = 0; !ld16 dq_head, cli_active_queue + 2; var dq_mod_head = dq_head & (cli_capacity - 1); var dq_entry_addr = cli_active_queue + 8 + dq_mod_head * 16; !ldw io_offset, dq_entry_addr; !ld32 len, dq_entry_addr + 8; dq_head = (dq_head + 1) & 65535; !st16 cli_active_queue + 2, dq_head;
+                var aligned = (io_offset & 2047) == 0;
+                var in_bounds = io_offset < (cli_capacity * 2048);
+                var is_invalid = 0;
+                if (aligned == 0) { is_invalid = 1; }
+                if (in_bounds == 0) { is_invalid = 1; }
+                if (is_invalid) {
+                    var eq_tail = 0; !ld16 eq_tail, cli_free_queue; var eq_mod_tail = eq_tail & (cli_capacity - 1); var eq_entry_addr = cli_free_queue + 8 + eq_mod_tail * 16; !stw eq_entry_addr, io_offset; !st32 eq_entry_addr + 8, len; eq_tail = (eq_tail + 1) & 65535; !st16 cli_free_queue, eq_tail;
+                } else {
+                    var buffer_vaddr = cli_data_vaddr + io_offset;
+                    @cache_clean(buffer_vaddr,0,buffer_vaddr + len,0);
+                    var phys_addr = io_offset + cli_data_io;
+                    var eq_tail = 0; !ld16 eq_tail, drv_active_queue; var eq_mod_tail = eq_tail & (drv_capacity - 1); var eq_entry_addr = drv_active_queue + 8 + eq_mod_tail * 16; !stw eq_entry_addr, phys_addr; !st32 eq_entry_addr + 8, len; eq_tail = (eq_tail + 1) & 65535; !st16 drv_active_queue, eq_tail;
+                    enqueued = 1;
+                }
+                var qe_tail = 0; var qe_head = 0; !ld16 qe_tail, cli_active_queue; !ld16 qe_head, cli_active_queue + 2; var qe_empty_check = qe_tail - qe_head; cli_empty = (qe_empty_check == 0);
+            }
+            !st32 cli_active_queue + 4, 0;
+            reprocess = 0;
+            var qe_tail = 0; var qe_head = 0; !ld16 qe_tail, cli_active_queue; !ld16 qe_head, cli_active_queue + 2; var qe_empty_check = qe_tail - qe_head; cli_empty = (qe_empty_check == 0);
+            if (cli_empty == 0) {
+                !st32 cli_active_queue + 4, 1;
+                reprocess = 1;
+            }
+        }
+        client = client + 1;
+    }
+    if (enqueued) {
+        var signal_required = 0;
+        var rs_signalled = 0; !ld32 rs_signalled, drv_active_queue + 4; signal_required = !rs_signalled;
+        if (signal_required) {
+            !st32 drv_active_queue + 4, 1;
+            @sddf_deferred_notify(0,config_driver_id,0,0);
+        }
+    }
+    return 0;
+}
+fun tx_return() {
+    var reprocess = 1;
+    var i = 0;
+    var num_clients = num_clients;
+    var drv_free_queue = drv_free_queue;
+    var drv_capacity = drv_capacity;
+    while (i < num_clients) {
+        var notify_addr = (@base + (210 + i) * @biw);
+        !st32 notify_addr, 0;
+        i = i + 1;
+    }
+    while (reprocess) {
+        var drv_empty = 0;
+        var qe_tail = 0; var qe_head = 0; !ld16 qe_tail, drv_free_queue; !ld16 qe_head, drv_free_queue + 2; var qe_empty_check = qe_tail - qe_head; drv_empty = (qe_empty_check == 0);
+        while (true) {
+            if (drv_empty) { break; }
+            var phys_addr = 0;
+            var len = 0;
+            var dq_head = 0; !ld16 dq_head, drv_free_queue + 2; var dq_mod_head = dq_head & (drv_capacity - 1); var dq_entry_addr = drv_free_queue + 8 + dq_mod_head * 16; !ldw phys_addr, dq_entry_addr; !ld32 len, dq_entry_addr + 8; dq_head = (dq_head + 1) & 65535; !st16 drv_free_queue + 2, dq_head;
+            var client = 0;
+            var offset = 0;
+            var eo_client = 0; client = -1; offset = 0; var eo_found = 0; while (eo_client < num_clients) { if (eo_found) {break;} var eo_cli_data_io = (lds 1 (@base + (100 + eo_client) * @biw)); var eo_cli_capacity = (lds 1 (@base + (30 + eo_client * 4 + 2) * @biw)); var eo_cli_max_addr = eo_cli_data_io + eo_cli_capacity * 2048; if (phys_addr >= eo_cli_data_io && phys_addr < eo_cli_max_addr) { offset = phys_addr - eo_cli_data_io; client = eo_client; eo_found = 1; }; eo_client = eo_client + 1; }
+            if (client < 0) {
+                break;
+            }
+            var cli_queue_base = 30 + client * 4;
+            var cli_free_queue = (lds 1 (@base + (cli_queue_base) * @biw));
+            var cli_capacity = (lds 1 (@base + (cli_queue_base + 2) * @biw));
+            var eq_tail = 0; !ld16 eq_tail, cli_free_queue; var eq_mod_tail = eq_tail & (cli_capacity - 1); var eq_entry_addr = cli_free_queue + 8 + eq_mod_tail * 16; !stw eq_entry_addr, offset; !st32 eq_entry_addr + 8, len; eq_tail = (eq_tail + 1) & 65535; !st16 cli_free_queue, eq_tail;
+            var notify_addr = (@base + (210 + client) * @biw);
+            !st32 notify_addr, 1;
+            var qe_tail = 0; var qe_head = 0; !ld16 qe_tail, drv_free_queue; !ld16 qe_head, drv_free_queue + 2; var qe_empty_check = qe_tail - qe_head; drv_empty = (qe_empty_check == 0);
+        }
+        !st32 drv_free_queue + 4, 0;
+        reprocess = 0;
+        var qe_tail = 0; var qe_head = 0; !ld16 qe_tail, drv_free_queue; !ld16 qe_head, drv_free_queue + 2; var qe_empty_check = qe_tail - qe_head; drv_empty = (qe_empty_check == 0);
+        if (drv_empty == 0) {
+            !st32 drv_free_queue + 4, 1;
+            reprocess = 1;
+        }
+    }
+    var client = 0;
+    while (client < num_clients) {
+        var notify_flag = (lds 1 (@base + (210 + client) * @biw));
+        if (notify_flag) {
+            var cli_queue_base = 30 + client * 4;
+            var cli_free_queue = (lds 1 (@base + (cli_queue_base) * @biw));
+            var cli_capacity = (lds 1 (@base + (cli_queue_base + 2) * @biw));
+            var signal_required = 0;
+            var rs_signalled = 0; !ld32 rs_signalled, cli_free_queue + 4; signal_required = !rs_signalled;
+            if (signal_required) {
+                !st32 cli_free_queue + 4, 1;
+                var cli_conn_id = (lds 1 (@base + (150 + client) * @biw));
+                @sddf_notify(0,cli_conn_id,0,0);
+            }
+        }
+        client = client + 1;
+    }
+    return 0;
+}
+export fun notified(1 ch) {
+    tx_return();
+    tx_provide();
+    return 0;
+}
+var 1 config_driver_id = (lds 1 (@base + ((lds 1 (@base + (0) * @biw))) * @biw));
+var 1 num_clients = (lds 1 (@base + (200) * @biw));
+var 1 drv_active_queue = (lds 1 (@base + (10 + 1) * @biw));
+var 1 drv_capacity = (lds 1 (@base + (10 + 2) * @biw));
+var 1 drv_free_queue = (lds 1 (@base + (10) * @biw));
+fun tx_provide() {
+    var enqueued = 0;
+    var client = 0;
+    var num_clients = num_clients;
+    var drv_active_queue = drv_active_queue;
+    var drv_capacity = drv_capacity;
+    while (client < num_clients) {
+        var reprocess = 1;
+        var cli_queue_base = 30 + client * 4;
+        var cli_active_queue = (lds 1 (@base + (cli_queue_base + 1) * @biw));
+        var cli_capacity = (lds 1 (@base + (cli_queue_base + 2) * @biw));
+        var cli_free_queue = (lds 1 (@base + (cli_queue_base) * @biw));
+        var cli_data_vaddr = (lds 1 (@base + (cli_queue_base + 3) * @biw));
+        var cli_data_io = (lds 1 (@base + (100 + client) * @biw));
+        while (reprocess) {
+            var cli_empty = 0;
+            var qe_tail = 0; var qe_head = 0; !ld16 qe_tail, cli_active_queue; !ld16 qe_head, cli_active_queue + 2; var qe_empty_check = qe_tail - qe_head; cli_empty = (qe_empty_check == 0);
+            while (1) {
+                if (cli_empty) { break; }
+                var io_offset = 0;
+                var len = 0;
+                var dq_head = 0; !ld16 dq_head, cli_active_queue + 2; var dq_mod_head = dq_head & (cli_capacity - 1); var dq_entry_addr = cli_active_queue + 8 + dq_mod_head * 16; !ldw io_offset, dq_entry_addr; !ld32 len, dq_entry_addr + 8; dq_head = (dq_head + 1) & 65535; !st16 cli_active_queue + 2, dq_head;
+                var aligned = (io_offset & 2047) == 0;
+                var in_bounds = io_offset < (cli_capacity * 2048);
+                var is_invalid = 0;
+                if (aligned == 0) { is_invalid = 1; }
+                if (in_bounds == 0) { is_invalid = 1; }
+                if (is_invalid) {
+                    var eq_tail = 0; !ld16 eq_tail, cli_free_queue; var eq_mod_tail = eq_tail & (cli_capacity - 1); var eq_entry_addr = cli_free_queue + 8 + eq_mod_tail * 16; !stw eq_entry_addr, io_offset; !st32 eq_entry_addr + 8, len; eq_tail = (eq_tail + 1) & 65535; !st16 cli_free_queue, eq_tail;
+                } else {
+                    var buffer_vaddr = cli_data_vaddr + io_offset;
+                    @cache_clean(buffer_vaddr,0,buffer_vaddr + len,0);
+                    var phys_addr = io_offset + cli_data_io;
+                    var eq_tail = 0; !ld16 eq_tail, drv_active_queue; var eq_mod_tail = eq_tail & (drv_capacity - 1); var eq_entry_addr = drv_active_queue + 8 + eq_mod_tail * 16; !stw eq_entry_addr, phys_addr; !st32 eq_entry_addr + 8, len; eq_tail = (eq_tail + 1) & 65535; !st16 drv_active_queue, eq_tail;
+                    enqueued = 1;
+                }
+                var qe_tail = 0; var qe_head = 0; !ld16 qe_tail, cli_active_queue; !ld16 qe_head, cli_active_queue + 2; var qe_empty_check = qe_tail - qe_head; cli_empty = (qe_empty_check == 0);
+            }
+            !st32 cli_active_queue + 4, 0;
+            reprocess = 0;
+            var qe_tail = 0; var qe_head = 0; !ld16 qe_tail, cli_active_queue; !ld16 qe_head, cli_active_queue + 2; var qe_empty_check = qe_tail - qe_head; cli_empty = (qe_empty_check == 0);
+            if (cli_empty == 0) {
+                !st32 cli_active_queue + 4, 1;
+                reprocess = 1;
+            }
+        }
+        client = client + 1;
+    }
+    if (enqueued) {
+        var signal_required = 0;
+        var rs_signalled = 0; !ld32 rs_signalled, drv_active_queue + 4; signal_required = !rs_signalled;
+        if (signal_required) {
+            !st32 drv_active_queue + 4, 1;
+            @sddf_deferred_notify(0,config_driver_id,0,0);
+        }
+    }
+    return 0;
+}
+fun tx_return() {
+    var reprocess = 1;
+    var i = 0;
+    var num_clients = num_clients;
+    var drv_free_queue = drv_free_queue;
+    var drv_capacity = drv_capacity;
+    while (i < num_clients) {
+        var notify_addr = (@base + (210 + i) * @biw);
+        !st32 notify_addr, 0;
+        i = i + 1;
+    }
+    while (reprocess) {
+        var drv_empty = 0;
+        var qe_tail = 0; var qe_head = 0; !ld16 qe_tail, drv_free_queue; !ld16 qe_head, drv_free_queue + 2; var qe_empty_check = qe_tail - qe_head; drv_empty = (qe_empty_check == 0);
+        while (true) {
+            if (drv_empty) { break; }
+            var phys_addr = 0;
+            var len = 0;
+            var dq_head = 0; !ld16 dq_head, drv_free_queue + 2; var dq_mod_head = dq_head & (drv_capacity - 1); var dq_entry_addr = drv_free_queue + 8 + dq_mod_head * 16; !ldw phys_addr, dq_entry_addr; !ld32 len, dq_entry_addr + 8; dq_head = (dq_head + 1) & 65535; !st16 drv_free_queue + 2, dq_head;
+            var client = 0;
+            var offset = 0;
+            var eo_client = 0; client = -1; offset = 0; var eo_found = 0; while (eo_client < num_clients) { if (eo_found) {break;} var eo_cli_data_io = (lds 1 (@base + (100 + eo_client) * @biw)); var eo_cli_capacity = (lds 1 (@base + (30 + eo_client * 4 + 2) * @biw)); var eo_cli_max_addr = eo_cli_data_io + eo_cli_capacity * 2048; if (phys_addr >= eo_cli_data_io && phys_addr < eo_cli_max_addr) { offset = phys_addr - eo_cli_data_io; client = eo_client; eo_found = 1; }s eo_client = eo_client + 1; }
+            if (client < 0) {
+                break;
+            }
+            var cli_queue_base = 30 + client * 4;
+            var cli_free_queue = (lds 1 (@base + (cli_queue_base) * @biw));
+            var cli_capacity = (lds 1 (@base + (cli_queue_base + 2) * @biw));
+            var eq_tail = 0; !ld16 eq_tail, cli_free_queue; var eq_mod_tail = eq_tail & (cli_capacity - 1); var eq_entry_addr = cli_free_queue + 8 + eq_mod_tail * 16; !stw eq_entry_addr, offset; !st32 eq_entry_addr + 8, len; eq_tail = (eq_tail + 1) & 65535; !st16 cli_free_queue, eq_tail;
+            var notify_addr = (@base + (210 + client) * @biw);
+            !st32 notify_addr, 1;
+            var qe_tail = 0; var qe_head = 0; !ld16 qe_tail, drv_free_queue; !ld16 qe_head, drv_free_queue + 2; var qe_empty_check = qe_tail - qe_head; drv_empty = (qe_empty_check == 0);
+        }
+        !st32 drv_free_queue + 4, 0;
+        reprocess = 0;
+        var qe_tail = 0; var qe_head = 0; !ld16 qe_tail, drv_free_queue; !ld16 qe_head, drv_free_queue + 2; var qe_empty_check = qe_tail - qe_head; drv_empty = (qe_empty_check == 0);
+        if (drv_empty == 0) {
+            !st32 drv_free_queue + 4, 1;
+            reprocess = 1;
+        }
+    }
+    var client = 0;
+    while (client < num_clients) {
+        var notify_flag = (lds 1 (@base + (210 + client) * @biw));
+        if (notify_flag) {
+            var cli_queue_base = 30 + client * 4;
+            var cli_free_queue = (lds 1 (@base + (cli_queue_base) * @biw));
+            var cli_capacity = (lds 1 (@base + (cli_queue_base + 2) * @biw));
+            var signal_required = 0;
+            var rs_signalled = 0; !ld32 rs_signalled, cli_free_queue + 4; signal_required = !rs_signalled;
+            if (signal_required) {
+                !st32 cli_free_queue + 4, 1;
+                var cli_conn_id = (lds 1 (@base + (150 + client) * @biw));
+                @sddf_notify(0,cli_conn_id,0,0);
+            }
+        }
+        client = client + 1;
+    }
+    return 0;
+}
+export fun notified(1 ch) {
+    tx_return();
+    tx_provide();
+    return 0;
+}

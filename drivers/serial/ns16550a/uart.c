@@ -17,8 +17,36 @@ __attribute__((__section__(".serial_driver_config"))) serial_driver_config_t con
 
 __attribute__((__section__(".device_resources"))) device_resources_t device_resources;
 
+#ifdef PANCAKE_SERIAL
+serial_queue_handle_t *rx_queue_handle;
+serial_queue_handle_t *tx_queue_handle;
+static char cml_memory[1024*20];
+extern void *cml_heap, *cml_stack, *cml_stackend;
+extern void cml_main(void);
+
+void init_pancake_mem() {
+    unsigned long cml_heap_sz = 1024*10;
+    unsigned long cml_stack_sz = 1024*10;
+    cml_heap = cml_memory;
+    cml_stack = cml_heap + cml_heap_sz;
+    cml_stackend = cml_stack + cml_stack_sz;
+}
+
+void cml_exit(int arg) {
+    for(;;);
+}
+
+void cml_err(int arg) {
+    for(;;);
+}
+
+void cml_clear() {
+    // Do nothing
+}
+#else
 serial_queue_handle_t rx_queue_handle;
 serial_queue_handle_t tx_queue_handle;
+#endif
 
 /* UART device registers */
 volatile uintptr_t uart_base;
@@ -40,6 +68,9 @@ volatile uintptr_t uart_base;
 #error "unknown platform reg-io-width"
 #endif
 
+#ifdef PANCAKE_SERIAL
+// Pancake-specific functions are defined in Pancake code
+#else
 static inline bool tx_fifo_not_full(void)
 {
 #if UART_DW_APB_REGISTERS
@@ -89,26 +120,6 @@ static inline bool tx_fifo_not_full(void)
 static inline bool rx_has_data(void)
 {
     return !!(*REG_PTR(UART_LSR) & UART_LSR_DR);
-}
-
-static void set_baud(unsigned long baud)
-{
-    /*  Divisor Latch Access Bit (DLAB) of the LCR must be set.
-    *   These registers share their address with the FIFO's.
-    */
-
-    uint32_t lcr_val = *REG_PTR(UART_LCR);
-
-    *REG_PTR(UART_LCR) |= UART_LCR_DLAB;
-
-    /* baud rate = (serial_clock_freq) / (16 * divisor) */
-    uint16_t divisor = DIV_ROUND_CLOSEST(UART_CLK, 16 * baud);
-
-    *REG_PTR(UART_DLH) = (divisor >> 8) & 0xff;
-    *REG_PTR(UART_DLL) = divisor & 0xff;
-
-    /* Restore the LCR */
-    *REG_PTR(UART_LCR) = lcr_val;
 }
 
 static void tx_provide(void)
@@ -185,6 +196,28 @@ static void handle_irq(void)
         tx_provide();
     }
 }
+#endif /* !PANCAKE_SERIAL */
+
+static void set_baud(unsigned long baud)
+{
+    /*  Divisor Latch Access Bit (DLAB) of the LCR must be set.
+    *   These registers share their address with the FIFO's.
+    */
+
+    uint32_t lcr_val = *REG_PTR(UART_LCR);
+
+    *REG_PTR(UART_LCR) |= UART_LCR_DLAB;
+
+    /* baud rate = (serial_clock_freq) / (16 * divisor) */
+    uint16_t divisor = DIV_ROUND_CLOSEST(UART_CLK, 16 * baud);
+
+    *REG_PTR(UART_DLH) = (divisor >> 8) & 0xff;
+    *REG_PTR(UART_DLL) = divisor & 0xff;
+
+    /* Restore the LCR */
+    *REG_PTR(UART_LCR) = lcr_val;
+}
+
 
 void init(void)
 {
@@ -198,6 +231,23 @@ void init(void)
 
     uart_base = (uintptr_t)device_resources.regions[0].region.vaddr;
 
+#ifdef PANCAKE_SERIAL
+    init_pancake_mem();
+    uintptr_t *pnk_mem = (uintptr_t *) cml_heap;
+    
+    pnk_mem[1] = device_resources.irqs[0].id;
+    pnk_mem[2] = config.rx.id;
+    pnk_mem[3] = config.tx.id;
+    pnk_mem[1024] = config.rx_enabled;
+    pnk_mem[1025] = REG_SHIFT;
+    pnk_mem[1026] = UART_DW_APB_REGISTERS;
+    
+    rx_queue_handle = (serial_queue_handle_t *) &pnk_mem[4];
+    tx_queue_handle = (serial_queue_handle_t *) &pnk_mem[7];
+    
+    pnk_mem[0] = uart_base;
+#endif
+    
     /* Ensure that the FIFO's are empty */
     while (!(*REG_PTR(UART_LSR) & (UART_LSR_THRE | UART_LSR_TEMT)));
 
@@ -227,10 +277,18 @@ void init(void)
            -> TX enabled as needed by tx_provide(). */
         *REG_PTR(UART_IER) = UART_IER_ERBFI;
 
+#ifdef PANCAKE_SERIAL
+        serial_queue_init(rx_queue_handle, config.rx.queue.vaddr, config.rx.data.size, config.rx.data.vaddr);
+#else
         serial_queue_init(&rx_queue_handle, config.rx.queue.vaddr, config.rx.data.size, config.rx.data.vaddr);
+#endif
     }
 
+#ifdef PANCAKE_SERIAL
+    serial_queue_init(tx_queue_handle, config.tx.queue.vaddr, config.tx.data.size, config.tx.data.vaddr);
+#else
     serial_queue_init(&tx_queue_handle, config.tx.queue.vaddr, config.tx.data.size, config.tx.data.vaddr);
+#endif
 
 #if UART_DW_APB_REGISTERS
     /* Clear the USR busy bit
@@ -239,8 +297,15 @@ void init(void)
      */
     (void)*REG_PTR(UART_USR);
 #endif
+
+#ifdef PANCAKE_SERIAL
+    cml_main();
+#endif
 }
 
+#ifdef PANCAKE_SERIAL
+extern void notified(microkit_channel ch);
+#else
 void notified(microkit_channel ch)
 {
     if (ch == device_resources.irqs[0].id) {
@@ -254,3 +319,4 @@ void notified(microkit_channel ch)
         LOG_DRIVER_ERR("received notification on unexpected channel\n");
     }
 }
+#endif /* !PANCAKE_SERIAL */

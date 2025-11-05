@@ -1,0 +1,169 @@
+co
+^Eco
+[Enter `^Ec?' for help]
+[connecting...up]
+GXBB:BL1:08dafd:0a8993;FEAT:EDFD718C;POC:3;RCY:0;EMMC:0;READ:0;CHK:0;
+TE: 119584
+no sdio debug board detected 
+
+BL2 Built : 11:44:26, Nov 25 2015. 
+gxb gfb13a3b-c2 - jcao@wonton
+
+Board ID = 8
+set vcck to 1100 mv
+set vddee to 1050 mv
+CPU clk: 1536MHz
+DDR channel setting: DDR0 Rank0+1 same
+DDR0: 2048MB(auto) @ 912MHz(2T)-13
+DataBus test pass!
+AddrBus test pass!
+Load fip header from eMMC, src: 0x0000c200, des: 0x01400000, size: 0x000000b0
+Load bl30 from eMMC, src: 0x00010200, des: 0x01000000, size: 0x00009ef0
+Sending bl30........................................OK. 
+Run bl30...
+Load bl301 from eMMC, src: 0x0001c200, des: 0x01000000, size: 0x000018c0
+Wait bl30...Done
+Sending bl301.......OK. 
+Run bl301...
+Load bl31from eMMC, src: 0x00020200, des: 0x10100000, size: 0x00011130
+
+
+--- UART initialized after reboot ---
+[Reset cause: unknown]
+[Image: unknown, amlogic_v1.1.3046-00db630-dirty 2016-08-31 09:24:14 tao.zeng@droid04]
+bl30: check_permit, count is 1
+bl30: check_permit: ok!
+chipid: Load bl33 from eMMC, src: 0x00034200, des: 0x01000000, size: 0x000781d0
+ef be ad de d f0 ad ba ef be ad de not ES chip
+[0.234731 Inits done]
+secure task start!
+high task start!
+low task start!
+NOTICE:  BL3-1: v1.0(debug):4d2e34d
+NOTICE:  BL3-1: Built : 17:08:35, Oct 29 2015
+INFO:    BL3-1: Initializing runtime services
+INFO:    BL3-1: Preparing for EL3 exit to normal world
+INFO:    BL3-1: Next image address = 0x1000000
+INFO:    BL3-1: Next image spsr = 0x3c9
+
+
+U-Boot 2019.04-dirty (Apr 26 2019 - 11:43:44 +1000) odroid-c2
+
+DRAM:  2 GiB
+MMC:   mmc@72000: 0, mmc@74000: 1
+Loading Environment from MMC... OK
+In:    serial
+Out:   serial
+Err:   serial
+Net:   eth0: ethernet@c9410000
+=> setenv autoload no && dhcp && tftpboot 0x20000000 odroidc2/local-kernel
+setenv autoload no && dhcp && tftpboot 0x20000000 odroidc2/local-kernel
+ethernet@c9410000 Waiting for PHY auto negotiation to complete...... done
+Speed: 1000, full duplex
+BOOTP broadcast 1
+BOOTP broadcast 2
+BOOTP broadcast 3
+BOOTP broadcast 4
+BOOTP broadcast 5
+DHCP client bound to address 172.16.1.83 (3758 ms)
+Speed: 1000, full duplex
+Using ethernet@c9410000 device
+TFTP from server 172.16.0.2; our IP address is 172.16.1.83
+Filename 'odroidc2/local-kernel'.
+Load address: 0x20000000
+Loading: *#################################################################
+	 #################################################################
+	 #################################################################
+	 #################################################################
+	 #################################################################
+	 #################################################################
+	 #################################################################
+	 #########################
+	 12.5 MiB/s
+done
+Bytes transferred = 7031752 (6b4bc8 hex)
+=> go 0x20000000
+go 0x20000000
+## Starting application at 0x20000000 ...
+"Synchronous Abort" handler, esr 0x86000010
+elr: 0000007f8108e000 lr : ffffffffa108e3cc (reloc)
+elr: 0000008000000000 lr : 00000000200003cc
+x0 : 00000000006a6000 x1 : 00000000006b0000
+x2 : ffffffff766a6000 x3 : 000000008a000000
+x4 : 0000000000000000 x5 : 0000000000000000
+x6 : 000000000022e000 x7 : 0000000000478000
+x8 : 0000008000000000 x9 : ffffffffffffffff
+x10: 0000000000000000 x11: 0000000000000002
+x12: 0000000000001000 x13: 0000000000000200
+x14: 0000000000000000 x15: 0000000000000008
+x16: 0000000000008080 x17: 0000000000000000
+x18: 000000007df69df8 x19: 0000000020002000
+x20: 0000000000000002 x21: 0000000020000000
+x22: 000000007df72ef0 x23: 000000007ffe4c58
+x24: 0000000000000002 x25: 0000000000000000
+x26: 0000000000000000 x27: 0000000000000000
+x28: 000000007df718d0 x29: 0000000020009fd0
+
+Resetting CPU ...
+
+resetting ...
+INFO:    PSCI Affinity Map:
+INFO:      AffInst: Level 0, MPID 0x0, State ON
+INFO:      AffInst: Level 0, MPID 0x1, State OFF
+INFO:      AffInst: Level 0, MPID 0x2, State OFF
+INFO:      AffInst: Level 0, MPID 0x3, State OFF
+bl31 rebGXBB:BL1:08dafd:0a8993;FEAT:EDFD718C;POC:3;RCY:0;EMMC:0;READ:0;CHK:0;
+TE: 118860
+no sdio debug board detected 
+
+BL2 Built : 11:44:26, Nov 25 2015. 
+gxb gfb13a3b-c2 - jcao@wonton
+
+Board ID = 8
+set vcck to 1100 mv
+set vddee to 1050 mv
+CPU clk: 1536MHz
+DDR channel setting: DDR0 Rank0+1 same
+DDR0: 2048MB(auto) @ 912MHz(2T)-13
+DataBus test pass!
+AddrBus test pass!
+Load fip header from eMMC, src: 0x0000c200, des: 0x01400000, size: 0x000000b0
+Load bl30 from eMMC, src: 0x00010200, des: 0x01000000, size: 0x00009ef0
+Sending bl30........................................OK. 
+Run bl30...
+Load bl301 from eMMC, src: 0x0001c200, des: 0x01000000, size: 0x000018c0
+Wait bl30...Done
+Sending bl301.......OK. 
+Run bl301...
+Load bl31 from eMC, src: 0x00020200, des: 0x10100000, size: 0x00011130
+
+
+--- UART initialized after reboot ---
+[Reset cause: unknown]
+[Image: unknown, amlogic_v1.1.3046-00db630-dirty 2016-08-31 09:24:14 tao.zeng@droid04]
+bl30: check_permit, count is 1
+bl30: check_permit: ok!
+chipid: Load bl33 from eMMC, src: 0x00034200, des: 0x01000000, size: 0x000781d0
+ef be ad de d f0 ad ba ef be ad de not ES chip
+[0.234005 Inits done]
+secure task start!
+high task start!
+low task start!
+NOTICE:  BL3-1: v1.0(debug):4d2e34d
+NOTICE:  BL3-1: Built : 17:08:35, Oct 29 2015
+INFO:    BL3-1: Initializing runtime services
+INFO:    BL3-1: Preparing for EL3 exit to normal world
+INFO:    BL3-1: Next image address = 0x1000000
+INFO:    BL3-1: Next image spsr = 0x3c9
+
+
+U-Boot 2019.04-dirty (Apr 26 2019 - 11:43:44 +1000) odroid-c2
+
+DRAM:  2 GiB
+MMC:   mmc@72000: 0, mmc@74000: 1
+Loading Environment from MMC... OK
+In:    serial
+Out:   serial
+Err:   serial
+Net:   eth0: ethernet@c9410000
+=> 

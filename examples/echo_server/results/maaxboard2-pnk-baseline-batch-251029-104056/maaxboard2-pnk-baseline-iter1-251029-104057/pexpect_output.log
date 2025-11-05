@@ -1,0 +1,31 @@
+Unknown option maaxboard2
+/usr/bin/mq run -r|-c <string> -l logfile -s system [-w retry-time] [-t retry-count] [-n] [-a] [-d timeout] [-e <string>] [-k <string>] [-L] [-b <file>] -f file1 -f file2 .. -f filen
+
+   Acquires a lock for a machine, and once locked runs the specified job
+   Jobs can include just a reservation
+
+   Output from the machine is generally collected and passed back to the
+   user both on stdout and in the form of an option logfile.
+
+   Jobs can be canceled at any time with ^C, which will notify the server
+   if the job is running and remove the job from the queue.
+
+   Returns 0 on success, nonzero if something went wrong
+
+Options:
+
+ -r          Reserves the device. Will not reboot or run an image
+ -n          No lock changes. Checks that you have the lock, and then runs an image. Will not unlock afterwards.
+ -a          Keep the machine alive after image is done
+ -c TEXT     Image is run until the specified regular completion text
+ -e TEXT     Image is run until the specified error text is found
+ -d TIME     Timeout (in seconds) to wait for the completion text (default -1 AKA no timeout)
+ -k KEY      Key for obtaining the lock
+ -l FILE     Optional location to write all the console output to
+ -L          This is a Linux image not seL4
+ -b FILE     Dtb to use instead of the default one with a Linux image
+ -s TEXT     Specifies which machine this job is for
+ -f FILE [+] Files to use as the job image
+ -w TIME     Number of seconds to wait between each attempt to acquire the lock (default 8)
+ --bitstream FILE  Optional bitstream to load to the FPGA
+

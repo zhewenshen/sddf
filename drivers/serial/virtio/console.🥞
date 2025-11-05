@@ -1,0 +1,610 @@
+/*
+ * Copyright 2025, UNSW
+ * SPDX-License-Identifier: BSD-2-Clause
+ */
+
+#define IRQ_CH  pnk_mem(1)
+#define RX_CH   pnk_mem(2)  
+#define TX_CH   pnk_mem(3)
+
+#define SERIAL_RX_QUEUE     pnk_mem(4)
+#define SERIAL_RX_CAPACITY  pnk_mem(5)
+#define SERIAL_RX_DATA      pnk_mem(6)
+
+#define SERIAL_TX_QUEUE     pnk_mem(7)
+#define SERIAL_TX_CAPACITY  pnk_mem(8)
+#define SERIAL_TX_DATA      pnk_mem(9)
+
+#define VIRTIO_REG_BASE     pnk_mem(0)
+
+#define HW_RING_BUFFER_VADDR  pnk_mem(10)
+#define HW_RING_BUFFER_PADDR  pnk_mem(11)
+#define VIRTIO_RX_CHAR_VADDR  pnk_mem(12)
+#define VIRTIO_RX_CHAR_PADDR  pnk_mem(13)
+#define VIRTIO_TX_CHAR_VADDR  pnk_mem(14)
+#define VIRTIO_TX_CHAR_PADDR  pnk_mem(15)
+
+#define RX_LAST_SEEN_USED   pnk_mem(16)
+#define TX_LAST_SEEN_USED   pnk_mem(17)
+#define RX_LAST_DESC_IDX    pnk_mem(18)
+#define TX_LAST_DESC_IDX    pnk_mem(19)
+
+#define RX_VIRTQ_DESC_OFF   pnk_mem(20)
+#define RX_VIRTQ_AVAIL_OFF  pnk_mem(21)
+#define RX_VIRTQ_USED_OFF   pnk_mem(22)
+
+#define TX_VIRTQ_DESC_OFF   pnk_mem(23)
+#define TX_VIRTQ_AVAIL_OFF  pnk_mem(24)
+#define TX_VIRTQ_USED_OFF   pnk_mem(25)
+
+#define RX_DESC_IALLOC_PTR  pnk_mem(30)
+#define TX_DESC_IALLOC_PTR  pnk_mem(31)
+#define RX_CHAR_IALLOC_PTR  pnk_mem(32)
+#define TX_CHAR_IALLOC_PTR  pnk_mem(33)
+
+#define RX_ENABLED          pnk_mem(1024)
+
+#define IALLOC_IDXLIST_OFFSET   0
+#define IALLOC_HEAD_OFFSET      8
+#define IALLOC_TAIL_OFFSET      12
+#define IALLOC_NUM_FREE_OFFSET  16
+#define IALLOC_OFFSET_OFFSET    20
+#define IALLOC_SIZE_OFFSET      24
+
+#define VIRTIO_REG_MAGIC             0
+#define VIRTIO_REG_VERSION           4
+#define VIRTIO_REG_DEVICE_ID         8
+#define VIRTIO_REG_VENDOR_ID         12
+#define VIRTIO_REG_DEVICE_FEATURES   16
+#define VIRTIO_REG_DEVICE_FEATURES_SEL 20
+#define VIRTIO_REG_DRIVER_FEATURES   32
+#define VIRTIO_REG_DRIVER_FEATURES_SEL 36
+#define VIRTIO_REG_QUEUE_SEL         48
+#define VIRTIO_REG_QUEUE_NUM_MAX     52
+#define VIRTIO_REG_QUEUE_NUM         56
+#define VIRTIO_REG_QUEUE_READY       68
+#define VIRTIO_REG_QUEUE_NOTIFY      80
+#define VIRTIO_REG_INTERRUPT_STATUS  96
+#define VIRTIO_REG_INTERRUPT_ACK     100
+#define VIRTIO_REG_STATUS            112
+#define VIRTIO_REG_QUEUE_DESC_LOW    128
+#define VIRTIO_REG_QUEUE_DESC_HIGH   132
+#define VIRTIO_REG_QUEUE_DRIVER_LOW  144
+#define VIRTIO_REG_QUEUE_DRIVER_HIGH 148
+#define VIRTIO_REG_QUEUE_DEVICE_LOW  160
+#define VIRTIO_REG_QUEUE_DEVICE_HIGH 164
+
+#define RX_COUNT                     512
+#define TX_COUNT                     512
+#define VIRTIO_SERIAL_RX_QUEUE       0
+#define VIRTIO_SERIAL_TX_QUEUE       1
+
+#define VIRTIO_DEVICE_STATUS_ACKNOWLEDGE  1
+#define VIRTIO_DEVICE_STATUS_DRIVER       2
+#define VIRTIO_DEVICE_STATUS_FEATURES_OK  8
+#define VIRTIO_DEVICE_STATUS_DRIVER_OK    4
+
+#define VIRTIO_MMIO_IRQ_VQUEUE       1
+#define VIRTIO_MMIO_IRQ_CONFIG       2
+
+#define VIRTQ_DESC_F_NEXT            1
+#define VIRTQ_DESC_F_WRITE           2
+
+fun virtio_read_reg(1 offset)
+{
+  var reg_addr = VIRTIO_REG_BASE + offset;
+  var value = 0;
+  !ld32 value, reg_addr;
+  return value;
+}
+
+fun virtio_write_reg(1 offset, 1 value)
+{
+  var reg_addr = VIRTIO_REG_BASE + offset;
+  !st32 reg_addr, value;
+  return 0;
+}
+
+fun ialloc_alloc(1 ialloc_ptr)
+{
+  var num_free_ptr = ialloc_ptr + IALLOC_NUM_FREE_OFFSET;
+  var num_free = 0;
+  !ld32 num_free, num_free_ptr;
+  
+  if (num_free == 0) {
+    return 4294967295;
+  }
+  
+  var head_ptr = ialloc_ptr + IALLOC_HEAD_OFFSET;
+  var offset_ptr = ialloc_ptr + IALLOC_OFFSET_OFFSET;
+  var idxlist_ptr = 0;
+  var head = 0;
+  var offset = 0;
+  
+  !ld32 head, head_ptr;
+  !ld32 offset, offset_ptr;
+  !ldw idxlist_ptr, ialloc_ptr + IALLOC_IDXLIST_OFFSET;
+  
+  var allocated_id = head + offset;
+  
+  var next_head = 0;
+  !ld32 next_head, idxlist_ptr + head * 4;
+  !st32 head_ptr, next_head;
+  
+  !st32 idxlist_ptr + (allocated_id - offset) * 4, 4294967295;
+  
+  num_free = num_free - 1;
+  !st32 num_free_ptr, num_free;
+  
+  return allocated_id;
+}
+
+fun ialloc_free(1 ialloc_ptr, 1 id)
+{
+  var size_ptr = ialloc_ptr + IALLOC_SIZE_OFFSET;
+  var offset_ptr = ialloc_ptr + IALLOC_OFFSET_OFFSET;
+  var num_free_ptr = ialloc_ptr + IALLOC_NUM_FREE_OFFSET;
+  var size = 0;
+  var offset = 0;
+  var num_free = 0;
+  
+  !ld32 size, size_ptr;
+  !ld32 offset, offset_ptr;
+  !ld32 num_free, num_free_ptr;
+  
+  if (id >= (size + offset)) { return -1; }
+  if (id < offset) { return -1; }
+  
+  var idxlist_ptr = 0;
+  !ldw idxlist_ptr, ialloc_ptr + IALLOC_IDXLIST_OFFSET;
+  var idx_val = 0;
+  !ld32 idx_val, idxlist_ptr + (id - offset) * 4;
+  if (idx_val != 4294967295) {
+    return -1; 
+  }
+  
+  var tail_ptr = ialloc_ptr + IALLOC_TAIL_OFFSET;
+  var head_ptr = ialloc_ptr + IALLOC_HEAD_OFFSET;
+  
+  if (num_free == 0) {
+    var idx_no_offset = id - offset;
+    !st32 head_ptr, idx_no_offset;
+    !st32 tail_ptr, idx_no_offset;
+  } else {
+    var tail = 0;
+    !ld32 tail, tail_ptr;
+    var idx_no_offset = id - offset;
+    !st32 idxlist_ptr + tail * 4, idx_no_offset;
+    !st32 tail_ptr, idx_no_offset;
+  }
+  
+  num_free = num_free + 1;
+  !st32 num_free_ptr, num_free;
+  
+  return 0;
+}
+
+fun alloc_rx_desc()
+{
+  var rx_desc_ialloc = RX_DESC_IALLOC_PTR;
+  var 1 idx = ialloc_alloc(rx_desc_ialloc);
+  return idx;
+}
+
+fun free_rx_desc(1 idx)
+{
+  var rx_desc_ialloc = RX_DESC_IALLOC_PTR;
+  ialloc_free(rx_desc_ialloc, idx);
+  return 0;
+}
+
+fun alloc_tx_desc()
+{
+  var tx_desc_ialloc = TX_DESC_IALLOC_PTR;
+  var 1 idx = ialloc_alloc(tx_desc_ialloc);
+  return idx;
+}
+
+fun free_tx_desc(1 idx)
+{
+  var tx_desc_ialloc = TX_DESC_IALLOC_PTR;
+  ialloc_free(tx_desc_ialloc, idx);
+  return 0;
+}
+
+fun alloc_rx_char()
+{
+  var rx_char_ialloc = RX_CHAR_IALLOC_PTR;
+  var 1 idx = ialloc_alloc(rx_char_ialloc);
+  return idx;
+}
+
+fun free_rx_char(1 idx)
+{
+  var rx_char_ialloc = RX_CHAR_IALLOC_PTR;
+  ialloc_free(rx_char_ialloc, idx);
+  return 0;
+}
+
+fun alloc_tx_char()
+{
+  var tx_char_ialloc = TX_CHAR_IALLOC_PTR;
+  var 1 idx = ialloc_alloc(tx_char_ialloc);
+  return idx;
+}
+
+fun free_tx_char(1 idx)
+{
+  var tx_char_ialloc = TX_CHAR_IALLOC_PTR;
+  ialloc_free(tx_char_ialloc, idx);
+  return 0;
+}
+
+fun virtio_avail_full_rx()
+{
+  var last_desc_idx = RX_LAST_DESC_IDX;
+  return (last_desc_idx >= RX_COUNT);
+}
+
+fun virtio_avail_full_tx()
+{
+  var last_desc_idx = TX_LAST_DESC_IDX;
+  return (last_desc_idx >= TX_COUNT);
+}
+
+fun write_virtq_desc(1 base_addr, 1 desc_idx, 1 addr_low, 1 addr_high, 1 len, 1 flags)
+{
+  var desc_addr = base_addr + desc_idx * 16;
+  !st32 desc_addr, addr_low;
+  !st32 desc_addr + 4, addr_high;
+  !st32 desc_addr + 8, len;
+  !st16 desc_addr + 12, flags;
+  !st16 desc_addr + 14, 0;
+  return 0;
+}
+
+fun read_virtq_desc_addr(1 base_addr, 1 desc_idx)
+{
+  var desc_addr = base_addr + desc_idx * 16;
+  var addr_low = 0;
+  !ld32 addr_low, desc_addr;
+  return addr_low;
+}
+
+fun write_virtq_avail_ring(1 base_addr, 1 idx, 1 desc_idx)
+{
+  var ring_addr = base_addr + 4 + idx * 2;
+  !st16 ring_addr, desc_idx;
+  return 0;
+}
+
+fun read_virtq_avail_idx(1 base_addr)
+{
+  var idx = 0;
+  !ld16 idx, base_addr + 2;
+  return idx;
+}
+
+fun write_virtq_avail_idx(1 base_addr, 1 idx)
+{
+  !st16 base_addr + 2, idx;
+  return 0;
+}
+
+fun read_virtq_used_idx(1 base_addr)
+{
+  var idx = 0;
+  !ld16 idx, base_addr + 2;
+  return idx;
+}
+
+fun read_virtq_used_ring_id(1 base_addr, 1 idx)
+{
+  var ring_addr = base_addr + 4 + idx * 8;
+  var id = 0;
+  !ld32 id, ring_addr;
+  return id;
+}
+
+export fun tx_provide()
+{
+  var transferred = false;
+  var tx_queue = SERIAL_TX_QUEUE;
+  var tx_capacity = SERIAL_TX_CAPACITY;
+  var tx_data = SERIAL_TX_DATA;
+
+  while (true)
+  {
+    var 1 tx_full = virtio_avail_full_tx();
+    if (tx_full) { break; }
+
+    var 1 is_empty = serial_queue_is_empty(tx_queue);
+    if (is_empty) { break; }
+
+    var 1 char_idx = alloc_tx_char();
+    if (char_idx == 4294967295) { break; }
+
+    var 1 desc_idx = alloc_tx_desc();
+    if (desc_idx == 4294967295) { 
+      free_tx_char(char_idx);
+      break; 
+    }
+
+    var 1 c = serial_queue_dequeue_char(tx_queue, tx_capacity, tx_data);
+    
+    var tx_char_base = VIRTIO_TX_CHAR_VADDR;
+    var char_addr = tx_char_base + char_idx;
+    !st8 char_addr, c;
+
+    var tx_char_paddr = VIRTIO_TX_CHAR_PADDR + char_idx;
+    var tx_desc_base = HW_RING_BUFFER_VADDR + TX_VIRTQ_DESC_OFF;
+    write_virtq_desc(tx_desc_base, desc_idx, tx_char_paddr, 0, 1, 0);
+
+    var tx_avail_base = HW_RING_BUFFER_VADDR + TX_VIRTQ_AVAIL_OFF;
+    var 1 avail_idx = read_virtq_avail_idx(tx_avail_base);
+    var ring_idx = avail_idx & 511;
+    write_virtq_avail_ring(tx_avail_base, ring_idx, desc_idx);
+    
+    var new_avail_idx = avail_idx + 1;
+    write_virtq_avail_idx(tx_avail_base, new_avail_idx);
+
+    var last_desc_idx = TX_LAST_DESC_IDX;
+    var new_last_desc_idx = last_desc_idx + 1;
+    var addr = pnk_mem_ptr(19);
+    !st32 addr, new_last_desc_idx;
+
+    transferred = true;
+  }
+
+  if (transferred) {
+    virtio_write_reg(VIRTIO_REG_QUEUE_NOTIFY, VIRTIO_SERIAL_TX_QUEUE);
+    var 1 requires_signal = serial_queue_require_signal(tx_queue);
+    if (requires_signal) {
+      serial_queue_cancel_signal(tx_queue);
+      microkit_notify(TX_CH)
+    }
+  }
+
+  return 0;
+}
+
+fun tx_return()
+{
+  var tx_used_base = HW_RING_BUFFER_VADDR + TX_VIRTQ_USED_OFF;
+  var tx_desc_base = HW_RING_BUFFER_VADDR + TX_VIRTQ_DESC_OFF;
+  
+  var 1 curr_idx = read_virtq_used_idx(tx_used_base);
+  var last_seen = TX_LAST_SEEN_USED;
+  var i = last_seen;
+
+  while (i != curr_idx) {
+    var ring_idx = i & 511;
+    var 1 used_id = read_virtq_used_ring_id(tx_used_base, ring_idx);
+    
+    var 1 desc_addr = read_virtq_desc_addr(tx_desc_base, used_id);
+    var tx_char_paddr_base = VIRTIO_TX_CHAR_PADDR;
+    var char_idx = desc_addr - tx_char_paddr_base;
+
+    free_tx_desc(used_id);
+    free_tx_char(char_idx);
+
+    var last_desc_idx = TX_LAST_DESC_IDX;
+    var new_last_desc_idx = last_desc_idx - 1;
+    var addr = pnk_mem_ptr(19);
+    !st32 addr, new_last_desc_idx;
+
+    i = i + 1;
+  }
+
+  var addr = pnk_mem_ptr(17);
+  !st32 addr, curr_idx;
+
+  return 0;
+}
+
+fun rx_provide()
+{
+  var transferred = false;
+  
+  while (true) {
+    var 1 rx_full = virtio_avail_full_rx();
+    if (rx_full) { break; }
+
+    var 1 desc_idx = alloc_rx_desc();
+    if (desc_idx == 4294967295) { break; }
+
+    var 1 char_idx = alloc_rx_char();
+    if (char_idx == 4294967295) {
+      free_rx_desc(desc_idx);
+      break;
+    }
+
+    var rx_char_paddr = VIRTIO_RX_CHAR_PADDR + char_idx;
+    var rx_desc_base = HW_RING_BUFFER_VADDR + RX_VIRTQ_DESC_OFF;
+    write_virtq_desc(rx_desc_base, desc_idx, rx_char_paddr, 0, 1, VIRTQ_DESC_F_WRITE);
+
+    var rx_avail_base = HW_RING_BUFFER_VADDR + RX_VIRTQ_AVAIL_OFF;
+    var 1 avail_idx = read_virtq_avail_idx(rx_avail_base);
+    var ring_idx = avail_idx & 511;
+    write_virtq_avail_ring(rx_avail_base, ring_idx, desc_idx);
+    
+    var new_avail_idx = avail_idx + 1;
+    write_virtq_avail_idx(rx_avail_base, new_avail_idx);
+
+    var last_desc_idx = RX_LAST_DESC_IDX;
+    var new_last_desc_idx = last_desc_idx + 1;
+    var addr = pnk_mem_ptr(18);
+    !st32 addr, new_last_desc_idx;
+
+    transferred = true;
+  }
+
+  if (transferred) {
+    virtio_write_reg(VIRTIO_REG_QUEUE_NOTIFY, VIRTIO_SERIAL_RX_QUEUE);
+  }
+
+  return 0;
+}
+
+fun rx_return()
+{
+  var rx_queue = SERIAL_RX_QUEUE;
+  var rx_capacity = SERIAL_RX_CAPACITY;
+  var rx_data = SERIAL_RX_DATA;
+  var rx_used_base = HW_RING_BUFFER_VADDR + RX_VIRTQ_USED_OFF;
+  var rx_desc_base = HW_RING_BUFFER_VADDR + RX_VIRTQ_DESC_OFF;
+  
+  var transferred = 0;
+  var 1 curr_idx = read_virtq_used_idx(rx_used_base);
+  var last_seen = RX_LAST_SEEN_USED;
+  var i = last_seen;
+  var reprocess = true;
+
+  while (reprocess) {
+    while (i != curr_idx) {
+      var 1 queue_full = serial_queue_is_full(rx_queue, rx_capacity);
+      if (queue_full) { break; }
+
+      var ring_idx = i & 511;
+      var 1 used_id = read_virtq_used_ring_id(rx_used_base, ring_idx);
+      
+      var 1 desc_addr = read_virtq_desc_addr(rx_desc_base, used_id);
+      var rx_char_paddr_base = VIRTIO_RX_CHAR_PADDR;
+      var char_idx = desc_addr - rx_char_paddr_base;
+
+      var rx_char_base = VIRTIO_RX_CHAR_VADDR;
+      var char_addr = rx_char_base + char_idx;
+      var c = 0;
+      !ld8 c, char_addr;
+
+      serial_queue_enqueue_char(rx_queue, rx_capacity, rx_data, c);
+
+      free_rx_desc(used_id);
+      free_rx_char(char_idx);
+
+      var last_desc_idx = RX_LAST_DESC_IDX;
+      var new_last_desc_idx = last_desc_idx - 1;
+      var addr = pnk_mem_ptr(18);
+      !st32 addr, new_last_desc_idx;
+
+      i = i + 1;
+      transferred = transferred + 1;
+    }
+
+    if (i != curr_idx) {
+      var 1 queue_full = serial_queue_is_full(rx_queue, rx_capacity);
+      if (queue_full) {
+        serial_queue_request_signal(rx_queue);
+      }
+    }
+    
+    reprocess = false;
+
+    if (i != curr_idx) {
+      var 1 queue_full = serial_queue_is_full(rx_queue, rx_capacity);
+      if (!queue_full) {
+        serial_queue_cancel_signal(rx_queue);
+        reprocess = true;
+      }
+    }
+  }
+
+  var addr = pnk_mem_ptr(16);
+  !st32 addr, i;
+
+  if (transferred > 0) {
+    microkit_notify(RX_CH)
+  }
+
+  return 0;
+}
+
+fun handle_irq()
+{
+  var 1 irq_status = virtio_read_reg(VIRTIO_REG_INTERRUPT_STATUS);
+  
+  if (irq_status & VIRTIO_MMIO_IRQ_VQUEUE) {
+    virtio_write_reg(VIRTIO_REG_INTERRUPT_ACK, VIRTIO_MMIO_IRQ_VQUEUE);
+
+    if (RX_ENABLED) {
+      rx_return();
+      rx_provide();
+    }
+    tx_return();
+    tx_provide();
+  }
+
+  return 0;
+}
+
+export fun console_setup()
+{
+  var 1 magic = virtio_read_reg(VIRTIO_REG_MAGIC);
+  if (magic != 1936553328) { return 1; }
+
+  var 1 device_id = virtio_read_reg(VIRTIO_REG_DEVICE_ID);
+  if (device_id != 3) { return 1; }
+
+  var 1 version = virtio_read_reg(VIRTIO_REG_VERSION);
+  if (version != 2) { return 1; }
+
+  virtio_write_reg(VIRTIO_REG_STATUS, 0);
+  virtio_write_reg(VIRTIO_REG_STATUS, VIRTIO_DEVICE_STATUS_ACKNOWLEDGE);
+  virtio_write_reg(VIRTIO_REG_STATUS, VIRTIO_DEVICE_STATUS_DRIVER);
+  virtio_write_reg(VIRTIO_REG_STATUS, VIRTIO_DEVICE_STATUS_FEATURES_OK);
+
+  var 1 status = virtio_read_reg(VIRTIO_REG_STATUS);
+  if (!(status & VIRTIO_DEVICE_STATUS_FEATURES_OK)) { return 1; }
+
+  var hw_ring_base = HW_RING_BUFFER_PADDR;
+
+  virtio_write_reg(VIRTIO_REG_QUEUE_SEL, VIRTIO_SERIAL_RX_QUEUE);
+  virtio_write_reg(VIRTIO_REG_QUEUE_NUM, RX_COUNT);
+  virtio_write_reg(VIRTIO_REG_QUEUE_DESC_LOW, (hw_ring_base + RX_VIRTQ_DESC_OFF) & 4294967295);
+  virtio_write_reg(VIRTIO_REG_QUEUE_DESC_HIGH, (hw_ring_base + RX_VIRTQ_DESC_OFF) >> 32);
+  virtio_write_reg(VIRTIO_REG_QUEUE_DRIVER_LOW, (hw_ring_base + RX_VIRTQ_AVAIL_OFF) & 4294967295);
+  virtio_write_reg(VIRTIO_REG_QUEUE_DRIVER_HIGH, (hw_ring_base + RX_VIRTQ_AVAIL_OFF) >> 32);
+  virtio_write_reg(VIRTIO_REG_QUEUE_DEVICE_LOW, (hw_ring_base + RX_VIRTQ_USED_OFF) & 4294967295);
+  virtio_write_reg(VIRTIO_REG_QUEUE_DEVICE_HIGH, (hw_ring_base + RX_VIRTQ_USED_OFF) >> 32);
+  virtio_write_reg(VIRTIO_REG_QUEUE_READY, 1);
+
+  virtio_write_reg(VIRTIO_REG_QUEUE_SEL, VIRTIO_SERIAL_TX_QUEUE);
+  virtio_write_reg(VIRTIO_REG_QUEUE_NUM, TX_COUNT);
+  virtio_write_reg(VIRTIO_REG_QUEUE_DESC_LOW, (hw_ring_base + TX_VIRTQ_DESC_OFF) & 4294967295);
+  virtio_write_reg(VIRTIO_REG_QUEUE_DESC_HIGH, (hw_ring_base + TX_VIRTQ_DESC_OFF) >> 32);
+  virtio_write_reg(VIRTIO_REG_QUEUE_DRIVER_LOW, (hw_ring_base + TX_VIRTQ_AVAIL_OFF) & 4294967295);
+  virtio_write_reg(VIRTIO_REG_QUEUE_DRIVER_HIGH, (hw_ring_base + TX_VIRTQ_AVAIL_OFF) >> 32);
+  virtio_write_reg(VIRTIO_REG_QUEUE_DEVICE_LOW, (hw_ring_base + TX_VIRTQ_USED_OFF) & 4294967295);
+  virtio_write_reg(VIRTIO_REG_QUEUE_DEVICE_HIGH, (hw_ring_base + TX_VIRTQ_USED_OFF) >> 32);
+  virtio_write_reg(VIRTIO_REG_QUEUE_READY, 1);
+
+  virtio_write_reg(VIRTIO_REG_STATUS, VIRTIO_DEVICE_STATUS_DRIVER_OK);
+  virtio_write_reg(VIRTIO_REG_INTERRUPT_ACK, VIRTIO_MMIO_IRQ_VQUEUE);
+
+  if (RX_ENABLED) {
+    rx_provide();
+  }
+
+  return 0;
+}
+
+export fun notified(1 ch)
+{
+  if (ch == IRQ_CH) {
+    handle_irq();
+    microkit_deferred_irq_ack(ch)
+    return 0;
+  }
+
+  if (ch == TX_CH) {
+    tx_provide();
+    return 0;
+  }
+
+  if (ch == RX_CH) {
+    rx_return();
+    return 0;
+  }
+
+  return 0;
+}

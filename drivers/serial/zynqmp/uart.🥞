@@ -1,0 +1,255 @@
+/*
+ * Copyright 2025, UNSW
+ * SPDX-License-Identifier: BSD-2-Clause
+ */
+ 
+#define UART_REG_BASE       pnk_mem(0)
+#define IRQ_CH              pnk_mem(1)
+#define RX_CH               pnk_mem(2)
+#define TX_CH               pnk_mem(3)
+#define SERIAL_RX_QUEUE     pnk_mem(4)
+#define SERIAL_RX_CAPACITY  pnk_mem(5)
+#define SERIAL_RX_DATA      pnk_mem(6)
+#define SERIAL_TX_QUEUE     pnk_mem(7)
+#define SERIAL_TX_CAPACITY  pnk_mem(8)
+#define SERIAL_TX_DATA      pnk_mem(9)
+
+#define RX_ENABLED          pnk_mem(1024)
+#define RX_ENABLED_PTR      pnk_mem_ptr(1024)
+#define WAITING_FOR_TX      pnk_mem(1025)
+#define WAITING_FOR_TX_PTR  pnk_mem_ptr(1025)
+
+#define ZYNQMP_UART_CR            0
+#define ZYNQMP_UART_MR            4
+#define ZYNQMP_UART_IER           8
+#define ZYNQMP_UART_IDR           12
+#define ZYNQMP_UART_IMR           16
+#define ZYNQMP_UART_ISR           20
+#define ZYNQMP_UART_BAUDGEN       24
+#define ZYNQMP_UART_RXTOUT        28
+#define ZYNQMP_UART_RXWM          32
+#define ZYNQMP_UART_MODEMCR       36
+#define ZYNQMP_UART_MODEMSR       40
+#define ZYNQMP_UART_SR            44
+#define ZYNQMP_UART_FIFO          48
+#define ZYNQMP_UART_BAUDDIV       52
+
+#define ZYNQMP_UART_CHANNEL_STS_RXEMPTY  2
+#define ZYNQMP_UART_CHANNEL_STS_RXFULL   4
+#define ZYNQMP_UART_CHANNEL_STS_TXEMPTY  8
+#define ZYNQMP_UART_CHANNEL_STS_TXFULL   16
+#define ZYNQMP_UART_CHANNEL_STS_TXACTIVE 2048
+#define ZYNQMP_UART_CHANNEL_STS_TXNFULL  16384
+
+#define ZYNQMP_UART_CR_TX_EN         16
+#define ZYNQMP_UART_CR_TX_DIS        32
+#define ZYNQMP_UART_CR_TX_RST        2
+#define ZYNQMP_UART_CR_RX_EN         4
+#define ZYNQMP_UART_CR_RX_DIS        8
+#define ZYNQMP_UART_CR_RX_RST        1
+#define ZYNQMP_UART_IXR_TXEMPTY      8
+#define ZYNQMP_UART_IXR_RXOVR        1
+#define ZYNQMP_UART_IXR_MASK         8191
+
+fun uart_read_sr()
+{
+  var reg_addr = UART_REG_BASE + ZYNQMP_UART_SR;
+  var sr = 0;
+  !ld32 sr, reg_addr;
+  return sr;
+}
+
+fun uart_read_isr()
+{
+  var reg_addr = UART_REG_BASE + ZYNQMP_UART_ISR;
+  var isr = 0;
+  !ld32 isr, reg_addr;
+  return isr;
+}
+
+fun uart_write_isr(1 val)
+{
+  var reg_addr = UART_REG_BASE + ZYNQMP_UART_ISR;
+  !st32 reg_addr, val;
+  return 0;
+}
+
+fun uart_write_ier(1 val)
+{
+  var reg_addr = UART_REG_BASE + ZYNQMP_UART_IER;
+  !st32 reg_addr, val;
+  return 0;
+}
+
+fun uart_write_idr(1 val)
+{
+  var reg_addr = UART_REG_BASE + ZYNQMP_UART_IDR;
+  !st32 reg_addr, val;
+  return 0;
+}
+
+fun uart_read_char()
+{
+  var reg_addr = UART_REG_BASE + ZYNQMP_UART_FIFO;
+  var c = 0;
+  !ld32 c, reg_addr;
+  return (c & 255);
+}
+
+fun uart_write_char(1 c)
+{
+  var reg_addr = UART_REG_BASE + ZYNQMP_UART_FIFO;
+  !st32 reg_addr, c;
+  return 0;
+}
+
+fun tx_provide()
+{
+  var waiting = WAITING_FOR_TX;
+  if (waiting) {
+    return 0;
+  }
+
+  var transferred = 0;
+  var tx_queue = SERIAL_TX_QUEUE;
+  var tx_capacity = SERIAL_TX_CAPACITY; 
+  var tx_data = SERIAL_TX_DATA;
+  
+  var 1 sr = uart_read_sr();
+  var tx_fifo_full = sr & ZYNQMP_UART_CHANNEL_STS_TXNFULL;
+  var 1 queue_empty = serial_queue_is_empty(tx_queue);
+
+  while (!tx_fifo_full & !queue_empty) {
+    var 1 c = serial_queue_dequeue_char(tx_queue, tx_capacity, tx_data);
+    uart_write_char(c);
+    transferred = 1;
+    
+    sr = uart_read_sr();
+    tx_fifo_full = sr & ZYNQMP_UART_CHANNEL_STS_TXNFULL;
+    queue_empty = serial_queue_is_empty(tx_queue);
+  }
+
+  if (transferred) {
+    uart_write_isr(ZYNQMP_UART_IXR_TXEMPTY);
+  }
+  sr = uart_read_sr();
+  tx_fifo_full = sr & ZYNQMP_UART_CHANNEL_STS_TXNFULL;
+  if (tx_fifo_full) {
+    queue_empty = serial_queue_is_empty(tx_queue);
+    if (!queue_empty) {
+      uart_write_ier(ZYNQMP_UART_IXR_TXEMPTY);
+      var waiting_ptr = WAITING_FOR_TX_PTR;
+      !st32 waiting_ptr, 1;
+    }
+  }
+
+  if (transferred) {
+    var 1 requires_signal = serial_queue_require_signal(tx_queue);
+    if (requires_signal) {
+      serial_queue_cancel_signal(tx_queue);
+      var tx_ch = TX_CH;
+      microkit_notify(tx_ch)
+    }
+  }
+
+  return 0;
+}
+
+fun rx_return()
+{
+  var rx_enabled = RX_ENABLED;
+  if (!rx_enabled) {
+    return 0;
+  }
+
+  var reprocess = 1;
+  var enqueued = 0;
+
+  var rx_queue = SERIAL_RX_QUEUE;
+  var rx_capacity = SERIAL_RX_CAPACITY;
+  var rx_data = SERIAL_RX_DATA;
+  
+  while (reprocess) {
+    var 1 sr = uart_read_sr();
+    var rx_empty = sr & ZYNQMP_UART_CHANNEL_STS_RXEMPTY;
+    var 1 queue_full = serial_queue_is_full(rx_queue, rx_capacity);
+    
+    while (!rx_empty & !queue_full) {
+      var 1 c = uart_read_char();
+      serial_queue_enqueue_char(rx_queue, rx_capacity, rx_data, c);
+      enqueued = 1;
+      
+      sr = uart_read_sr();
+      rx_empty = sr & ZYNQMP_UART_CHANNEL_STS_RXEMPTY;
+      queue_full = serial_queue_is_full(rx_queue, rx_capacity);
+    }
+
+    sr = uart_read_sr();
+    rx_empty = sr & ZYNQMP_UART_CHANNEL_STS_RXEMPTY;
+    queue_full = serial_queue_is_full(rx_queue, rx_capacity);
+    
+    if (!rx_empty & queue_full) {
+      serial_queue_request_signal(rx_queue);
+    }
+    
+    reprocess = 0;
+
+    if (!rx_empty & !queue_full) {
+      serial_queue_cancel_signal(rx_queue);
+      reprocess = 1;
+    }
+  }
+
+  if (enqueued) {
+    var rx_ch = RX_CH;
+    microkit_notify(rx_ch)
+  }
+
+  return 0;
+}
+
+fun handle_irq()
+{
+  var 1 irq_status = uart_read_isr();
+  uart_write_isr(irq_status);
+
+  if (irq_status & ZYNQMP_UART_IXR_TXEMPTY) {
+    var waiting_ptr = WAITING_FOR_TX_PTR;
+    !st32 waiting_ptr, 0;
+    
+    uart_write_idr(ZYNQMP_UART_IXR_TXEMPTY);
+    
+    tx_provide();
+  }
+  
+  if (irq_status & ZYNQMP_UART_IXR_RXOVR) {
+    rx_return();
+  }
+
+  return 0;
+}
+
+export fun notified(1 ch)
+{
+  var irq_ch = IRQ_CH;
+  if (ch == irq_ch) {
+    handle_irq();
+    microkit_deferred_irq_ack(ch)
+    return 0;
+  }
+  
+  var tx_ch = TX_CH;
+  if (ch == tx_ch) {
+    tx_provide();
+    return 0;
+  }
+  
+  var rx_ch = RX_CH;
+  if (ch == rx_ch) {
+    rx_return();
+    return 0;
+  }
+  
+  @assert(0, 0, 0, 0);
+  return 0;
+}

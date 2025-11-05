@@ -1,0 +1,184 @@
+{
+  "metadata": {
+    "num_cores": 4,
+    "test_throughputs": [
+      10,
+      20,
+      50,
+      100,
+      200,
+      300,
+      400,
+      500,
+      600,
+      700,
+      800,
+      900,
+      1000
+    ]
+  },
+  "tests": [
+    {
+      "test_number": 1,
+      "throughput_mbps": 10,
+      "active_cores": 1,
+      "system": {
+        "total_cycles": 22986149709,
+        "pd_total_cycles": 14709178823,
+        "pd_kernel_cycles": 879724209,
+        "pd_user_cycles": 13829454614,
+        "kernel_entries": 1401074,
+        "schedules": 889498,
+        "cpu_utilization": 63.99,
+        "kernel_cpu_utilization": 3.83,
+        "user_cpu_utilization": 60.16
+      },
+      "cores": [
+        {
+          "core_id": 0,
+          "total_cycles": 22986149709,
+          "pd_total_cycles": 14709178823,
+          "pd_kernel_cycles": 879724209,
+          "pd_user_cycles": 13829454614,
+          "kernel_entries": 1401074,
+          "schedules": 889498,
+          "cpu_utilization": 63.99,
+          "kernel_cpu_utilization": 3.83,
+          "user_cpu_utilization": 60.16,
+          "protection_domains": [
+            {
+              "name": "serial_driver",
+              "total_cycles": 28843,
+              "kernel_cycles": 2962,
+              "user_cycles": 25881,
+              "kernel_entries": 2,
+              "schedules": 2,
+              "cpu_utilization": 0.0,
+              "kernel_cpu_utilization": 0.0,
+              "user_cpu_utilization": 0.0
+            },
+            {
+              "name": "serial_virt_tx",
+              "total_cycles": 13195,
+              "kernel_cycles": 4470,
+              "user_cycles": 8725,
+              "kernel_entries": 3,
+              "schedules": 2,
+              "cpu_utilization": 0.0,
+              "kernel_cpu_utilization": 0.0,
+              "user_cpu_utilization": 0.0
+            },
+            {
+              "name": "ethernet_driver",
+              "total_cycles": 4822579992,
+              "kernel_cycles": 259932110,
+              "user_cycles": 4562647882,
+              "kernel_entries": 423948,
+              "schedules": 244400,
+              "cpu_utilization": 20.98,
+              "kernel_cpu_utilization": 1.13,
+              "user_cpu_utilization": 19.85
+            },
+            {
+              "name": "net_virt_tx",
+              "total_cycles": 1553913694,
+              "kernel_cycles": 194885313,
+              "user_cycles": 1359028381,
+              "kernel_entries": 228050,
+              "schedules": 159878,
+              "cpu_utilization": 6.76,
+              "kernel_cpu_utilization": 0.85,
+              "user_cpu_utilization": 5.91
+            },
+            {
+              "name": "net_virt_rx",
+              "total_cycles": 1474298758,
+              "kernel_cycles": 221997181,
+              "user_cycles": 1252301577,
+              "kernel_entries": 343152,
+              "schedules": 211782,
+              "cpu_utilization": 6.41,
+              "kernel_cpu_utilization": 0.97,
+              "user_cpu_utilization": 5.45
+            },
+            {
+              "name": "client0",
+              "total_cycles": 3923371519,
+              "kernel_cycles": 67199016,
+              "user_cycles": 3856172503,
+              "kernel_entries": 132144,
+              "schedules": 66733,
+              "cpu_utilization": 17.07,
+              "kernel_cpu_utilization": 0.29,
+              "user_cpu_utilization": 16.78
+            },
+            {
+              "name": "client0_net_copier",
+              "total_cycles": 2919729500,
+              "kernel_cycles": 131168181,
+              "user_cycles": 2788561319,
+              "kernel_entries": 196644,
+              "schedules": 130771,
+              "cpu_utilization": 12.7,
+              "kernel_cpu_utilization": 0.57,
+              "user_cpu_utilization": 12.13
+            },
+            {
+              "name": "client1",
+              "total_cycles": 3619717,
+              "kernel_cycles": 792838,
+              "user_cycles": 2826879,
+              "kernel_entries": 1072,
+              "schedules": 1072,
+              "cpu_utilization": 0.02,
+              "kernel_cpu_utilization": 0.0,
+              "user_cpu_utilization": 0.01
+            },
+            {
+              "name": "client1_net_copier",
+              "total_cycles": 73942,
+              "kernel_cycles": 28455,
+              "user_cycles": 45487,
+              "kernel_entries": 29,
+              "schedules": 19,
+              "cpu_utilization": 0.0,
+              "kernel_cpu_utilization": 0.0,
+              "user_cpu_utilization": 0.0
+            },
+            {
+              "name": "timer_driver",
+              "total_cycles": 11549663,
+              "kernel_cycles": 3713683,
+              "user_cycles": 7835980,
+              "kernel_entries": 3586,
+              "schedules": 2739,
+              "cpu_utilization": 0.05,
+              "kernel_cpu_utilization": 0.02,
+              "user_cpu_utilization": 0.03
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "pmu_data": {
+    "L1 i-cache misses": [
+      22570841
+    ],
+    "L1 d-cache misses": [
+      68288454
+    ],
+    "L1 i-tlb misses": [
+      840556
+    ],
+    "L1 d-tlb misses": [
+      7736048
+    ],
+    "Instructions": [
+      3053786595
+    ],
+    "Branch mispredictions": [
+      27871844
+    ]
+  }
+}

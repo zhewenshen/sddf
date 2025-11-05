@@ -95,6 +95,38 @@ wget https://github.com/seL4/microkit/releases/download/2.0.1/microkit-sdk-2.0.1
 tar xf microkit-sdk-2.0.1-macos-x86-64.tar.gz
 ```
 
+## Pancake sDDF
+
+This branch includes Pancake implementations for network, serial, timer, and I2C subsystems.
+
+To get started:
+
+1. Build the CakeML compiler:
+   ```sh
+   cd cake-16bit-x64-64/cake-unverified-x64-64
+   make -j$(nproc)
+   ```
+
+2. Build the echo server with Pancake components:
+
+```sh
+export SDDF_DIR=$PWD
+cd examples/echo_server
+make -j$(nproc) MICROKIT_BOARD=qemu_virt_aarch64 \
+     MICROKIT_SDK=$SDDF_DIR/microkit-sdk-2.0.1 \
+     CAKE_COMPILER=$SDDF_DIR/cake-16bit-x64-64/cake-unverified-x64-64/cake \
+     MICROKIT_CONFIG=debug \
+     PANCAKE_NETWORK=1 \
+     PANCAKE_SERIAL=1 \
+     PANCAKE_TIMER=1 \
+     qemu
+```
+
+This compiles the echo server using Pancake for network, serial, and timer subsystems.
+
+> **N.B.** Pancake sDDF is very much work in progress. Most drivers should work fine, however there are some that are untested right now (e.g., I2C and DWMAC network drivers) and will most likely contain bugs somewhere. 😢
+
+
 ### Nix
 
 There is a Nix flake available in the repository, so you can get a development shell via:

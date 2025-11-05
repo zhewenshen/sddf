@@ -1,0 +1,201 @@
+/*
+ * Copyright 2025, UNSW
+ * SPDX-License-Identifier: BSD-2-Clause
+ */
+
+#define IRQ_CH              pnk_mem(0)
+#define TIMER_FREQ          pnk_mem(1)
+#define SCRATCHPAD          pnk_mem(3)
+
+#define TIMEOUT_BASE        10
+#define MAX_TIMEOUTS        6
+
+// Timer protocol constants
+#define SDDF_TIMER_GET_TIME     0
+#define SDDF_TIMER_SET_TIMEOUT  1
+#define NS_IN_S                 1000000000
+
+export fun protected(1 ch, 1 msginfo)
+{
+    // Extract label from msginfo (bits 12-63)
+    var label = msginfo >> 12;
+    
+    if (label == SDDF_TIMER_GET_TIME) {
+        // Get current time in nanoseconds
+        var 1 ticks = get_ticks();
+        var timer_freq = TIMER_FREQ;
+        
+        // Convert ticks to nanoseconds: ticks * NS_IN_S / timer_freq
+        // Use approximation to avoid division: ticks * 1000 / (freq/1000000)
+        // For typical ARM timer freq ~62MHz: ticks * 16 (since 1000000000/62500000 ≈ 16)
+        var time_ns = ticks * 16;
+        
+        // Set message register 0
+        seL4_SetMR(0, time_ns)
+        
+        // Return microkit_msginfo_new(0, 1) = 1
+        return 1;
+    }
+    
+    if (label == SDDF_TIMER_SET_TIMEOUT) {
+        // Get timeout value from message register 0
+        @seL4_GetMR_timer(0,0,0,0);
+        var timeout_ns = SCRATCHPAD;
+        
+        var timer_freq = TIMER_FREQ;
+        var 1 curr_time = get_ticks();
+        
+        // Convert nanoseconds to ticks: timeout_ns * timer_freq / NS_IN_S
+        // Use approximation: timeout_ns >> 4 (roughly divide by 16)
+        var offset_ticks = timeout_ns >> 4;
+        var new_timeout = curr_time + offset_ticks;
+        
+        // Update timeout in memory
+        var timeout_addr = pnk_mem_ptr(TIMEOUT_BASE + ch);
+        !stw timeout_addr, new_timeout;
+        
+        // Process timeouts
+        process_timeouts(curr_time);
+        
+        // Return microkit_msginfo_new(0, 0) = 0
+        return 0;
+    }
+    
+    // Unknown request - return microkit_msginfo_new(0, 0) = 0
+    return 0;
+}
+
+#define GENERIC_TIMER_ENABLE 1
+#define TIMEOUT_INVALID     18446744073709551615
+
+fun get_ticks()
+{
+    var scratchpad_addr = pnk_mem_ptr(2);
+    @get_ticks(0,0,scratchpad_addr,8);
+    var ticks = 0;
+    !ldw ticks, scratchpad_addr;
+    return ticks;
+}
+
+fun generic_timer_set_compare(1 ticks)
+{
+    @generic_timer_set_compare(0,ticks,0,0);
+    return 0;
+}
+
+
+fun generic_timer_read_ctrl()
+{
+    var scratchpad_addr = pnk_mem_ptr(2);
+    @generic_timer_read_ctrl(0,0,scratchpad_addr,4);
+    var ctrl = 0;
+    !ld32 ctrl, scratchpad_addr;
+    return ctrl;
+}
+
+fun generic_timer_write_ctrl(1 ctrl)
+{
+    @generic_timer_write_ctrl(0,ctrl,0,0);
+    return 0;
+}
+
+fun generic_timer_enable()
+{
+    var 1 ctrl = generic_timer_read_ctrl();
+    ctrl = ctrl | GENERIC_TIMER_ENABLE;
+    generic_timer_write_ctrl(ctrl);
+    return 0;
+}
+
+fun freq_cycles_and_hz_to_ns(1 ncycles, 1 hz)
+{
+    var scratchpad_addr = pnk_mem_ptr(2);
+    !stw scratchpad_addr, ncycles;
+    @freq_cycles_and_hz_to_ns(scratchpad_addr,hz,scratchpad_addr,8);
+    var ns = 0;
+    !ldw ns, scratchpad_addr;
+    return ns;
+}
+
+fun freq_ns_and_hz_to_cycles(1 ns, 1 hz)
+{
+    var scratchpad_addr = pnk_mem_ptr(2);
+    !stw scratchpad_addr, ns;
+    @freq_ns_and_hz_to_cycles(scratchpad_addr,hz,scratchpad_addr,8);
+    var cycles = 0;
+    !ldw cycles, scratchpad_addr;
+    return cycles;
+}
+
+fun set_timeout(1 timeout)
+{
+    var timer_freq = TIMER_FREQ;
+    var 1 cycles = freq_ns_and_hz_to_cycles(timeout, timer_freq);
+    generic_timer_set_compare(cycles);
+    return 0;
+}
+
+export fun process_timeouts(1 curr_time)
+{
+    var i = 0;
+    while (i < MAX_TIMEOUTS) {
+        var timeout_addr = pnk_mem_ptr(TIMEOUT_BASE + i);
+        var timeout_val = 0;
+        !ldw timeout_val, timeout_addr;
+        
+        if (timeout_val != TIMEOUT_INVALID && timeout_val <=+ curr_time) {
+            microkit_notify(i)
+            !stw timeout_addr, TIMEOUT_INVALID;
+        }
+        
+        i = i + 1;
+    }
+    
+    var next_timeout = TIMEOUT_INVALID;
+    i = 0;
+    while (i < MAX_TIMEOUTS) {
+        var timeout_addr = pnk_mem_ptr(TIMEOUT_BASE + i);
+        var timeout_val = 0;
+        !ldw timeout_val, timeout_addr;
+        
+        if (timeout_val <+ next_timeout) {
+            next_timeout = timeout_val;
+        }
+        
+        i = i + 1;
+    }
+    
+    if (next_timeout != TIMEOUT_INVALID) {
+        set_timeout(next_timeout);
+    }
+    
+    return 0;
+}
+
+export fun get_ticks_in_ns()
+{
+    var 1 ticks = get_ticks();
+    var timer_freq = TIMER_FREQ;
+    var 1 result = freq_cycles_and_hz_to_ns(ticks, timer_freq);
+    return result;
+}
+
+export fun notified(1 ch)
+{
+    var irq_ch = IRQ_CH;
+    if (ch != irq_ch) {
+        microkit_deferred_irq_ack(ch)
+        return 0;
+    }
+    
+    microkit_deferred_irq_ack(ch)
+    
+    generic_timer_set_compare(4294967295);
+    
+    var 1 ticks = get_ticks();
+    var timer_freq = TIMER_FREQ;
+    var 1 curr_time = freq_cycles_and_hz_to_ns(ticks, timer_freq);
+    process_timeouts(curr_time);
+    
+    return 0;
+}

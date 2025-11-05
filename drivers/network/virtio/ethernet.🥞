@@ -1,0 +1,604 @@
+/*
+ * Copyright 2025, UNSW
+ * SPDX-License-Identifier: BSD-2-Clause
+ */
+
+#define VIRTIO_REGS_BASE             pnk_mem(0)
+#define IRQ_CH                       pnk_mem(1)
+#define RX_CH                        pnk_mem(2)
+#define TX_CH                        pnk_mem(3)
+#define NET_RX_FREE                  pnk_mem(4)
+#define NET_RX_ACTIVE                pnk_mem(5)
+#define NET_RX_CAPACITY              pnk_mem(6)
+#define NET_TX_FREE                  pnk_mem(7)
+#define NET_TX_ACTIVE                pnk_mem(8)
+#define NET_TX_CAPACITY              pnk_mem(9)
+#define RX_VIRTQ_BASE                pnk_mem(11)
+#define TX_VIRTQ_BASE                pnk_mem(12)
+#define RX_LAST_SEEN_USED_PTR        pnk_mem(13)
+#define TX_LAST_SEEN_USED_PTR        pnk_mem(14)
+#define RX_LAST_DESC_IDX_PTR         pnk_mem(15)
+#define TX_LAST_DESC_IDX_PTR         pnk_mem(16)
+#define RX_IALLOC_PTR                pnk_mem(17)
+#define TX_IALLOC_PTR                pnk_mem(18)
+#define VIRTIO_NET_RX_HEADERS_PADDR  pnk_mem(19)
+#define VIRTIO_NET_TX_HEADERS_PADDR  pnk_mem(20)
+#define INITIALIZED_BUFFERS          pnk_mem(21)
+#define HW_RING_BUFFER_VADDR         pnk_mem(22)
+#define HW_RING_BUFFER_PADDR         pnk_mem(23)
+#define VIRTIO_NET_TX_HEADERS_VADDR  pnk_mem(24)
+
+#define VIRTIO_NET_RX_QUEUE          0
+#define VIRTIO_NET_TX_QUEUE          1
+#define VIRTIO_MMIO_IRQ_VQUEUE       1
+#define VIRTIO_MMIO_IRQ_CONFIG       2
+#define VIRTQ_DESC_F_NEXT            1
+#define VIRTQ_DESC_F_WRITE           2
+#define NET_BUFFER_SIZE              2048
+#define VIRTIO_NET_HDR_SIZE          10
+
+#define RX_COUNT                     512
+#define TX_COUNT                     512
+#define HW_RING_SIZE                 65536
+
+#define VIRTIO_DEVICE_STATUS_ACKNOWLEDGE  1
+#define VIRTIO_DEVICE_STATUS_DRIVER       2
+#define VIRTIO_DEVICE_STATUS_DRIVER_OK    4
+#define VIRTIO_DEVICE_STATUS_FEATURES_OK  8
+
+#define VIRTIO_NET_F_MAC             32
+#define VIRTIO_F_VERSION_1           4294967296
+
+#define VIRTIO_DEVICE_ID_NET         1
+#define VIRTIO_VERSION               2
+
+#define MAGIC_VALUE_OFFSET           0
+#define VERSION_OFFSET               4
+#define DEVICE_ID_OFFSET             8
+#define DEVICE_FEATURES_OFFSET       16
+#define DEVICE_FEATURES_SEL_OFFSET   20
+#define DRIVER_FEATURES_OFFSET       32
+#define DRIVER_FEATURES_SEL_OFFSET 36
+#define QUEUE_SEL_OFFSET        48
+#define QUEUE_NUM_MAX_OFFSET    52
+#define QUEUE_NUM_OFFSET        56
+#define QUEUE_READY_OFFSET      68
+#define QUEUE_NOTIFY_OFFSET     80
+#define INTERRUPT_STATUS_OFFSET 96
+#define INTERRUPT_ACK_OFFSET    100
+#define STATUS_OFFSET           112
+#define QUEUE_DESC_LOW_OFFSET   128
+#define QUEUE_DESC_HIGH_OFFSET  132
+#define QUEUE_DRIVER_LOW_OFFSET 144
+#define QUEUE_DRIVER_HIGH_OFFSET 148
+#define QUEUE_DEVICE_LOW_OFFSET 160
+#define QUEUE_DEVICE_HIGH_OFFSET 164
+#define CONFIG_OFFSET           256
+
+#define VIRTQ_NUM_OFFSET        0
+#define VIRTQ_DESC_OFFSET       8
+#define VIRTQ_AVAIL_OFFSET      16
+#define VIRTQ_USED_OFFSET       24
+
+#define VIRTQ_DESC_ADDR_OFFSET  0
+#define VIRTQ_DESC_LEN_OFFSET   8
+#define VIRTQ_DESC_FLAGS_OFFSET 12
+#define VIRTQ_DESC_NEXT_OFFSET  14
+#define VIRTQ_DESC_SIZE         16
+
+#define VIRTQ_AVAIL_FLAGS_OFFSET 0
+#define VIRTQ_AVAIL_IDX_OFFSET   2
+#define VIRTQ_AVAIL_RING_OFFSET  4
+
+#define VIRTQ_USED_FLAGS_OFFSET  0
+#define VIRTQ_USED_IDX_OFFSET    2
+#define VIRTQ_USED_RING_OFFSET   4
+
+#define VIRTQ_USED_ELEM_ID_OFFSET  0
+#define VIRTQ_USED_ELEM_LEN_OFFSET 4
+#define VIRTQ_USED_ELEM_SIZE       8
+
+#define IALLOC_IDXLIST_OFFSET   0
+#define IALLOC_HEAD_OFFSET      8
+#define IALLOC_TAIL_OFFSET      12
+#define IALLOC_NUM_FREE_OFFSET  16
+#define IALLOC_OFFSET_OFFSET    20
+#define IALLOC_SIZE_OFFSET      24
+
+
+fun virtio_avail_full_rx()
+{
+  var rx_last_desc_idx_ptr = RX_LAST_DESC_IDX_PTR;
+  var rx_last_desc_idx = 0;
+  !ld32 rx_last_desc_idx, rx_last_desc_idx_ptr;
+
+  var rx_virtq = RX_VIRTQ_BASE;
+  var virtq_num = 0;
+  !ld16 virtq_num, rx_virtq + VIRTQ_NUM_OFFSET;
+  var full = (rx_last_desc_idx >= virtq_num);
+  return full;
+}
+
+fun virtio_avail_full_tx()
+{
+  var tx_last_desc_idx_ptr = TX_LAST_DESC_IDX_PTR;
+  var tx_last_desc_idx = 0;
+  !ld32 tx_last_desc_idx, tx_last_desc_idx_ptr;
+
+  var tx_virtq = TX_VIRTQ_BASE;
+  var virtq_num = 0;
+  !ld16 virtq_num, tx_virtq + VIRTQ_NUM_OFFSET;
+
+  var full = (tx_last_desc_idx >= virtq_num);
+  return full;
+}
+
+fun ialloc_alloc(1 ialloc_ptr)
+{
+  var num_free_ptr = ialloc_ptr + IALLOC_NUM_FREE_OFFSET;
+  var num_free = 0;
+  !ld32 num_free, num_free_ptr;
+
+  if (num_free == 0) {
+    return -1;
+  }
+
+  var head_ptr = ialloc_ptr + IALLOC_HEAD_OFFSET;
+  var offset_ptr = ialloc_ptr + IALLOC_OFFSET_OFFSET;
+  var idxlist_ptr = 0;
+  var head = 0;
+  var offset = 0;
+
+  !ld32 head, head_ptr;
+  !ld32 offset, offset_ptr;
+  !ldw idxlist_ptr, ialloc_ptr + IALLOC_IDXLIST_OFFSET;
+
+  var allocated_id = head + offset;
+
+  var next_head = 0;
+  !ld32 next_head, idxlist_ptr + head * 4;
+  !st32 head_ptr, next_head;
+
+  !st32 idxlist_ptr + (allocated_id - offset) * 4, -1;
+
+  num_free = num_free - 1;
+  !st32 num_free_ptr, num_free;
+
+  return allocated_id;
+}
+
+fun ialloc_free(1 ialloc_ptr, 1 id)
+{
+  var size_ptr = ialloc_ptr + IALLOC_SIZE_OFFSET;
+  var offset_ptr = ialloc_ptr + IALLOC_OFFSET_OFFSET;
+  var num_free_ptr = ialloc_ptr + IALLOC_NUM_FREE_OFFSET;
+  var size = 0;
+  var offset = 0;
+  var num_free = 0;
+
+  !ld32 size, size_ptr;
+  !ld32 offset, offset_ptr;
+  !ld32 num_free, num_free_ptr;
+
+  if (id >= (size + offset)) { return -1; }
+  if (id < offset) { return -1; }
+
+  var idxlist_ptr = 0;
+  !ldw idxlist_ptr, ialloc_ptr + IALLOC_IDXLIST_OFFSET;
+  var idx_val = 0;
+  !ld32 idx_val, idxlist_ptr + (id - offset) * 4;
+  if (idx_val != 4294967295) {
+    return -1;
+  }
+
+  var tail_ptr = ialloc_ptr + IALLOC_TAIL_OFFSET;
+  var head_ptr = ialloc_ptr + IALLOC_HEAD_OFFSET;
+
+  if (num_free == 0) {
+    var idx_no_offset = id - offset;
+    !st32 head_ptr, idx_no_offset;
+    !st32 tail_ptr, idx_no_offset;
+  } else {
+    var tail = 0;
+    !ld32 tail, tail_ptr;
+    var idx_no_offset = id - offset;
+    !st32 idxlist_ptr + tail * 4, idx_no_offset;
+    !st32 tail_ptr, idx_no_offset;
+  }
+
+  num_free = num_free + 1;
+  !st32 num_free_ptr, num_free;
+
+  return 0;
+}
+
+fun rx_provide()
+{
+
+  var rx_free = NET_RX_FREE;
+  var rx_capacity = NET_RX_CAPACITY;
+
+  if (rx_free == 0) { return 0; }
+  if (rx_capacity == 0) { return 0; }
+  var 1 queue_empty = net_queue_empty(rx_free, rx_capacity);
+
+  if (queue_empty && (INITIALIZED_BUFFERS == 0)) {
+    return 0;
+  }
+
+  var transferred = false;
+  var reprocess = true;
+
+  while (reprocess)
+  {
+    while (true)
+    {
+      var 1 avail_full = virtio_avail_full_rx();
+      if (avail_full) { break; }
+      var 1 queue_empty = net_queue_empty(rx_free, rx_capacity);
+      if (queue_empty) { break; }
+
+      var {1,1} buffer = net_dequeue(rx_free, rx_capacity);
+      var io_addr = buffer.0;
+
+      var rx_ialloc = RX_IALLOC_PTR;
+      var 1 hdr_desc_idx = ialloc_alloc(rx_ialloc);
+      if (hdr_desc_idx == -1) {
+        break;
+      }
+
+      var 1 pkt_desc_idx = ialloc_alloc(rx_ialloc);
+
+      if (pkt_desc_idx == -1) {
+        ialloc_free(rx_ialloc, hdr_desc_idx);
+        break;
+      }
+
+      var rx_virtq = RX_VIRTQ_BASE;
+      var virtq_num = 0;
+      !ld16 virtq_num, rx_virtq + VIRTQ_NUM_OFFSET;
+
+      var virtq_desc_ptr = 0;
+      var virtq_avail_ptr = 0;
+      !ldw virtq_desc_ptr, rx_virtq + VIRTQ_DESC_OFFSET;
+      !ldw virtq_avail_ptr, rx_virtq + VIRTQ_AVAIL_OFFSET;
+
+      var hdr_desc_addr = virtq_desc_ptr + hdr_desc_idx * VIRTQ_DESC_SIZE;
+      var hdr_phys_addr = VIRTIO_NET_RX_HEADERS_PADDR + hdr_desc_idx * VIRTIO_NET_HDR_SIZE;
+      !stw hdr_desc_addr + VIRTQ_DESC_ADDR_OFFSET, hdr_phys_addr;
+      !st32 hdr_desc_addr + VIRTQ_DESC_LEN_OFFSET, VIRTIO_NET_HDR_SIZE;
+      !st16 hdr_desc_addr + VIRTQ_DESC_FLAGS_OFFSET, (VIRTQ_DESC_F_NEXT | VIRTQ_DESC_F_WRITE);
+      !st16 hdr_desc_addr + VIRTQ_DESC_NEXT_OFFSET, pkt_desc_idx;
+      var pkt_desc_addr = virtq_desc_ptr + pkt_desc_idx * VIRTQ_DESC_SIZE;
+      !stw pkt_desc_addr + VIRTQ_DESC_ADDR_OFFSET, io_addr;
+      !st32 pkt_desc_addr + VIRTQ_DESC_LEN_OFFSET, NET_BUFFER_SIZE;
+      !st16 pkt_desc_addr + VIRTQ_DESC_FLAGS_OFFSET, VIRTQ_DESC_F_WRITE;
+      var avail_idx = 0;
+      !ld16 avail_idx, virtq_avail_ptr + VIRTQ_AVAIL_IDX_OFFSET;
+      var virtq_num = 0;
+      !ld16 virtq_num, rx_virtq + VIRTQ_NUM_OFFSET;
+      var ring_idx = avail_idx & (virtq_num - 1);
+      var ring_entry_addr = virtq_avail_ptr + VIRTQ_AVAIL_RING_OFFSET + ring_idx * 2;
+      !st16 ring_entry_addr, hdr_desc_idx;
+      avail_idx = avail_idx + 1;
+      !st16 virtq_avail_ptr + VIRTQ_AVAIL_IDX_OFFSET, avail_idx;
+      var rx_last_desc_idx_ptr = RX_LAST_DESC_IDX_PTR;
+      var rx_last_desc_idx = 0;
+      !ld32 rx_last_desc_idx, rx_last_desc_idx_ptr;
+      rx_last_desc_idx = rx_last_desc_idx + 2;
+      !st32 rx_last_desc_idx_ptr, rx_last_desc_idx;
+
+      transferred = true;
+    }
+
+    net_request_signal(rx_free, rx_capacity);
+    reprocess = false;
+
+    var 1 queue_empty = net_queue_empty(rx_free, rx_capacity);
+    var 1 avail_full = virtio_avail_full_rx();
+    if ((queue_empty == 0) && (avail_full == 0)) {
+      net_cancel_signal(rx_free);
+      reprocess = true;
+    }
+  }
+
+  if (transferred) {
+    THREAD_MEMORY_RELEASE()
+    var regs_base = VIRTIO_REGS_BASE;
+    var queue_notify_addr = regs_base + QUEUE_NOTIFY_OFFSET;
+    !st32 queue_notify_addr, VIRTIO_NET_RX_QUEUE;
+  }
+
+  return 0;
+}
+
+fun tx_provide()
+{
+
+  var tx_active = NET_TX_ACTIVE;
+  var tx_capacity = NET_TX_CAPACITY;
+
+  if (tx_active == 0) { return 0; }
+  if (tx_capacity == 0) { return 0; }
+  var 1 queue_empty = net_queue_empty(tx_active, tx_capacity);
+
+  var reprocess = true;
+  var packets_transferred = false;
+
+  while (reprocess)
+  {
+    while (true)
+    {
+      var 1 avail_full = virtio_avail_full_tx();
+      if (avail_full) { break; }
+      var 1 queue_empty = net_queue_empty(tx_active, tx_capacity);
+      if (queue_empty) { break; }
+
+      var {1,1} buffer = net_dequeue(tx_active, tx_capacity);
+      var io_addr = buffer.0;
+      var len = buffer.1;
+      var tx_ialloc = TX_IALLOC_PTR;
+      var 1 hdr_desc_idx = ialloc_alloc(tx_ialloc);
+      if (hdr_desc_idx == -1) {
+        break;
+      }
+
+      var 1 pkt_desc_idx = ialloc_alloc(tx_ialloc);
+      if (pkt_desc_idx == -1) {
+        ialloc_free(tx_ialloc, hdr_desc_idx);
+        break;
+      }
+      var tx_virtq = TX_VIRTQ_BASE;
+      var virtq_num = 0;
+      !ld16 virtq_num, tx_virtq + VIRTQ_NUM_OFFSET;
+
+      var virtq_desc_ptr = 0;
+      var virtq_avail_ptr = 0;
+      !ldw virtq_desc_ptr, tx_virtq + VIRTQ_DESC_OFFSET;
+      !ldw virtq_avail_ptr, tx_virtq + VIRTQ_AVAIL_OFFSET;
+      var tx_headers_vaddr = VIRTIO_NET_TX_HEADERS_VADDR;
+      var hdr_vaddr = tx_headers_vaddr + hdr_desc_idx * VIRTIO_NET_HDR_SIZE;
+      !st8 hdr_vaddr + 0, 0;
+      !st8 hdr_vaddr + 1, 0;
+      !st16 hdr_vaddr + 2, 0;
+      !st16 hdr_vaddr + 4, 0;
+      !st16 hdr_vaddr + 6, 0;
+      !st16 hdr_vaddr + 8, 0;
+
+      var hdr_desc_addr = virtq_desc_ptr + hdr_desc_idx * VIRTQ_DESC_SIZE;
+      var hdr_phys_addr = VIRTIO_NET_TX_HEADERS_PADDR + hdr_desc_idx * VIRTIO_NET_HDR_SIZE;
+      !stw hdr_desc_addr + VIRTQ_DESC_ADDR_OFFSET, hdr_phys_addr;
+      !st32 hdr_desc_addr + VIRTQ_DESC_LEN_OFFSET, VIRTIO_NET_HDR_SIZE;
+      !st16 hdr_desc_addr + VIRTQ_DESC_FLAGS_OFFSET, VIRTQ_DESC_F_NEXT;
+      !st16 hdr_desc_addr + VIRTQ_DESC_NEXT_OFFSET, pkt_desc_idx;
+      var pkt_desc_addr = virtq_desc_ptr + pkt_desc_idx * VIRTQ_DESC_SIZE;
+      !stw pkt_desc_addr + VIRTQ_DESC_ADDR_OFFSET, io_addr;
+      !st32 pkt_desc_addr + VIRTQ_DESC_LEN_OFFSET, len;
+      !st16 pkt_desc_addr + VIRTQ_DESC_FLAGS_OFFSET, 0;
+      var avail_idx = 0;
+      !ld16 avail_idx, virtq_avail_ptr + VIRTQ_AVAIL_IDX_OFFSET;
+      var virtq_num = 0;
+      !ld16 virtq_num, tx_virtq + VIRTQ_NUM_OFFSET;
+      var ring_idx = avail_idx & (virtq_num - 1);
+      var ring_entry_addr = virtq_avail_ptr + VIRTQ_AVAIL_RING_OFFSET + ring_idx * 2;
+      !st16 ring_entry_addr, hdr_desc_idx;
+      avail_idx = avail_idx + 1;
+      !st16 virtq_avail_ptr + VIRTQ_AVAIL_IDX_OFFSET, avail_idx;
+      var tx_last_desc_idx_ptr = TX_LAST_DESC_IDX_PTR;
+      var tx_last_desc_idx = 0;
+      !ld32 tx_last_desc_idx, tx_last_desc_idx_ptr;
+      tx_last_desc_idx = tx_last_desc_idx + 2;
+      !st32 tx_last_desc_idx_ptr, tx_last_desc_idx;
+
+      packets_transferred = true;
+    }
+
+    net_request_signal(tx_active, tx_capacity);
+    reprocess = false;
+
+    var 1 avail_full = virtio_avail_full_tx();
+    var 1 queue_empty = net_queue_empty(tx_active, tx_capacity);
+    if ((avail_full == 0) && (queue_empty == 0)) {
+      net_cancel_signal(tx_active);
+      reprocess = true;
+    }
+  }
+
+  if (packets_transferred) {
+    THREAD_MEMORY_RELEASE()
+    var regs_base = VIRTIO_REGS_BASE;
+    var queue_notify_addr = regs_base + QUEUE_NOTIFY_OFFSET;
+    !st32 queue_notify_addr, VIRTIO_NET_TX_QUEUE;
+  }
+
+  return 0;
+}
+
+fun rx_return()
+{
+  var rx_active = NET_RX_ACTIVE;
+  var rx_capacity = NET_RX_CAPACITY;
+  var packets_transferred = 0;
+
+  var rx_virtq = RX_VIRTQ_BASE;
+  var rx_last_seen_used_ptr = RX_LAST_SEEN_USED_PTR;
+  var rx_last_desc_idx_ptr = RX_LAST_DESC_IDX_PTR;
+  var rx_ialloc = RX_IALLOC_PTR;
+
+  var virtq_desc_ptr = 0;
+  var virtq_used_ptr = 0;
+  !ldw virtq_desc_ptr, rx_virtq + VIRTQ_DESC_OFFSET;
+  !ldw virtq_used_ptr, rx_virtq + VIRTQ_USED_OFFSET;
+
+  var last_seen_used = 0;
+  var curr_used_idx = 0;
+  !ld16 last_seen_used, rx_last_seen_used_ptr;
+  !ld16 curr_used_idx, virtq_used_ptr + VIRTQ_USED_IDX_OFFSET;
+
+  var i = last_seen_used;
+  while (i != curr_used_idx) {
+    var virtq_num = 0;
+    !ld16 virtq_num, rx_virtq + VIRTQ_NUM_OFFSET;
+    var ring_idx = i & (virtq_num - 1);
+
+    var used_elem_addr = virtq_used_ptr + VIRTQ_USED_RING_OFFSET + ring_idx * VIRTQ_USED_ELEM_SIZE;
+    var hdr_desc_id = 0;
+    !ld32 hdr_desc_id, used_elem_addr + VIRTQ_USED_ELEM_ID_OFFSET;
+
+    var hdr_desc_addr = virtq_desc_ptr + hdr_desc_id * VIRTQ_DESC_SIZE;
+    var pkt_desc_id = 0;
+    !ld16 pkt_desc_id, hdr_desc_addr + VIRTQ_DESC_NEXT_OFFSET;
+
+    var pkt_desc_addr = virtq_desc_ptr + pkt_desc_id * VIRTQ_DESC_SIZE;
+    var pkt_addr = 0;
+    var pkt_len = 0;
+    !ldw pkt_addr, pkt_desc_addr + VIRTQ_DESC_ADDR_OFFSET;
+    !ld32 pkt_len, pkt_desc_addr + VIRTQ_DESC_LEN_OFFSET;
+
+    net_enqueue(rx_active, pkt_addr, pkt_len, rx_capacity);
+    ialloc_free(rx_ialloc, hdr_desc_id);
+    ialloc_free(rx_ialloc, pkt_desc_id);
+
+    var rx_last_desc_idx = 0;
+    !ld32 rx_last_desc_idx, rx_last_desc_idx_ptr;
+    rx_last_desc_idx = rx_last_desc_idx - 2;
+    !st32 rx_last_desc_idx_ptr, rx_last_desc_idx;
+
+    i = i + 1;
+    packets_transferred = packets_transferred + 1;
+  }
+
+  !st16 rx_last_seen_used_ptr, curr_used_idx;
+
+  if (packets_transferred > 0) {
+    var 1 to_signal = net_require_signal(rx_active, rx_capacity);
+    if (to_signal) {
+      net_cancel_signal(rx_active);
+      microkit_notify(RX_CH)
+    }
+  }
+  return 0;
+}
+
+fun tx_return()
+{
+  var tx_free = NET_TX_FREE;
+  var tx_capacity = NET_TX_CAPACITY;
+  var packets_transferred = 0;
+
+  var tx_virtq = TX_VIRTQ_BASE;
+  var tx_last_seen_used_ptr = TX_LAST_SEEN_USED_PTR;
+  var tx_last_desc_idx_ptr = TX_LAST_DESC_IDX_PTR;
+  var tx_ialloc = TX_IALLOC_PTR;
+
+  var virtq_desc_ptr = 0;
+  var virtq_used_ptr = 0;
+  !ldw virtq_desc_ptr, tx_virtq + VIRTQ_DESC_OFFSET;
+  !ldw virtq_used_ptr, tx_virtq + VIRTQ_USED_OFFSET;
+
+  var last_seen_used = 0;
+  var curr_used_idx = 0;
+  !ld16 last_seen_used, tx_last_seen_used_ptr;
+  !ld16 curr_used_idx, virtq_used_ptr + VIRTQ_USED_IDX_OFFSET;
+
+  var i = last_seen_used;
+  while (i != curr_used_idx) {
+    var virtq_num = 0;
+    !ld16 virtq_num, tx_virtq + VIRTQ_NUM_OFFSET;
+    var ring_idx = i & (virtq_num - 1);
+
+    var used_elem_addr = virtq_used_ptr + VIRTQ_USED_RING_OFFSET + ring_idx * VIRTQ_USED_ELEM_SIZE;
+    var hdr_desc_id = 0;
+    !ld32 hdr_desc_id, used_elem_addr + VIRTQ_USED_ELEM_ID_OFFSET;
+
+    var hdr_desc_addr = virtq_desc_ptr + hdr_desc_id * VIRTQ_DESC_SIZE;
+    var pkt_desc_id = 0;
+    !ld16 pkt_desc_id, hdr_desc_addr + VIRTQ_DESC_NEXT_OFFSET;
+
+    var pkt_desc_addr = virtq_desc_ptr + pkt_desc_id * VIRTQ_DESC_SIZE;
+    var pkt_addr = 0;
+    !ldw pkt_addr, pkt_desc_addr + VIRTQ_DESC_ADDR_OFFSET;
+
+    net_enqueue(tx_free, pkt_addr, 0, tx_capacity);
+    ialloc_free(tx_ialloc, hdr_desc_id);
+    ialloc_free(tx_ialloc, pkt_desc_id);
+
+    var tx_last_desc_idx = 0;
+    !ld32 tx_last_desc_idx, tx_last_desc_idx_ptr;
+    tx_last_desc_idx = tx_last_desc_idx - 2;
+    !st32 tx_last_desc_idx_ptr, tx_last_desc_idx;
+
+    i = i + 1;
+    packets_transferred = packets_transferred + 1;
+  }
+
+  !st16 tx_last_seen_used_ptr, curr_used_idx;
+
+  if (packets_transferred > 0) {
+    var 1 to_signal = net_require_signal(tx_free, tx_capacity);
+    if (to_signal) {
+      net_cancel_signal(tx_free);
+      microkit_notify(TX_CH)
+    }
+  }
+  return 0;
+}
+
+fun main() {
+  rx_provide();
+  tx_provide();
+
+  return 0;
+}
+
+
+fun handle_irq()
+{
+
+  var regs_base = VIRTIO_REGS_BASE;
+  var irq_status_addr = regs_base + INTERRUPT_STATUS_OFFSET;
+  var irq_ack_addr = regs_base + INTERRUPT_ACK_OFFSET;
+
+  var irq_status = 0;
+  !ld32 irq_status, irq_status_addr;
+
+  if (irq_status & VIRTIO_MMIO_IRQ_VQUEUE) {
+    !st32 irq_ack_addr, VIRTIO_MMIO_IRQ_VQUEUE;
+
+    tx_return();
+    tx_provide();
+    rx_return();
+  }
+
+  if (irq_status & VIRTIO_MMIO_IRQ_CONFIG) {
+  }
+
+  return 0;
+}
+
+export fun notified(1 ch)
+{
+
+  var irq_ch = IRQ_CH;
+  var rx_ch = RX_CH;
+  var tx_ch = TX_CH;
+
+  if (ch == irq_ch) {
+
+    handle_irq();
+    microkit_deferred_irq_ack(ch)
+  }
+  if (ch == rx_ch) {
+
+    rx_provide();
+  }
+  if (ch == tx_ch) {
+
+    tx_provide();
+  }
+  if ((ch != irq_ch) && (ch != rx_ch) && (ch != tx_ch)) {
+    debug_print(0,ch,0,123456);
+    // @assert(0,0,0,0);
+  }
+  return 0;
+}

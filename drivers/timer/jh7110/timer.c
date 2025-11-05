@@ -30,6 +30,9 @@
 
 #define CLIENT_CH_START 2
 #define MAX_TIMEOUTS 6
+#ifdef PANCAKE_TIMER
+#define TIMEOUT_BASE 10
+#endif
 
 #define STARFIVE_TIMER_MAX_TICKS UINT32_MAX
 #define STARFIVE_TIMER_MODE_CONTINUOUS 0
@@ -76,6 +79,32 @@ uint32_t timeout_timer_elapses = 0;
 /* Right now, we only service a single timeout per client.
  * This timeout array indicates when a timeout should occur,
  * indexed by client ID. */
+#ifdef PANCAKE_TIMER
+static char cml_memory[1024*20];
+extern void *cml_heap, *cml_stack, *cml_stackend;
+extern void cml_main(void);
+
+void init_pancake_mem() {
+    unsigned long cml_heap_sz = 1024*10;
+    unsigned long cml_stack_sz = 1024*10;
+    cml_heap = cml_memory;
+    cml_stack = cml_heap + cml_heap_sz;
+    cml_stackend = cml_stack + cml_stack_sz;
+}
+
+void cml_exit(int arg) {
+    microkit_dbg_puts("ERROR! We should not be getting here\n");
+}
+
+void cml_err(int arg, char* filename, char* funcname, int lineno) {
+    if (filename == NULL) {
+        microkit_dbg_puts("Memory not ready for entry. You may have not run the init code yet, or be trying to enter during an FFI call.\n");
+    }
+    cml_exit(arg);
+}
+
+// Pancake-specific functions are defined in Pancake code
+#else
 static uint64_t timeouts[MAX_TIMEOUTS];
 
 static uint64_t get_ticks_in_ns(void)
@@ -127,16 +156,20 @@ static void process_timeouts(uint64_t curr_time)
         uint64_t ticks_remainder = (ns % NS_IN_S) * STARFIVE_TIMER_TICKS_PER_SECOND / NS_IN_S;
         uint64_t num_ticks = ticks_whole_seconds + ticks_remainder;
 
-        assert(num_ticks <= STARFIVE_TIMER_MAX_TICKS);
         if (num_ticks > STARFIVE_TIMER_MAX_TICKS) {
-            sddf_dprintf("ERROR: num_ticks: 0x%lx\n", num_ticks);
+            /* truncate num_ticks to maximum timeout, will use multiple interrupts to process the requested timeout. */
+            num_ticks = STARFIVE_TIMER_MAX_TICKS;
         }
 
         timeout_regs->load = num_ticks;
         timeout_regs->enable = STARFIVE_TIMER_ENABLED;
     }
 }
+#endif
 
+#ifdef PANCAKE_TIMER
+extern void notified(microkit_channel ch);
+#else
 void notified(microkit_channel ch)
 {
     if (ch == counter_irq) {
@@ -167,7 +200,22 @@ void notified(microkit_channel ch)
 
     microkit_deferred_irq_ack(ch);
 }
+#endif
 
+#ifdef PANCAKE_TIMER
+extern uint64_t get_ticks_in_ns_pancake(void);
+extern void process_timeouts_pancake(uint64_t curr_time);
+
+// FFI function for seL4_GetMR - stores result in scratchpad slot 7
+void ffiseL4_GetMR_timer(unsigned char *c, long clen, unsigned char *a, long alen) {
+    uintptr_t *pnk_mem = (uintptr_t *) cml_heap;
+    seL4_Word value = seL4_GetMR(clen);
+    pnk_mem[7] = value; // Store in SCRATCHPAD slot
+}
+
+// Pancake version handles all protected calls
+extern seL4_MessageInfo_t protected(microkit_channel ch, microkit_msginfo msginfo);
+#else
 seL4_MessageInfo_t protected(microkit_channel ch, microkit_msginfo msginfo)
 {
     switch (microkit_msginfo_get_label(msginfo)) {
@@ -191,6 +239,7 @@ seL4_MessageInfo_t protected(microkit_channel ch, microkit_msginfo msginfo)
 
     return microkit_msginfo_new(0, 0);
 }
+#endif
 
 void init(void)
 {
@@ -203,6 +252,42 @@ void init(void)
         microkit_irq_ack(device_resources.irqs[i].id);
     }
 
+#ifdef PANCAKE_TIMER
+    init_pancake_mem();
+    
+    uintptr_t *pnk_mem = (uintptr_t *) cml_heap;
+    
+    pnk_mem[0] = device_resources.irqs[0].id;
+    pnk_mem[1] = device_resources.irqs[1].id;
+    
+    uintptr_t timer_base = (uintptr_t)device_resources.regions[0].region.vaddr;
+    pnk_mem[2] = timer_base;
+    pnk_mem[3] = timer_base + STARFIVE_TIMER_CHANNEL_REGS_SIZE * STARFIVE_TIMER_CHANNEL;
+    pnk_mem[4] = 0;
+    pnk_mem[5] = 0;
+    pnk_mem[6] = CLIENT_CH_START;
+    
+    for (int i = 0; i < MAX_TIMEOUTS; i++) {
+        pnk_mem[TIMEOUT_BASE + i] = 9223372036854775807ULL;
+    }
+    
+    counter_regs = (volatile starfive_timer_regs_t *)timer_base;
+    timeout_regs = (volatile starfive_timer_regs_t *)(timer_base
+                                                      + STARFIVE_TIMER_CHANNEL_REGS_SIZE * STARFIVE_TIMER_CHANNEL);
+    timeout_regs->enable = STARFIVE_TIMER_DISABLED;
+    timeout_regs->ctrl = STARFIVE_TIMER_MODE_CONTINUOUS;
+    timeout_regs->load = STARFIVE_TIMER_MAX_TICKS;
+    timeout_regs->intmask = STARFIVE_TIMER_INTERRUPT_UNMASKED;
+
+    counter_regs->enable = STARFIVE_TIMER_DISABLED;
+    counter_regs->ctrl = STARFIVE_TIMER_MODE_CONTINUOUS;
+    counter_regs->load = STARFIVE_TIMER_MAX_TICKS;
+    counter_regs->intmask = STARFIVE_TIMER_INTERRUPT_UNMASKED;
+
+    counter_regs->enable = STARFIVE_TIMER_ENABLED;
+    
+    cml_main();
+#else
     for (int i = 0; i < MAX_TIMEOUTS; i++) {
         timeouts[i] = UINT64_MAX;
     }
@@ -225,4 +310,5 @@ void init(void)
     counter_regs->intmask = STARFIVE_TIMER_INTERRUPT_UNMASKED;
 
     counter_regs->enable = STARFIVE_TIMER_ENABLED;
+#endif
 }

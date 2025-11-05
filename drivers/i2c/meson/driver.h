@@ -24,6 +24,17 @@ enum data_direction {
 
 // Driver state
 typedef struct _i2c_ifState {
+#ifdef PANCAKE_I2C
+    /* to avoid bit-shift operations, we try to use word size variables when possible in Pancake */
+    uint64_t curr_data;          /* Pointer to current request/response being handled */
+    uint64_t curr_request_len;   /* Number of bytes in current request (number of tokens) */
+    uint64_t curr_response_len;  /* Number of bytes in current response (only the data) and not the error tokens at the start */
+    uint64_t remaining;          /* Number of bytes remaining to dispatch in the current request.*/
+    uint64_t notified;           /* Flag indicating that there is more independent requests waiting on the queue_handle.request. */
+    uint64_t rw_remaining;       /* Number of bytes to read/write if request data offset is in the midst of a buffer. If this is zero, no read/write is in progress and we can interpret the current byte as a token.*/
+    uint64_t data_direction;     /* enum data_direction */
+    uint64_t addr;               /* I2C bus address of the current request being handled */
+#else
     /* Pointer to current request/response being handled */
     uint8_t *curr_data;
     /* Number of bytes in current request (number of tokens) */
@@ -42,6 +53,7 @@ typedef struct _i2c_ifState {
     enum data_direction data_direction;
     /* I2C bus address of the current request being handled */
     size_t addr;
+#endif
 } i2c_ifState_t;
 
 #define DATA_DIRECTION_WRITE (0x0)

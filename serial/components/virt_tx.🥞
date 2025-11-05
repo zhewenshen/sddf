@@ -1,0 +1,320 @@
+#define CONFIG_DRIVER_ID pnk_mem(0)
+
+// Memory layout
+#define DRV_QUEUE_BASE      10
+#define CLI_QUEUE_BASE      20
+#define CLI_CONN_ID_BASE    50
+#define TX_PENDING_HEAD     60
+#define TX_PENDING_TAIL     61
+#define TX_PENDING_QUEUE_BASE    70
+#define TX_PENDING_CLIENTS_BASE  140
+#define COLOR_ENABLED           210
+#define COLOR_START_BASE        220
+#define COLOR_END_BASE          250
+
+fun get_conn_id(1 client) {
+    var conn_id_offset = CLI_CONN_ID_BASE + client;
+    return pnk_mem(conn_id_offset);
+}
+
+fun get_tx_pending_length() {
+    var head = pnk_mem(TX_PENDING_HEAD);
+    var tail = pnk_mem(TX_PENDING_TAIL);
+    var temp = 65 + tail - head;
+
+    while (temp >= 65) {
+        temp = temp - 65;
+    }
+
+    return temp;
+}
+
+fun serial_require_consumer_signal(1 client) {
+    return serial_require_consumer_signal_client(client, CLI_QUEUE_BASE);
+}
+
+fun serial_cancel_consumer_signal(1 client) {
+    return serial_cancel_consumer_signal_client(client, CLI_QUEUE_BASE);
+}
+
+fun tx_pending_pop() {
+    var head = pnk_mem(TX_PENDING_HEAD);
+    var queue_offset = TX_PENDING_QUEUE_BASE + head;
+    var client = pnk_mem(queue_offset);
+
+    var clients_pending_offset = TX_PENDING_CLIENTS_BASE + client;
+    var addr = pnk_mem_ptr(clients_pending_offset);
+    !st32 addr, 0;
+
+    var new_head = head + 1;
+    while (new_head >= 65) {
+        new_head = new_head - 65;
+    }
+    var head_addr = pnk_mem_ptr(TX_PENDING_HEAD);
+    !st32 head_addr, new_head;
+
+    return client;
+}
+
+fun tx_pending_push(1 client) {
+    var clients_pending_offset = TX_PENDING_CLIENTS_BASE + client;
+    var is_pending = pnk_mem(clients_pending_offset);
+    if (is_pending) {
+        return 0;
+    }
+
+    var tail = pnk_mem(TX_PENDING_TAIL);
+    var queue_offset = TX_PENDING_QUEUE_BASE + tail;
+    var addr = pnk_mem_ptr(queue_offset);
+    !st32 addr, client;
+
+    var pending_addr = pnk_mem_ptr(clients_pending_offset);
+    !st32 pending_addr, 1;
+
+    var new_tail = tail + 1;
+    while (new_tail >= 65) {
+        new_tail = new_tail - 65;
+    }
+    var tail_addr = pnk_mem_ptr(TX_PENDING_TAIL);
+    !st32 tail_addr, new_tail;
+
+    return 0;
+}
+
+fun process_tx_queue(1 client) {
+    var cli_offset = CLI_QUEUE_BASE + client * 3;
+    var cli_queue_ptr = pnk_mem(cli_offset);
+    var cli_capacity = pnk_mem(cli_offset + 1);
+    var cli_data_ptr = pnk_mem(cli_offset + 2);
+
+    var drv_queue_ptr = pnk_mem(DRV_QUEUE_BASE);
+    var drv_capacity = pnk_mem(DRV_QUEUE_BASE + 1);
+    var drv_data_ptr = pnk_mem(DRV_QUEUE_BASE + 2);
+
+    var 1 cli_empty = serial_queue_is_empty(cli_queue_ptr);
+    if (cli_empty) {
+        return 0;
+    }
+
+    var 1 cli_length = serial_queue_get_length(cli_queue_ptr);
+
+    var color_enabled = pnk_mem(COLOR_ENABLED);
+    var total_length = cli_length;
+    if (color_enabled) {
+        total_length = cli_length + 5 + 4;
+    }
+
+    var 1 drv_free = serial_queue_get_free(drv_queue_ptr, drv_capacity);
+
+    if (total_length > drv_free) {
+        tx_pending_push(client);
+        serial_queue_request_signal(drv_queue_ptr);
+        return 0;
+    }
+
+    var 1 cli_head = serial_queue_get_head(cli_queue_ptr);
+    var 1 drv_tail = serial_queue_get_tail(drv_queue_ptr);
+
+    if (color_enabled) {
+        // Transfer color start (5 bytes)
+        var color_index = client;
+        while (color_index >= 6) {
+            color_index = color_index - 6;
+        }
+        var color_start_base = COLOR_START_BASE + color_index * 5;
+
+        var byte_idx = 0;
+        while (byte_idx < 5) {
+            var color_byte = pnk_mem(color_start_base + byte_idx);
+
+            var dst_idx = drv_tail;
+            while (dst_idx >= drv_capacity) {
+                dst_idx = dst_idx - drv_capacity;
+            }
+            var dst_addr = drv_data_ptr + dst_idx;
+            !st8 dst_addr, color_byte;
+
+            drv_tail = drv_tail + 1;
+            byte_idx = byte_idx + 1;
+        }
+
+        // Transfer client data
+        var src_pos = cli_head;
+        var bytes_copied = 0;
+
+        while (bytes_copied < cli_length) {
+            var src_idx = src_pos;
+            while (src_idx >= cli_capacity) {
+                src_idx = src_idx - cli_capacity;
+            }
+            var src_addr = cli_data_ptr + src_idx;
+            var byte_val = 0;
+            !ld8 byte_val, src_addr;
+
+            var dst_idx = drv_tail;
+            while (dst_idx >= drv_capacity) {
+                dst_idx = dst_idx - drv_capacity;
+            }
+            var dst_addr = drv_data_ptr + dst_idx;
+            !st8 dst_addr, byte_val;
+
+            src_pos = src_pos + 1;
+            drv_tail = drv_tail + 1;
+            bytes_copied = bytes_copied + 1;
+        }
+
+        // Transfer color end (4 bytes)
+        byte_idx = 0;
+        while (byte_idx < 4) {
+            var color_byte = pnk_mem(COLOR_END_BASE + byte_idx);
+
+            var dst_idx = drv_tail;
+            while (dst_idx >= drv_capacity) {
+                dst_idx = dst_idx - drv_capacity;
+            }
+            var dst_addr = drv_data_ptr + dst_idx;
+            !st8 dst_addr, color_byte;
+
+            drv_tail = drv_tail + 1;
+            byte_idx = byte_idx + 1;
+        }
+
+    } else {
+        // Transfer without color support
+        var src_pos = cli_head;
+        var bytes_copied = 0;
+
+        while (bytes_copied < cli_length) {
+            var src_idx = src_pos;
+            while (src_idx >= cli_capacity) {
+                src_idx = src_idx - cli_capacity;
+            }
+            var src_addr = cli_data_ptr + src_idx;
+            var byte_val = 0;
+            !ld8 byte_val, src_addr;
+
+            var dst_idx = drv_tail;
+            while (dst_idx >= drv_capacity) {
+                dst_idx = dst_idx - drv_capacity;
+            }
+            var dst_addr = drv_data_ptr + dst_idx;
+            !st8 dst_addr, byte_val;
+
+            src_pos = src_pos + 1;
+            drv_tail = drv_tail + 1;
+            bytes_copied = bytes_copied + 1;
+        }
+    }
+
+    var new_cli_head = cli_head + cli_length;
+    serial_queue_set_head(cli_queue_ptr, new_cli_head);
+    serial_queue_set_tail(drv_queue_ptr, drv_tail);
+
+    return 1;
+}
+
+fun tx_return() {
+    var 1 num_pending_tx = get_tx_pending_length();
+    if (!num_pending_tx) {
+        return -1;
+    }
+
+    var i = 0;
+    var notify_client_arr_base = pnk_mem_ptr(501);
+    while (true) {
+        if (i == 64) { break; }
+        var curr_addr = notify_client_arr_base + i * 4;
+        !st32 curr_addr, 0;
+        i = i + 1;
+    }
+
+    var transferred = 0;
+    var req = 0;
+
+    while (true) {
+        if (req == num_pending_tx) { break; }
+
+        var 1 client = tx_pending_pop();
+        var 1 process_result = process_tx_queue(client);
+
+        var notify_addr = notify_client_arr_base + client * 4;
+        !st32 notify_addr, process_result;
+
+        if (process_result) {
+            transferred = 1;
+        }
+
+        req = req + 1;
+    }
+
+    if (transferred) {
+        sddf_notify(CONFIG_DRIVER_ID)
+    }
+
+    var client = 0;
+    while (true) {
+        if (client == 3) { break; }
+
+        var notify_addr = notify_client_arr_base + client * 4;
+        var notify_val = 0;
+        !ld32 notify_val, notify_addr;
+
+        if (notify_val) {
+            var 1 signal_required = serial_require_consumer_signal(client);
+
+            if (signal_required) {
+                serial_cancel_consumer_signal(client);
+                var 1 conn_id = get_conn_id(client);
+                sddf_notify(conn_id)
+            }
+        }
+
+        client = client + 1;
+    }
+
+    return 0;
+}
+
+fun tx_provide(1 ch) {
+    var active_client = 64;
+    var i = 0;
+    while (true) {
+        if (i == 3) { break; }
+        var 1 curr_conn_id = get_conn_id(i);
+        if (ch == curr_conn_id) {
+            active_client = i;
+            break;
+        }
+        i = i + 1;
+    }
+
+    if (active_client == 64) {
+        return -1;
+    }
+
+    var 1 transferred = process_tx_queue(active_client);
+
+    if (transferred) {
+        sddf_notify(CONFIG_DRIVER_ID)
+    }
+
+    if (transferred) {
+        var 1 signal_required = serial_require_consumer_signal(active_client);
+
+        if (signal_required) {
+            serial_cancel_consumer_signal(active_client);
+            sddf_notify(ch)
+        }
+    }
+
+    return 0;
+}
+
+export fun notified(1 ch) {
+    if (ch == CONFIG_DRIVER_ID) {
+        tx_return();
+    } else {
+        tx_provide(ch);
+    }
+    return 0;
+}

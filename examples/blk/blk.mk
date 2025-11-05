@@ -77,6 +77,7 @@ MICROKIT_TOOL ?= $(MICROKIT_SDK)/bin/microkit
 
 BOARD_DIR := $(MICROKIT_SDK)/board/$(MICROKIT_BOARD)/$(MICROKIT_CONFIG)
 ARCH := ${shell grep 'CONFIG_SEL4_ARCH  ' $(BOARD_DIR)/include/kernel/gen_config.h | cut -d' ' -f4}
+SDDF_CUSTOM_LIBC := 1
 
 IMAGES := blk_driver.elf client.elf blk_virt.elf serial_virt_tx.elf serial_driver.elf
 CFLAGS := -nostdlib \
@@ -92,9 +93,11 @@ LDFLAGS := -L$(BOARD_DIR)/lib
 LIBS := --start-group -lmicrokit -Tmicrokit.ld libsddf_util_debug.a --end-group
 
 ifeq ($(ARCH),aarch64)
-	CFLAGS += -mcpu=$(CPU) -target aarch64-none-elf
+	TARGET := aarch64-none-elf
+	CFLAGS += -mcpu=$(CPU) -target $(TARGET)
 else ifeq ($(ARCH),riscv64)
-	CFLAGS += -march=rv64imafdc -target riscv64-none-elf
+	TARGET := riscv64-none-elf
+	CFLAGS += -march=rv64imafdc -target $(TARGET)
 endif
 
 DTS := $(SDDF)/dts/$(MICROKIT_BOARD).dts
@@ -103,6 +106,7 @@ METAPROGRAM := $(TOP)/meta.py
 
 BLK_DRIVER := $(SDDF)/drivers/blk/${BLK_DRIVER_DIR}
 SERIAL_DRIVER := $(SDDF)/drivers/serial/${SERIAL_DRIVER_DIR}
+UTIL := $(SDDF)/util
 
 all: $(IMAGE_FILE)
 

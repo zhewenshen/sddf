@@ -1,0 +1,266 @@
+/*
+ * Copyright 2025, UNSW
+ * SPDX-License-Identifier: BSD-2-Clause
+ */
+
+#define UART_REG_BASE       pnk_mem(0)
+#define IRQ_CH              pnk_mem(1)
+#define RX_CH               pnk_mem(2)
+#define TX_CH               pnk_mem(3)
+#define SERIAL_RX_QUEUE     pnk_mem(4)
+#define SERIAL_RX_CAPACITY  pnk_mem(5)
+#define SERIAL_RX_DATA      pnk_mem(6)
+#define SERIAL_TX_QUEUE     pnk_mem(7)
+#define SERIAL_TX_CAPACITY  pnk_mem(8)
+#define SERIAL_TX_DATA      pnk_mem(9)
+
+#define RX_ENABLED          pnk_mem(1024)
+#define RX_ENABLED_PTR      pnk_mem_ptr(1024)
+
+#define PL011_DR            0
+#define PL011_RSR_ECR       4
+#define PL011_FR            24
+#define PL011_ILPR          32
+#define PL011_IBRD          36
+#define PL011_FBRD          40
+#define PL011_LCR_H         44
+#define PL011_TCR           48
+#define PL011_IFLS          52
+#define PL011_IMSC          56
+#define PL011_RIS           60
+#define PL011_MIS           64
+#define PL011_ICR           68
+#define PL011_DMACR         72
+
+#define PL011_DR_DATA_MASK          255
+
+#define PL011_FR_TXFE               128
+#define PL011_FR_RXFF               64
+#define PL011_FR_TXFF               32
+#define PL011_FR_RXFE               16
+#define PL011_FR_UART_BUSY          8
+
+#define PL011_LCR_WLEN_MASK         3
+#define PL011_LCR_WLEN_SHFT         5
+#define PL011_LCR_FIFO_EN           16
+#define PL011_LCR_2_STP_BITS        8
+#define PL011_LCR_PARTY_EVEN        4
+#define PL011_LCR_PARTY_EN          2
+
+#define PL011_CR_RX_EN              512
+#define PL011_CR_TX_EN              256
+#define PL011_CR_UART_EN            1
+
+#define PL011_IFLS_RX_MASK          7
+#define PL011_IFLS_RX_SHFT          3
+#define PL011_IFLS_TX_MASK          7
+#define PL011_IFLS_TX_SHFT          0
+
+#define PL011_IMSC_RX_TIMEOUT       64
+#define PL011_IMSC_TX_INT           32
+#define PL011_IMSC_RX_INT           16
+
+#define PL011_IMSC_TX_INT_MASK      4294967263
+#define PL011_IMSC_RX_TIMEOUT_RX_INT_MASK    4294967119
+
+fun uart_read_reg(1 offset)
+{
+  var reg_addr = UART_REG_BASE + offset;
+  var val = 0;
+  !ld32 val, reg_addr;
+  return val;
+}
+
+fun uart_write_reg(1 offset, 1 val)
+{
+  var reg_addr = UART_REG_BASE + offset;
+  !st32 reg_addr, val;
+  return 0;
+}
+
+fun uart_read_fr()
+{
+  return uart_read_reg(PL011_FR);
+}
+
+fun uart_read_dr()
+{
+  var 1 dr = uart_read_reg(PL011_DR);
+  return (dr & PL011_DR_DATA_MASK);
+}
+
+fun uart_write_dr(1 c)
+{
+  uart_write_reg(PL011_DR, c);
+  return 0;
+}
+
+fun uart_read_imsc()
+{
+  return uart_read_reg(PL011_IMSC);
+}
+
+fun uart_write_imsc(1 val)
+{
+  uart_write_reg(PL011_IMSC, val);
+  return 0;
+}
+
+fun uart_read_mis()
+{
+  return uart_read_reg(PL011_MIS);
+}
+
+fun tx_provide()
+{
+  var transferred = 0;
+  var tx_queue = SERIAL_TX_QUEUE;
+  var tx_capacity = SERIAL_TX_CAPACITY; 
+  var tx_data = SERIAL_TX_DATA;
+  
+  var 1 fr = uart_read_fr();
+  var tx_fifo_full = fr & PL011_FR_TXFF;
+  var 1 queue_empty = serial_queue_is_empty(tx_queue);
+
+  while (!tx_fifo_full & !queue_empty) {
+    var 1 c = serial_queue_dequeue_char(tx_queue, tx_capacity, tx_data);
+    uart_write_dr(c);
+    transferred = 1;
+    
+    fr = uart_read_fr();
+    tx_fifo_full = fr & PL011_FR_TXFF;
+    queue_empty = serial_queue_is_empty(tx_queue);
+  }
+
+  fr = uart_read_fr();
+  tx_fifo_full = fr & PL011_FR_TXFF;
+  queue_empty = serial_queue_is_empty(tx_queue);
+  
+  if (tx_fifo_full & !queue_empty) {
+    var 1 imsc = uart_read_imsc();
+    imsc = imsc | PL011_IMSC_TX_INT;
+    uart_write_imsc(imsc);
+  }
+  
+  if (!tx_fifo_full | queue_empty) {
+    var 1 imsc = uart_read_imsc();
+    imsc = imsc & PL011_IMSC_TX_INT_MASK;
+    uart_write_imsc(imsc);
+  }
+
+  if (transferred) {
+    var 1 requires_signal = serial_queue_require_signal(tx_queue);
+    if (requires_signal) {
+      serial_queue_cancel_signal(tx_queue);
+      var tx_ch = TX_CH;
+      microkit_notify(tx_ch)
+    }
+  }
+
+  return 0;
+}
+
+fun rx_return()
+{
+  var rx_enabled = RX_ENABLED;
+  if (!rx_enabled) {
+    return 0;
+  }
+
+  var reprocess = 1;
+  var enqueued = 0;
+
+  var rx_queue = SERIAL_RX_QUEUE;
+  var rx_capacity = SERIAL_RX_CAPACITY;
+  var rx_data = SERIAL_RX_DATA;
+  
+  while (reprocess) {
+    var 1 fr = uart_read_fr();
+    var rx_empty = fr & PL011_FR_RXFE;
+    var 1 queue_full = serial_queue_is_full(rx_queue, rx_capacity);
+    
+    while (!rx_empty & !queue_full) {
+      var 1 c = uart_read_dr();
+      serial_queue_enqueue_char(rx_queue, rx_capacity, rx_data, c);
+      enqueued = 1;
+      
+      fr = uart_read_fr();
+      rx_empty = fr & PL011_FR_RXFE;
+      queue_full = serial_queue_is_full(rx_queue, rx_capacity);
+    }
+
+    fr = uart_read_fr();
+    rx_empty = fr & PL011_FR_RXFE;
+    queue_full = serial_queue_is_full(rx_queue, rx_capacity);
+    
+    if (!rx_empty & queue_full) {
+      var 1 imsc = uart_read_imsc();
+      imsc = imsc & PL011_IMSC_RX_TIMEOUT_RX_INT_MASK;
+      uart_write_imsc(imsc);
+      serial_queue_request_signal(rx_queue);
+    }
+    
+    reprocess = 0;
+
+    if (!rx_empty & !queue_full) {
+      serial_queue_cancel_signal(rx_queue);
+      var 1 imsc = uart_read_imsc();
+      imsc = imsc | (PL011_IMSC_RX_TIMEOUT | PL011_IMSC_RX_INT);
+      uart_write_imsc(imsc);
+      reprocess = 1;
+    }
+  }
+
+  if (enqueued) {
+    var rx_ch = RX_CH;
+    microkit_notify(rx_ch)
+  }
+
+  return 0;
+}
+
+fun handle_irq() {
+  var 1 uart_int_reg = uart_read_mis();
+  while (uart_int_reg & (PL011_IMSC_RX_TIMEOUT | PL011_IMSC_RX_INT) || uart_int_reg & PL011_IMSC_TX_INT) {
+    var rx_enabled = RX_ENABLED;
+    if (rx_enabled && uart_int_reg & (PL011_IMSC_RX_TIMEOUT | PL011_IMSC_RX_INT)) {
+      rx_return();
+    }
+
+    if (uart_int_reg & PL011_IMSC_TX_INT) {
+        tx_provide();
+    }
+
+    uart_int_reg = uart_read_mis();
+  }
+
+  return 0;
+}
+
+export fun notified(1 ch)
+{
+  var irq_ch = IRQ_CH;
+  if (ch == irq_ch) {
+    handle_irq();
+    microkit_deferred_irq_ack(ch)
+    return 0;
+  }
+  
+  var tx_ch = TX_CH;
+  if (ch == tx_ch) {
+    tx_provide();
+    return 0;
+  }
+  
+  var rx_ch = RX_CH;
+  if (ch == rx_ch) {
+    var 1 imsc = uart_read_imsc();
+    imsc = imsc | (PL011_IMSC_RX_TIMEOUT | PL011_IMSC_RX_INT);
+    uart_write_imsc(imsc);
+    rx_return();
+    return 0;
+  }
+  
+  @assert(0, 0, 0, 0);
+  return 0;
+}

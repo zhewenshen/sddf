@@ -16,6 +16,40 @@
 #include <sddf/resources/device.h>
 #include "driver.h"
 
+// #define DEBUG_DRIVER
+
+#ifdef PANCAKE_I2C
+static char cml_memory[1024*8];
+extern void *cml_heap;
+extern void *cml_stack;
+extern void *cml_stackend;
+
+extern void cml_main(void);
+
+void cml_exit(int arg) {
+    microkit_dbg_puts("ERROR! We should not be getting here\n");
+}
+
+void cml_err(int arg) {
+    if (arg == 3) {
+        microkit_dbg_puts("Memory not ready for entry. You may have not run the init code yet, or be trying to enter during an FFI call.\n");
+    }
+    cml_exit(arg);
+}
+
+void cml_clear() {
+    microkit_dbg_puts("Trying to clear cache\n");
+}
+
+void init_pancake_mem() {
+    unsigned long cml_heap_sz = 1024*4;
+    unsigned long cml_stack_sz = 1024*4;
+    cml_heap = cml_memory;
+    cml_stack = cml_heap + cml_heap_sz;
+    cml_stackend = cml_stack + cml_stack_sz;
+}
+#endif
+
 #ifndef I2C_BUS_NUM
 #error "I2C_BUS_NUM must be defined!"
 #endif
@@ -52,9 +86,19 @@ uintptr_t gpio_regs = 0x30100000;
 volatile struct i2c_regs *regs;
 
 // Driver state for each interface
-static i2c_ifState_t i2c_ifState;
+#ifdef PANCAKE_I2C
+static i2c_ifState_t *i2c_ifState;
+i2c_queue_handle_t *queue_handle;
 
+#define STATE_PTR i2c_ifState
+#define QUEUE_PTR queue_handle
+#else
+static i2c_ifState_t i2c_ifState;
 i2c_queue_handle_t queue_handle;
+
+#define STATE_PTR (&i2c_ifState)
+#define QUEUE_PTR (&queue_handle)
+#endif
 
 char *meson_token_to_str(uint8_t token)
 {
@@ -350,10 +394,10 @@ static inline uint8_t i2c_token_convert(i2c_token_t token)
     case I2C_TOKEN_START:
         return MESON_I2C_TOKEN_START;
     case I2C_TOKEN_ADDR_WRITE:
-        i2c_ifState.data_direction = DATA_DIRECTION_WRITE;
+        STATE_PTR->data_direction = DATA_DIRECTION_WRITE;
         return MESON_I2C_TOKEN_ADDR_WRITE;
     case I2C_TOKEN_ADDR_READ:
-        i2c_ifState.data_direction = DATA_DIRECTION_READ;
+        STATE_PTR->data_direction = DATA_DIRECTION_READ;
         return MESON_I2C_TOKEN_ADDR_READ;
     case I2C_TOKEN_STOP:
         return MESON_I2C_TOKEN_STOP;
@@ -370,15 +414,19 @@ static inline uint8_t i2c_token_convert(i2c_token_t token)
 static inline void i2c_load_tokens(void)
 {
     LOG_DRIVER("starting token load\n");
-    i2c_token_t *tokens = i2c_ifState.curr_data;
-    LOG_DRIVER("Tokens remaining in this req: %zu\n", i2c_ifState.remaining);
+#ifdef PANCAKE_I2C
+    i2c_token_t *tokens = (i2c_token_t *)STATE_PTR->curr_data;
+#else
+    i2c_token_t *tokens = STATE_PTR->curr_data;
+#endif
+    LOG_DRIVER("Tokens remaining in this req: %zu\n", STATE_PTR->remaining);
 
     // Load address into address register
     // Address goes into low 7 bits of address register
     // First clear all address bits (bits 0:7 inclusive)
     regs->addr &= ~(0xff);
     // Device expects that the 7-bit address is shifted left by 1 bit
-    regs->addr |= ((i2c_ifState.addr & 0x7f) << 1);
+    regs->addr |= ((STATE_PTR->addr & 0x7f) << 1);
 
     LOG_DRIVER("regs->addr 0x%lx\n", regs->addr);
 
@@ -398,7 +446,7 @@ static inline void i2c_load_tokens(void)
     uint32_t rdata_offset = 0;
 
     // Offset into supplied buffer
-    int request_data_offset = i2c_ifState.curr_request_len - i2c_ifState.remaining;
+    int request_data_offset = STATE_PTR->curr_request_len - STATE_PTR->remaining;
 
     // basically loops all available space in the registers until one has not more room or request is finished and in the process:
     // - add meson_token equivalent to token list register
@@ -407,14 +455,14 @@ static inline void i2c_load_tokens(void)
     // It should be noted that we do not explicitly add the MESON_I2C_TOKEN_END to the token list register as
     // we have already cleared the registers and it has a value of zero.
 
-    while (tk_offset < 16 && wdata_offset < 8 && rdata_offset < 8 && request_data_offset < i2c_ifState.curr_request_len) {
+    while (tk_offset < 16 && wdata_offset < 8 && rdata_offset < 8 && request_data_offset < STATE_PTR->curr_request_len) {
         LOG_DRIVER("request_data_offset : 0x%lx, tk_offset: 0x%lx, wdata_offset: 0x%lx, rdata_offset: 0x%lx\n",
                    request_data_offset, tk_offset, wdata_offset, rdata_offset);
 
         // Discover next operation
         uint8_t meson_token;
         uint32_t data;
-        if (i2c_ifState.rw_remaining == 0) {
+        if (STATE_PTR->rw_remaining == 0) {
             LOG_DRIVER("Accepting new token...\n");
             // Get meson_token if no read/write is in progress.
             meson_token = i2c_token_convert(tokens[request_data_offset]);
@@ -426,11 +474,11 @@ static inline void i2c_load_tokens(void)
                 uint8_t buff_length = tokens[request_data_offset + 1];
 
                 // Set interface state
-                i2c_ifState.rw_remaining = buff_length;
-                i2c_ifState.data_direction = (meson_token == MESON_I2C_TOKEN_ADDR_WRITE)
+                STATE_PTR->rw_remaining = buff_length;
+                STATE_PTR->data_direction = (meson_token == MESON_I2C_TOKEN_ADDR_WRITE)
                                              ? DATA_DIRECTION_WRITE : DATA_DIRECTION_READ;
 
-                LOG_DRIVER("DD=%d    REM=%d\n", i2c_ifState.data_direction, i2c_ifState.rw_remaining);
+                LOG_DRIVER("DD=%d    REM=%d\n", STATE_PTR->data_direction, STATE_PTR->rw_remaining);
 
                 // IMPORTANT: skip buffer length byte!
                 request_data_offset++;
@@ -438,20 +486,20 @@ static inline void i2c_load_tokens(void)
 
         } else {
             LOG_DRIVER("Resuming in-progress read/write. DD=%d remaining=%d\n",
-                       i2c_ifState.data_direction, i2c_ifState.rw_remaining);
+                       STATE_PTR->data_direction, STATE_PTR->rw_remaining);
             // We are in the middle of a read or write. Pick up where we left off
-            if (i2c_ifState.rw_remaining == 1 && i2c_ifState.data_direction == DATA_DIRECTION_READ) {
+            if (STATE_PTR->rw_remaining == 1 && STATE_PTR->data_direction == DATA_DIRECTION_READ) {
                 // Write data end on last byte of a read.
                 meson_token = MESON_I2C_TOKEN_DATA_END;
                 // TODO: @mattr potential fencepost error? Seems correct to me though.
             } else {
                 meson_token = MESON_I2C_TOKEN_DATA;
             }
-            if (i2c_ifState.data_direction == DATA_DIRECTION_WRITE) {
+            if (STATE_PTR->data_direction == DATA_DIRECTION_WRITE) {
                 data = tokens[request_data_offset]; // Take next byte to write
             }
             LOG_DRIVER("DATA=%u\n", data);
-            i2c_ifState.rw_remaining--;
+            STATE_PTR->rw_remaining--;
         }
 
 
@@ -468,7 +516,7 @@ static inline void i2c_load_tokens(void)
         tk_offset++;
 
         // If data token and we are writing, load data into wbuf registers
-        if (meson_token == MESON_I2C_TOKEN_DATA && i2c_ifState.data_direction == DATA_DIRECTION_WRITE) {
+        if (meson_token == MESON_I2C_TOKEN_DATA && STATE_PTR->data_direction == DATA_DIRECTION_WRITE) {
             // the + 1 is because tokens[request_data_offset] = MESON_I2C_TOKEN_DATA but we want to store the token the come after
             if (wdata_offset < 4) {
                 regs->wdata0 |= (data << (wdata_offset * 8));
@@ -481,7 +529,7 @@ static inline void i2c_load_tokens(void)
 
         /* If data token and we are reading, increment counter of rdata */
         if ((meson_token == MESON_I2C_TOKEN_DATA || meson_token == MESON_I2C_TOKEN_DATA_END)
-            && i2c_ifState.data_direction == DATA_DIRECTION_READ) {
+            && STATE_PTR->data_direction == DATA_DIRECTION_READ) {
             rdata_offset++;
         }
 
@@ -492,9 +540,9 @@ static inline void i2c_load_tokens(void)
                request_data_offset, tk_offset, wdata_offset, rdata_offset);
 
     // Update remaining tokens indicator and start list processor
-    i2c_ifState.remaining = i2c_ifState.curr_request_len - request_data_offset;
+    STATE_PTR->remaining = STATE_PTR->curr_request_len - request_data_offset;
 
-    LOG_DRIVER("Tokens loaded. %zu remain for this request\n", i2c_ifState.remaining);
+    LOG_DRIVER("Tokens loaded. %zu remain for this request\n", STATE_PTR->remaining);
     i2c_dump();
 
     // Start list processor
@@ -513,28 +561,54 @@ void init(void)
         microkit_irq_ack(device_resources.irqs[i].id);
     }
 
+#ifdef PANCAKE_I2C
+    init_pancake_mem();
+
+    /* init_pancake_data */
+    uintptr_t *pnk_mem = (uintptr_t *) cml_heap;
+
+    /* Store constant info in Pancake memory */
+    pnk_mem[1] = device_resources.irqs[0].id;  // IRQ channel
+    pnk_mem[2] = device_resources.irqs[1].id;  // Timeout IRQ channel
+    pnk_mem[3] = config.virt.id;               // Virt channel
+
+    /* Allocate global structs in Pancake memory */
+    queue_handle = (i2c_queue_handle_t *) &pnk_mem[4];  /* 2 slots: [4],[5] */
+    i2c_ifState = (i2c_ifState_t *) &pnk_mem[6];        /* 8 slots: [6]-[13] */
+#endif
+
     regs = (volatile struct i2c_regs *)device_resources.regions[0].region.vaddr;
     i2c_setup();
+
+#ifdef PANCAKE_I2C
+    pnk_mem[0] = (uintptr_t) regs;
+    pnk_mem[21] = (uintptr_t) config.virt.data.vaddr; /* Store data region base */
+
+    *queue_handle = i2c_queue_init(config.virt.req_queue.vaddr, config.virt.resp_queue.vaddr);
+
+    cml_main();
+#else
     queue_handle = i2c_queue_init(config.virt.req_queue.vaddr, config.virt.resp_queue.vaddr);
+#endif
 
     // Set up driver state
-    i2c_ifState.curr_data = NULL;
-    i2c_ifState.curr_request_len = 0;
-    i2c_ifState.curr_response_len = 0;
-    i2c_ifState.remaining = 0;
-    i2c_ifState.notified = 0;
-    i2c_ifState.addr = 0;
+    STATE_PTR->curr_data = 0;
+    STATE_PTR->curr_request_len = 0;
+    STATE_PTR->curr_response_len = 0;
+    STATE_PTR->remaining = 0;
+    STATE_PTR->notified = 0;
+    STATE_PTR->addr = 0;
 }
 
 static inline void handle_request(void)
 {
     LOG_DRIVER("handling request\n");
-    if (!i2c_queue_empty(queue_handle.request)) {
+    if (!i2c_queue_empty(QUEUE_PTR->request)) {
         // If this interface is busy, skip notification and
         // set notified flag for later processing
-        if (i2c_ifState.curr_data) {
+        if (STATE_PTR->curr_data) {
             LOG_DRIVER("driver: request in progress, deferring notification until later\n");
-            i2c_ifState.notified = 1;
+            STATE_PTR->notified = 1;
             return;
         }
 
@@ -542,7 +616,7 @@ static inline void handle_request(void)
         size_t bus_address = 0;
         size_t offset = 0;
         unsigned int size = 0;
-        int err = i2c_dequeue_request(queue_handle, &bus_address, &offset, &size);
+        int err = i2c_dequeue_request(*QUEUE_PTR, &bus_address, &offset, &size);
         if (err) {
             LOG_DRIVER_ERR("fatal: failed to dequeue request\n");
             return;
@@ -559,17 +633,21 @@ static inline void handle_request(void)
 
         LOG_DRIVER("Loading request for bus address 0x%x of size %zu\n", bus_address, size);
 
-        i2c_ifState.curr_data = (i2c_token_t *)config.virt.data.vaddr + offset;
-        i2c_ifState.addr = bus_address;
-        i2c_ifState.curr_request_len = size;
-        i2c_ifState.remaining = size;
-        i2c_ifState.notified = 0;
+#ifdef PANCAKE_I2C
+        STATE_PTR->curr_data = (uint64_t)((i2c_token_t *)config.virt.data.vaddr + offset);
+#else
+        STATE_PTR->curr_data = (i2c_token_t *)config.virt.data.vaddr + offset;
+#endif
+        STATE_PTR->addr = bus_address;
+        STATE_PTR->curr_request_len = size;
+        STATE_PTR->remaining = size;
+        STATE_PTR->notified = 0;
 
         i2c_load_tokens();
     } else {
         LOG_DRIVER("called but no work available: resetting notified flag\n");
         // If nothing needs to be done, clear notified flag if it was set.
-        i2c_ifState.notified = 0;
+        STATE_PTR->notified = 0;
     }
 }
 
@@ -601,7 +679,11 @@ static void handle_response(void)
     // Prepare to extract data from the interface.
     // INVARIANT: request data is always smaller than returned data to allow
     //            reuse.
-    i2c_token_t *return_buffer = i2c_ifState.curr_data;
+#ifdef PANCAKE_I2C
+    i2c_token_t *return_buffer = (i2c_token_t *)STATE_PTR->curr_data;
+#else
+    i2c_token_t *return_buffer = STATE_PTR->curr_data;
+#endif
 
     // If there was an error, cancel the rest of this transaction and load the
     // error information into the return buffer.
@@ -624,7 +706,7 @@ static void handle_response(void)
 
         // Copy data into return buffer
         for (int i = 0; i < bytes_read; i++) {
-            size_t index = RESPONSE_DATA_OFFSET + i2c_ifState.curr_response_len;
+            size_t index = RESPONSE_DATA_OFFSET + STATE_PTR->curr_response_len;
             if (i < 4) {
                 uint8_t value = (regs->rdata0 >> (i * 8)) & 0xFF;
                 return_buffer[index] = value;
@@ -634,7 +716,7 @@ static void handle_response(void)
                 return_buffer[index] = value;
                 LOG_DRIVER("loading into return_buffer at %d value 0x%lx\n", index, value);
             }
-            i2c_ifState.curr_response_len++;
+            STATE_PTR->curr_response_len++;
         }
 
         LOG_DRIVER("I2C_ERR_OK\n");
@@ -644,26 +726,26 @@ static void handle_response(void)
     }
 
     // If request is completed or there was an error, return data to server and notify.
-    if (write_error || !i2c_ifState.remaining) {
+    if (write_error || !STATE_PTR->remaining) {
         LOG_DRIVER("request completed or error, hence returning response to server\n");
         LOG_DRIVER("curr_response_len : 0x%lx, curr_request_len : 0x%lx, return address is 0x%lx\n",
-                   i2c_ifState.curr_response_len, i2c_ifState.curr_request_len, i2c_ifState.addr);
-        LOG_DRIVER("enguing response with size: %d\n\n", i2c_ifState.curr_response_len + RESPONSE_DATA_OFFSET);
+                   STATE_PTR->curr_response_len, STATE_PTR->curr_request_len, STATE_PTR->addr);
+        LOG_DRIVER("enguing response with size: %d\n\n", STATE_PTR->curr_response_len + RESPONSE_DATA_OFFSET);
         // response length is + 2 (RESPONSE_DATA_OFFSET = 2) because of the error tokens at the start
-        int ret = i2c_enqueue_response(queue_handle, i2c_ifState.addr,
-                                       (size_t)i2c_ifState.curr_data - (uintptr_t)config.virt.data.vaddr,
-                                       i2c_ifState.curr_response_len + RESPONSE_DATA_OFFSET);
+        int ret = i2c_enqueue_response(*QUEUE_PTR, STATE_PTR->addr,
+                                       (size_t)STATE_PTR->curr_data - (uintptr_t)config.virt.data.vaddr,
+                                       STATE_PTR->curr_response_len + RESPONSE_DATA_OFFSET);
         if (ret) {
             LOG_DRIVER_ERR("Failed to enqueue response\n");
         }
 
         // reset driver state for another request
         // load tokens resets the interface registers so no need here
-        i2c_ifState.curr_response_len = 0;
-        i2c_ifState.curr_data = NULL;
-        i2c_ifState.curr_request_len = 0;
-        i2c_ifState.remaining = 0;
-        i2c_ifState.addr = 0;
+        STATE_PTR->curr_response_len = 0;
+        STATE_PTR->curr_data = 0;
+        STATE_PTR->curr_request_len = 0;
+        STATE_PTR->remaining = 0;
+        STATE_PTR->addr = 0;
 
         microkit_notify(config.virt.id);
 
@@ -672,15 +754,132 @@ static void handle_response(void)
 
     // If the driver was notified while this transaction was in progress, immediately start working on the next one.
     // OR if there is still more work to do in current request, crack on with it.
-    if (i2c_ifState.remaining) {
+    if (STATE_PTR->remaining) {
         LOG_DRIVER("Still work to do, starting next batch of tokens in request\n");
         i2c_load_tokens(); // results in a repeated start condition
-    } else if (i2c_ifState.notified) {
+    } else if (STATE_PTR->notified) {
         LOG_DRIVER("Was notified during transaction. Starting next client request immediately!\n");
         handle_request();
     }
 }
 
+#ifdef PANCAKE_I2C
+extern void notified(microkit_channel ch);
+
+/* FFI functions for pancake */
+void ffihandle_request(unsigned char* c, long clen, unsigned char* a, long alen) {
+    handle_request();
+}
+
+void ffihandle_response(unsigned char* c, long clen, unsigned char* a, long alen) {
+    handle_response();
+}
+
+void ffihandle_response_timeout(unsigned char* c, long clen, unsigned char* a, long alen) {
+    handle_response_timeout();
+}
+
+void ffimicrokit_dbg_puts(unsigned char* c, long clen, unsigned char* a, long alen) {
+    if (clen > 0) {
+        microkit_dbg_puts((char*)c);
+    }
+}
+
+void ffii2c_token_convert(unsigned char* c, long clen, unsigned char* a, long alen) {
+    /* Extract token from pancake memory */
+    uintptr_t *pnk_mem = (uintptr_t *) cml_heap;
+    uint8_t token = (uint8_t)pnk_mem[14];  /* Use slot 14 for token conversion */
+    uint8_t result = i2c_token_convert(token);
+    pnk_mem[15] = (uintptr_t)result;  /* Store result in slot 15 */
+}
+
+void ffii2c_load_tokens(unsigned char* c, long clen, unsigned char* a, long alen) {
+    i2c_load_tokens();
+}
+
+void ffimicrokit_notify_virt(unsigned char* c, long clen, unsigned char* a, long alen) {
+    microkit_notify(config.virt.id);
+}
+
+void ffii2c_enqueue_response(unsigned char* c, long clen, unsigned char* a, long alen) {
+    int ret = i2c_enqueue_response(*QUEUE_PTR, STATE_PTR->addr,
+                                   (size_t)STATE_PTR->curr_data - (uintptr_t)config.virt.data.vaddr,
+                                   STATE_PTR->curr_response_len + RESPONSE_DATA_OFFSET);
+    if (ret) {
+        LOG_DRIVER_ERR("Failed to enqueue response\n");
+    }
+}
+
+/* FFI function to extract a single byte from read registers */
+void ffiget_read_byte(unsigned char* c, long clen, unsigned char* a, long alen) {
+    /* Get the byte index from pancake memory */
+    uintptr_t *pnk_mem = (uintptr_t *) cml_heap;
+    uint8_t byte_index = (uint8_t)pnk_mem[25];  /* Byte index to extract */
+
+    uint8_t value = 0;
+
+    if (byte_index < 4) {
+        /* Extract from rdata0 register */
+        value = (regs->rdata0 >> (byte_index * 8)) & 0xFF;
+    } else if (byte_index < 8) {
+        /* Extract from rdata1 register */
+        value = (regs->rdata1 >> ((byte_index - 4) * 8)) & 0xFF;
+    }
+
+    /* Store the extracted value in scratch slot for return */
+    pnk_mem[26] = (uintptr_t)value;  /* Return value in slot 26 */
+}
+
+/* FFI function to handle response error checking and data extraction */
+void ffihandle_response_core(unsigned char* c, long clen, unsigned char* a, long alen) {
+    /* Get error status from control register */
+    volatile uint32_t ctl = regs->ctl;
+    bool err = ctl & (1 << 3);                /* bit 3 -> set if error */
+    uint8_t bytes_read = (ctl & 0xF00) >> 8;  /* bits 8-11 -> number of bytes to read */
+    uint8_t curr_token = (ctl & 0xF0) >> 4;   /* bits 4-7 -> curr token */
+
+    /* Get return buffer pointer */
+    i2c_token_t *return_buffer = (i2c_token_t *)STATE_PTR->curr_data;
+
+    /* Store results in pancake memory for return values */
+    uintptr_t *pnk_mem = (uintptr_t *) cml_heap;
+    pnk_mem[22] = (uintptr_t)err;         /* Store error status */
+    pnk_mem[23] = (uintptr_t)bytes_read;  /* Store bytes_read */
+    pnk_mem[24] = (uintptr_t)curr_token;  /* Store curr_token */
+
+    if (err) {
+        /* Handle error case */
+        if (curr_token == I2C_TOKEN_ADDR_READ) {
+            return_buffer[RESPONSE_ERR] = I2C_ERR_NOREAD;
+        } else {
+            return_buffer[RESPONSE_ERR] = I2C_ERR_NACK;
+        }
+        return_buffer[RESPONSE_ERR_TOKEN] = curr_token;
+    } else {
+        /* Success case - copy read data from registers to return buffer */
+        for (int i = 0; i < bytes_read; i++) {
+            size_t index = RESPONSE_DATA_OFFSET + STATE_PTR->curr_response_len;
+            uint8_t value = 0;
+
+            if (i < 4) {
+                value = (regs->rdata0 >> (i * 8)) & 0xFF;
+            } else if (i < 8) {
+                value = (regs->rdata1 >> ((i - 4) * 8)) & 0xFF;
+            }
+
+            return_buffer[index] = value;
+            STATE_PTR->curr_response_len++;
+        }
+
+        /* Set success status */
+        return_buffer[RESPONSE_ERR] = I2C_ERR_OK;
+        return_buffer[RESPONSE_ERR_TOKEN] = 0x0;
+    }
+}
+
+
+
+#else
 void notified(microkit_channel ch)
 {
     if (ch == config.virt.id) {
@@ -696,3 +895,4 @@ void notified(microkit_channel ch)
         LOG_DRIVER_ERR("unexpected notification on channel %d\n", ch);
     }
 }
+#endif

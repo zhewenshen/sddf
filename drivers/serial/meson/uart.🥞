@@ -1,0 +1,227 @@
+/*
+ * Copyright 2025, UNSW
+ * SPDX-License-Identifier: BSD-2-Clause
+ */
+#define IRQ_CH  pnk_mem(1)
+#define RX_CH   pnk_mem(2)  
+#define TX_CH   pnk_mem(3)
+
+#define SERIAL_RX_QUEUE     pnk_mem(4)
+#define SERIAL_RX_CAPACITY  pnk_mem(5)
+#define SERIAL_RX_DATA      pnk_mem(6)
+
+#define SERIAL_TX_QUEUE     pnk_mem(7)
+#define SERIAL_TX_CAPACITY  pnk_mem(8)
+#define SERIAL_TX_DATA      pnk_mem(9)
+
+#define UART_REG_BASE       pnk_mem(0)
+
+#define RX_ENABLED          pnk_mem(1024)
+
+#define WFIFO_OFFSET        0
+#define RFIFO_OFFSET        4
+#define CR_OFFSET           8
+#define SR_OFFSET           12
+
+#define AML_UART_RX_EMPTY   (1 << 20)
+#define AML_UART_TX_FULL    (1 << 21)
+#define AML_UART_TX_BUSY    (1 << 25)
+#define AML_UART_RX_BUSY    (1 << 26)
+
+#define AML_UART_RX_INT_EN  (1 << 27)
+#define AML_UART_TX_INT_EN  (1 << 28)
+#define AML_UART_CLEAR_ERR  (1 << 24)
+
+#define AML_UART_PARITY_ERR (1 << 16)
+#define AML_UART_FRAME_ERR  (1 << 17)
+#define AML_UART_TX_FIFO_WERR (1 << 18)
+#define UART_INTR_ABNORMAL  (AML_UART_PARITY_ERR | AML_UART_FRAME_ERR | AML_UART_TX_FIFO_WERR)
+
+#define AML_UART_RX_INT_EN_MASK  4160749567
+#define AML_UART_TX_INT_EN_MASK  4026531839
+
+
+fun uart_read_sr()
+{
+  var reg_addr = UART_REG_BASE + SR_OFFSET;
+  var sr = 0;
+  !ld32 sr, reg_addr;
+  return sr;
+}
+
+fun uart_read_cr()
+{
+  var reg_addr = UART_REG_BASE + CR_OFFSET;
+  var cr = 0;
+  !ld32 cr, reg_addr;
+  return cr;
+}
+
+fun uart_write_cr(1 cr)
+{
+  var reg_addr = UART_REG_BASE + CR_OFFSET;
+  !st32 reg_addr, cr;
+  return 0;
+}
+
+fun uart_read_char()
+{
+  var reg_addr = UART_REG_BASE + RFIFO_OFFSET;
+  var c = 0;
+  !ld8 c, reg_addr;
+  return c;
+}
+
+fun uart_write_char(1 c)
+{
+  var reg_addr = UART_REG_BASE + WFIFO_OFFSET;
+  !st8 reg_addr, c;
+  return 0;
+}
+
+export fun tx_provide()
+{
+  var transferred = false;
+  var tx_queue = SERIAL_TX_QUEUE;
+  var tx_capacity = SERIAL_TX_CAPACITY;
+  var tx_data = SERIAL_TX_DATA;
+
+  while (true)
+  {
+    var 1 sr = uart_read_sr();
+    if (sr & AML_UART_TX_FULL) { break; }
+
+    var 1 is_empty = serial_queue_is_empty(tx_queue);
+    if (is_empty) { break; }
+
+    var 1 c = serial_queue_dequeue_char(tx_queue, tx_capacity, tx_data);
+    uart_write_char(c);
+    transferred = true;
+  }
+
+  var 1 sr = uart_read_sr();
+  var 1 cr = uart_read_cr();
+  var 1 is_empty = serial_queue_is_empty(tx_queue);
+  
+  if ((sr & AML_UART_TX_FULL) && (!is_empty)) {
+    cr = cr | AML_UART_TX_INT_EN;
+    uart_write_cr(cr);
+  } else {
+    cr = cr & AML_UART_TX_INT_EN_MASK;
+    uart_write_cr(cr);
+  }
+
+  var 1 requires_signal = serial_queue_require_signal(tx_queue);
+  if (transferred && requires_signal) {
+    serial_queue_cancel_signal(tx_queue);
+    microkit_notify(TX_CH)
+  }
+
+  return 0;
+}
+
+fun rx_return()
+{
+  var reprocess = true;
+  var enqueued = false;
+  var rx_queue = SERIAL_RX_QUEUE;
+  var rx_capacity = SERIAL_RX_CAPACITY;
+  var rx_data = SERIAL_RX_DATA;
+
+  while (reprocess)
+  {
+    while (true)
+    {
+      var 1 sr = uart_read_sr();
+      if (sr & AML_UART_RX_EMPTY) { break; }
+
+      var 1 is_full = serial_queue_is_full(rx_queue, rx_capacity);
+      if (is_full) { break; }
+
+      var 1 c = uart_read_char();
+      serial_queue_enqueue_char(rx_queue, rx_capacity, rx_data, c);
+      enqueued = true;
+    }
+
+    var 1 sr = uart_read_sr();
+    var 1 is_full = serial_queue_is_full(rx_queue, rx_capacity);
+    
+    if ((!(sr & AML_UART_RX_EMPTY)) && is_full) {
+      var 1 cr = uart_read_cr();
+      cr = cr & AML_UART_RX_INT_EN_MASK;
+      uart_write_cr(cr);
+      serial_queue_request_signal(rx_queue);
+    }
+    
+    reprocess = false;
+
+    if ((!(sr & AML_UART_RX_EMPTY)) && (!is_full)) {
+      serial_queue_cancel_signal(rx_queue);
+      var 1 cr = uart_read_cr();
+      cr = cr | AML_UART_RX_INT_EN;
+      uart_write_cr(cr);
+      reprocess = true;
+    }
+  }
+
+  if (enqueued) {
+    microkit_notify(RX_CH)
+  }
+
+  return 0;
+}
+
+fun handle_irq()
+{
+  var 1 uart_sr = uart_read_sr();
+  var 1 uart_cr = uart_read_cr();
+
+  while ((uart_sr & UART_INTR_ABNORMAL) || (!(uart_sr & AML_UART_RX_EMPTY)) ||
+         ((uart_cr & AML_UART_TX_INT_EN) && (!(uart_sr & AML_UART_TX_FULL))))
+  {
+    if (RX_ENABLED && !(uart_sr & AML_UART_RX_EMPTY)) {
+      rx_return();
+    }
+
+    if ((uart_cr & AML_UART_TX_INT_EN) && (!(uart_sr & AML_UART_TX_FULL))) {
+      tx_provide();
+    }
+
+    if (uart_sr & UART_INTR_ABNORMAL) {
+      var 1 cr = uart_read_cr();
+      cr = cr | AML_UART_CLEAR_ERR;
+      uart_write_cr(cr);
+    }
+
+    uart_sr = uart_read_sr();
+    uart_cr = uart_read_cr();
+  }
+
+  return 0;
+}
+
+
+export fun notified(1 ch)
+{
+  if (ch == IRQ_CH) {
+    handle_irq();
+    microkit_deferred_irq_ack(ch)
+    return 0;
+  }
+
+  if (ch == TX_CH) {
+    tx_provide();
+    return 0;
+  }
+
+  if (ch == RX_CH) {
+    var 1 cr = uart_read_cr();
+    cr = cr | AML_UART_RX_INT_EN;
+    uart_write_cr(cr);
+
+    rx_return();
+    return 0;
+  }
+
+  return 0;
+}

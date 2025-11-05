@@ -1,0 +1,238 @@
+#define IRQ_CH              pnk_mem(0)
+#define TIMER_REG_BASE      pnk_mem(1)
+#define OVERFLOW_COUNT      pnk_mem(2)
+#define SCRATCHPAD          pnk_mem(3)
+#define TIMEOUT_BASE        10
+#define MAX_TIMEOUTS        6
+
+// GPT Register offsets
+#define CR_OFFSET           0
+#define PR_OFFSET           4
+#define SR_OFFSET           8
+#define IR_OFFSET           12
+#define OCR1_OFFSET         16
+#define OCR2_OFFSET         20
+#define OCR3_OFFSET         24
+#define ICR1_OFFSET         28
+#define ICR2_OFFSET         32
+#define CNT_OFFSET          36
+
+// GPT Register bit masks (hex converted to decimal)
+#define GPT_STATUS_REGISTER_CLEAR    63
+#define SR_ROLLOVER_BIT              32
+#define IR_OUTPUT_COMPARE_1          1
+#define CR_RESET_BIT                 32768
+#define CR_FREE_RUN_BIT              512
+#define CR_PERIPHERAL_CLOCK_BIT      64
+#define CR_ENABLE_BIT                1
+#define IR_ROLLOVER_INTERRUPT_BIT    32
+
+// GPT Frequency (in MHz)
+#define GPT_FREQ            12
+
+// Timeout invalid value (UINT64_MAX)
+#define TIMEOUT_INVALID     18446744073709551615
+
+// Timer protocol constants
+#define SDDF_TIMER_GET_TIME     0
+#define SDDF_TIMER_SET_TIMEOUT  1
+#define NS_IN_US                1000
+
+export fun protected(1 ch, 1 msginfo)
+{
+    // Extract label from msginfo (bits 12-63)
+    var label = msginfo >> 12;
+    
+    if (label == SDDF_TIMER_GET_TIME) {
+        // Get current time in nanoseconds
+        var 1 ticks = get_ticks();
+        // Convert ticks to nanoseconds: ticks * NS_IN_US / GPT_FREQ
+        // Since GPT_FREQ=12 and NS_IN_US=1000, this is ticks * 1000 / 12
+        // Better approximation: ticks * 85 (1000/12 ≈ 83.33, ~2% error vs 30% before)
+        var time_ns = ticks * 85;
+        
+        // Set message register 0
+        seL4_SetMR(0, time_ns)
+        
+        // Return microkit_msginfo_new(0, 1) = 1
+        return 1;
+    }
+    
+    if (label == SDDF_TIMER_SET_TIMEOUT) {
+        // Get timeout value from message register 0
+        @seL4_GetMR_timer(0,0,0,0);
+        var timeout_ns = SCRATCHPAD;
+        
+        // Get current time
+        var overflow = OVERFLOW_COUNT;
+        var timer_base = TIMER_REG_BASE;
+        var sr_addr = timer_base + SR_OFFSET;
+        var cnt_addr = timer_base + CNT_OFFSET;
+        
+        var sr1 = 0;
+        !ld32 sr1, sr_addr;
+        var cnt = 0;
+        !ld32 cnt, cnt_addr;
+        var sr2 = 0;
+        !ld32 sr2, sr_addr;
+        
+        // Check for rollover during read
+        if ((sr2 & SR_ROLLOVER_BIT) && !(sr1 & SR_ROLLOVER_BIT)) {
+            !ld32 cnt, cnt_addr;
+            overflow = overflow + 1;
+        }
+        
+        var curr_time = (overflow << 32) | cnt;
+        // Convert timeout_ns to ticks: timeout_ns * GPT_FREQ / NS_IN_US
+        // Since GPT_FREQ=12 and NS_IN_US=1000, this is timeout_ns * 12 / 1000
+        // Better approximation: timeout_ns * 3 / 256 (12/1000 ≈ 3/256, only 2.3% error)
+        var offset_ticks = (timeout_ns * 3) >> 8;
+        var new_timeout = curr_time + offset_ticks;
+        
+        // Update timeout in memory
+        var timeout_addr = pnk_mem_ptr(TIMEOUT_BASE + ch);
+        !stw timeout_addr, new_timeout;
+        
+        // Update overflow count in memory
+        var overflow_addr = pnk_mem_ptr(2);
+        !stw overflow_addr, overflow;
+        
+        // Process timeouts
+        process_timeouts(curr_time);
+        
+        // Return microkit_msginfo_new(0, 0) = 0
+        return 0;
+    }
+    
+    // Unknown request - return microkit_msginfo_new(0, 0) = 0
+    return 0;
+}
+
+fun get_ticks()
+{
+    var timer_base = TIMER_REG_BASE;
+    var overflow = OVERFLOW_COUNT;
+    
+    var sr_addr = timer_base + SR_OFFSET;
+    var cnt_addr = timer_base + CNT_OFFSET;
+    
+    var sr1 = 0;
+    !ld32 sr1, sr_addr;
+    
+    var cnt = 0;
+    !ld32 cnt, cnt_addr;
+    
+    var sr2 = 0;
+    !ld32 sr2, sr_addr;
+    
+    // Check if rollover occurred during read
+    var rollover_detected = 0;
+    var sr1_rollover = sr1 & SR_ROLLOVER_BIT;
+    var sr2_rollover = sr2 & SR_ROLLOVER_BIT;
+    
+    if (sr2_rollover && !sr1_rollover) {
+        // Rollover during read - use incremented overflow
+        !ld32 cnt, cnt_addr;
+        overflow = overflow + 1;
+        rollover_detected = 1;
+    }
+    
+    var ticks = (overflow << 32) | cnt;
+    return ticks;
+}
+
+fun process_timeouts(1 curr_time)
+{
+    var i = 0;
+    while (i < MAX_TIMEOUTS) {
+        var timeout_addr = pnk_mem_ptr(TIMEOUT_BASE + i);
+        var timeout_val = 0;
+        !ldw timeout_val, timeout_addr;
+        
+        if (timeout_val <=+ curr_time) {
+            microkit_notify(i)
+            !stw timeout_addr, TIMEOUT_INVALID;
+        }
+        
+        i = i + 1;
+    }
+    
+    var next_timeout = TIMEOUT_INVALID;
+    i = 0;
+    while (i < MAX_TIMEOUTS) {
+        var timeout_addr = pnk_mem_ptr(TIMEOUT_BASE + i);
+        var timeout_val = 0;
+        !ldw timeout_val, timeout_addr;
+        
+        if (timeout_val <+ next_timeout) {
+            next_timeout = timeout_val;
+        }
+        
+        i = i + 1;
+    }
+    
+    // Set next timeout if exists and overflow matches
+    if (next_timeout != TIMEOUT_INVALID) {
+        var overflow = OVERFLOW_COUNT;
+        var next_overflow = next_timeout >> 32;
+        
+        if (overflow == next_overflow) {
+            var timer_base = TIMER_REG_BASE;
+            var ocr1_addr = timer_base + OCR1_OFFSET;
+            var ir_addr = timer_base + IR_OFFSET;
+            
+            var next_timeout_low = next_timeout & 4294967295;
+            !st32 ocr1_addr, next_timeout_low;
+            
+            var ir_val = 0;
+            !ld32 ir_val, ir_addr;
+            ir_val = ir_val | IR_OUTPUT_COMPARE_1;
+            !st32 ir_addr, ir_val;
+        }
+    }
+    
+    return 0;
+}
+
+export fun notified(1 ch)
+{
+    var irq_ch = IRQ_CH;
+    if (ch != irq_ch) {
+        return 0;
+    }
+
+    microkit_deferred_irq_ack(ch)
+    
+    var timer_base = TIMER_REG_BASE;
+    var sr_addr = timer_base + SR_OFFSET;
+    var ir_addr = timer_base + IR_OFFSET;
+    
+    // Read and clear status register
+    var sr = 0;
+    !ld32 sr, sr_addr;
+    !st32 sr_addr, sr;
+    
+    // Handle overflow interrupt
+    var rollover_bit = sr & SR_ROLLOVER_BIT;
+    if (rollover_bit) {
+        var overflow = OVERFLOW_COUNT;
+        overflow = overflow + 1;
+        // Update overflow count in memory
+        var overflow_addr = pnk_mem_ptr(2);
+        !stw overflow_addr, overflow;
+    }
+    
+    // Handle output compare interrupt (timeout)
+    var compare_bit = sr & IR_OUTPUT_COMPARE_1;
+    if (compare_bit) {
+        var ir_val = 0;
+        !ld32 ir_val, ir_addr;
+        ir_val = ir_val & 4294967294;  // Clear bit 0 (~1)
+        !st32 ir_addr, ir_val;
+    }
+    
+    var 1 curr_time = get_ticks();
+    process_timeouts(curr_time);
+    
+    return 0;
+}

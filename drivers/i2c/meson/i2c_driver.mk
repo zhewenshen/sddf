@@ -13,18 +13,38 @@
 
 I2C_DRIVER_DIR := $(dir $(lastword $(MAKEFILE_LIST)))
 
+ifeq ($(PANCAKE_I2C),1)
+i2c_driver.elf: i2c/i2c_pnk.o i2c/i2c_driver.o pancake_ffi.o
+	$(LD) $(LDFLAGS) $^ $(LIBS) -o $@
+
+I2C_PNK = ${UTIL}/util.🥞 \
+        ${SDDF}/include/microkit/os/sddf/i2c/queue.🥞 \
+        ${I2C_DRIVER_DIR}/i2c.🥞
+
+i2c/i2c_pnk.S: $(I2C_PNK) |i2c
+	cat $(I2C_PNK) | cpp -P | $(CAKE_COMPILER) --target=arm8 --pancake --main_return=true > $@
+
+i2c/i2c_pnk.o: i2c/i2c_pnk.S
+	$(CC) -c -mcpu=$(CPU) $< -o $@
+
+i2c/i2c_driver.o: CFLAGS+=-I${I2C_DRIVER_DIR} -DI2C_BUS_NUM=${I2C_BUS_NUM} -DPANCAKE_I2C
+i2c/i2c_driver.o: ${I2C_DRIVER_DIR}/i2c.c |i2c
+	${CC} ${CFLAGS} -c -o $@ $<
+else
 i2c_driver.elf: i2c/i2c_driver.o
 	$(LD) $(LDFLAGS) $^ $(LIBS) -o $@
 
 i2c/i2c_driver.o: CFLAGS+=-I${I2C_DRIVER_DIR} -DI2C_BUS_NUM=${I2C_BUS_NUM}
 i2c/i2c_driver.o: ${I2C_DRIVER_DIR}/i2c.c |i2c
 	${CC} ${CFLAGS} -c -o $@ $<
+endif
 
 i2c:
 	mkdir -p $@
 
 clean::
 	rm -rf i2c
+	rm -f i2c/i2c_pnk.S i2c/i2c_pnk.o
 
 clobber::
 	rm -f i2c_driver.elf
