@@ -33,6 +33,7 @@ __attribute__((__section__(".net_virt_rx_config"))) net_virt_rx_config_t config;
 #define CLI_CONN_ID_BASE         1210
 #define NOTIFY_DRV_FLAG          1250
 #define NOTIFY_CLIENTS_BASE      1260
+#define RET_SLOT                 1949
 
 static char cml_memory[1024*30];
 extern void *cml_heap;
@@ -40,6 +41,7 @@ extern void *cml_stack;
 extern void *cml_stackend;
 
 extern void cml_main(void);
+extern void init_pnk(void);
 
 void cml_exit(int arg) {
     microkit_dbg_puts("ERROR! We should not be getting here\n");
@@ -63,6 +65,42 @@ void init_pancake_mem() {
     cml_stack = cml_heap + cml_heap_sz;
     cml_stackend = cml_stack + cml_stack_sz;
 }
+
+static inline int get_mac_addr_match(struct ethernet_header *buffer)
+{
+    for (int client = 0; client < config.num_clients; client++) {
+        bool match = true;
+        for (int i = 0; (i < ETH_HWADDR_LEN) && match; i++) {
+            if (buffer->dest.addr[i] != config.clients[client].mac_addr[i]) {
+                match = false;
+            }
+        }
+        if (match) {
+            return client;
+        }
+    }
+
+    bool broadcast_match = true;
+    for (int i = 0; (i < ETH_HWADDR_LEN) && broadcast_match; i++) {
+        if (buffer->dest.addr[i] != 0xFF) {
+            broadcast_match = false;
+        }
+    }
+    if (broadcast_match) {
+        return BROADCAST_ID;
+    }
+
+    return -1;
+}
+
+// FFI function for Pancake - stores result in RET_SLOT
+void ffiget_mac_addr_match(unsigned char* c, long clen, unsigned char* a, long alen) {
+    uintptr_t buffer_vaddr = (uintptr_t)c;
+    int result = get_mac_addr_match((struct ethernet_header *)buffer_vaddr);
+    uintptr_t *pnk_mem = (uintptr_t *) cml_heap;
+    pnk_mem[RET_SLOT] = (uintptr_t)result;
+}
+
 #endif
 
 /* In order to handle broadcast packets where the same buffer is given to multiple clients
@@ -310,6 +348,7 @@ void init(void)
     }
 
     cml_main();
+    init_pnk();
 #else
 
     buffer_refs = config.buffer_metadata.vaddr;

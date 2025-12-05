@@ -60,7 +60,3 @@ void ffiseL4_SetMR(unsigned char *c, long clen, unsigned char *a, long alen) {
     /* clen = register index, alen = value */
     seL4_SetMR(clen, alen);
 }
-
-void ffinop(unsigned char* c, long clen, unsigned char* a, long alen) {
-    // return;
-}

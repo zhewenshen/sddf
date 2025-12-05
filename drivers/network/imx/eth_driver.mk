@@ -17,7 +17,28 @@ ${CHECK_NETDRV_FLAGS_MD5}:
 	-rm -f .netdrv_cflags-*
 	touch $@
 
-ifeq ($(PANCAKE_NETWORK_DRIVER),1)
+ifeq ($(CCOMP_NETWORK_DRIVER),1)
+# CompCert-compiled network driver
+# SDDF_UPSTREAM should point to the sddf-upstream directory containing ccomp support
+ifeq ($(strip $(SDDF_UPSTREAM)),)
+SDDF_UPSTREAM := $(SDDF)/../sddf-upstream
+endif
+
+include $(SDDF_UPSTREAM)/util/compcert_ffi/compcert_ffi.mk
+
+CCOMP_CFLAGS := -I $(COMPCERT_INCLUDE)
+CCOMP_CFLAGS += $(filter-out -mcpu=cortex-a53 -mstrict-align -ffreestanding -Wno-unused-function -MD -MP,$(CFLAGS))
+CCOMP_CFLAGS += -fstruct-passing
+CCOMP_CFLAGS += $(CFLAGS_network)
+
+eth_driver.elf: network/imx/ethernet.o $(COMPCERT_FFI_LIB)
+	$(LD) $(LDFLAGS) $^ $(LIBS) -o $@
+
+network/imx/ethernet.o: $(SDDF_UPSTREAM)/drivers/network/imx/ethernet.c ${CHECK_NETDRV_FLAGS_MD5} | $(SDDF_LIBC_INCLUDE)
+	mkdir -p network/imx
+	ccomp -c ${CCOMP_CFLAGS} -I $(SDDF_UPSTREAM)/drivers/network/imx -o $@ $<
+
+else ifeq ($(PANCAKE_NETWORK_DRIVER),1)
 eth_driver.elf: ${BUILD_DIR}/ethernet_pnk.o imx/ethernet.o pancake_ffi.o
 	$(LD) $(LDFLAGS) $^ $(LIBS) -o $@
 
@@ -39,13 +60,14 @@ else
 	$(CC) -c -mcpu=$(CPU) $< -o $@
 endif
 else
+# Regular C compilation (clang/gcc)
 eth_driver.elf: network/imx/ethernet.o
 	$(LD) $(LDFLAGS) $< $(LIBS) -o $@
-endif
 
 network/imx/ethernet.o: ${ETHERNET_DRIVER_DIR}/ethernet.c ${CHECK_NETDRV_FLAGS_MD5}
 	mkdir -p network/imx
 	${CC} -c ${CFLAGS} ${CFLAGS_network} -I ${ETHERNET_DRIVER_DIR} -o $@ $<
 
+endif
 
 -include imx/ethernet.d

@@ -51,52 +51,7 @@ fun rx_return() {
                     var cli_addr = client_data_base + cli_io_or_offset;
                     var virt_addr = device_data_base + virt_io_or_offset;
 
-                    // Original byte-by-byte memcpy (slow as Pancake's optimisation cannot optmise this):
-                    // var copy_idx = 0;
-                    // while (copy_idx < virt_len) {
-                    //     var byte_val = 0;
-                    //     !ld8 byte_val, virt_addr + copy_idx;
-                    //     !st8 cli_addr + copy_idx, byte_val;
-                    //     copy_idx = copy_idx + 1;
-                    // }
-
-                    // some simple alternative that is much faster
-                    // but a compiler builtin would be appreciated - e.g. CompCert
-
-                    // faster memcpy
-                    var copy_idx = 0;
-                    var remaining = virt_len;
-
-                    while (remaining >= 8) {
-                        var val64 = 0;
-                        !ldw val64, virt_addr + copy_idx;
-                        !stw cli_addr + copy_idx, val64;
-                        copy_idx = copy_idx + 8;
-                        remaining = remaining - 8;
-                    }
-
-                    while (remaining >= 4) {
-                        var val32 = 0;
-                        !ld32 val32, virt_addr + copy_idx;
-                        !st32 cli_addr + copy_idx, val32;
-                        copy_idx = copy_idx + 4;
-                        remaining = remaining - 4;
-                    }
-
-                    while (remaining >= 2) {
-                        var val16 = 0;
-                        !ld16 val16, virt_addr + copy_idx;
-                        !st16 cli_addr + copy_idx, val16;
-                        copy_idx = copy_idx + 2;
-                        remaining = remaining - 2;
-                    }
-
-                    if (remaining > 0) {
-                        var byte_val = 0;
-                        !ld8 byte_val, virt_addr + copy_idx;
-                        !st8 cli_addr + copy_idx, byte_val;
-                    }
-                    // memcpy end here
+                    @sddf_memcpy(cli_addr, virt_len, virt_addr, 0);
 
                     cli_len = virt_len;
                     virt_len = 0;
@@ -169,5 +124,9 @@ fun rx_return() {
 
 export fun notified(1 ch) {
     rx_return();
+    return 0;
+}
+
+export fun init_pnk() {
     return 0;
 }

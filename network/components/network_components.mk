@@ -58,7 +58,8 @@ NETWORK_QUEUE_INCLUDE := ${SDDF}/include/sddf/network
 
 ifeq ($(PANCAKE_NETWORK_VIRT_RX),1)
 NETWORK_VIRT_RX_PNK = ${UTIL}/util.🥞 \
-	${SDDF}/network/components/virt_rx_opt.🥞
+	${SDDF}/include/sddf/network/queue.🥞 \
+	${SDDF}/network/components/virt_rx_lite.🥞
 
 network_virt_rx.elf: network/components/virt_rx_pnk.o network/components/network_virt_rx.o pancake_ffi.o libsddf_util_debug.a
 	$(LD) $(LDFLAGS) $^ $(LIBS) -o $@
@@ -67,7 +68,7 @@ network/components/virt_rx_pnk.o: network/components/virt_rx_pnk.S
 	$(CC) $(ASM_FLAGS) -c $< -o $@
 
 network/components/virt_rx_pnk.S: $(NETWORK_VIRT_RX_PNK) | network/components
-	cat $(NETWORK_VIRT_RX_PNK) | cpp -P | $(CAKE_COMPILER) --target=$(PANCAKE_TARGET) --pancake --main_return=true --gc=none --reg_alg=3 --exclude_prelude=true > $@
+	cat $(NETWORK_VIRT_RX_PNK) | cpp -P | $(CAKE_COMPILER) --target=$(PANCAKE_TARGET) --pancake --main_return=true > $@
 
 network/components/network_virt_rx.o: ${SDDF}/network/components/virt_rx.c
 	${CC} ${CFLAGS} -DPANCAKE_NETWORK_VIRT -o $@ -c $<
@@ -81,7 +82,8 @@ endif
 
 ifeq ($(PANCAKE_NETWORK_VIRT_TX),1)
 NETWORK_VIRT_TX_PNK = ${UTIL}/util.🥞 \
-	${SDDF}/network/components/virt_tx_opt.🥞
+	${SDDF}/include/sddf/network/queue.🥞 \
+	${SDDF}/network/components/virt_tx_lite2.🥞
 
 network_virt_tx.elf: network/components/virt_tx_pnk.o network/components/network_virt_tx.o pancake_ffi.o libsddf_util_debug.a
 	$(LD) $(LDFLAGS) $^ $(LIBS) -o $@
@@ -104,7 +106,8 @@ endif
 
 ifeq ($(PANCAKE_NETWORK_COPY),1)
 NETWORK_COPY_PNK = ${UTIL}/util.🥞 \
-	${SDDF}/network/components/copy_opt.🥞
+	${SDDF}/include/sddf/network/queue.🥞 \
+	${SDDF}/network/components/copy_lite.🥞
 
 network_copy.elf: network/components/copy_pnk.o network/components/network_copy.o pancake_ffi.o libsddf_util_debug.a
 	$(LD) $(LDFLAGS) $^ $(LIBS) -o $@

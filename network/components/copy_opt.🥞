@@ -3,11 +3,6 @@
  * SPDX-License-Identifier: BSD-2-Clause
  */
 
-/* OPTIMIZED VERSION: copy_opt
- * - Queue functions converted to macros (eliminate call overhead)
- * - Local variables shadow globals to avoid redundant pnk_mem loads
- */
-
 #define CONFIG_CLIENT_ID         0
 #define CONFIG_VIRT_RX_ID        1
 #define CLI_QUEUE_BASE           10
@@ -17,190 +12,135 @@
 #define CLI_NUM_BUFFERS          202
 #define VIRT_NUM_BUFFERS         203
 
+// Buffer constants
 #define NET_BUFFER_SIZE          2048
-#define NET_BUFF_DESC_SIZE       16
-#define MAX_INT16                65535
+#define NET_BUFFER_SHIFT         11
+#define NET_BUFFER_MASK          2047
 
-/* Global constants - loaded once at startup */
-var 1 config_client_id    = pnk_mem(CONFIG_CLIENT_ID);
-var 1 config_virt_rx_id   = pnk_mem(CONFIG_VIRT_RX_ID);
-var 1 virt_active_queue   = pnk_mem(VIRT_QUEUE_BASE + 1);
-var 1 virt_capacity       = pnk_mem(VIRT_QUEUE_BASE + 2);
-var 1 virt_free_queue     = pnk_mem(VIRT_QUEUE_BASE + 0);
-var 1 cli_free_queue      = pnk_mem(CLI_QUEUE_BASE + 0);
-var 1 cli_capacity        = pnk_mem(CLI_QUEUE_BASE + 2);
-var 1 cli_active_queue    = pnk_mem(CLI_QUEUE_BASE + 1);
-var 1 client_data_vaddr   = pnk_mem(CLIENT_DATA_VADDR);
-var 1 device_data_vaddr   = pnk_mem(DEVICE_DATA_VADDR);
-var 1 cli_num_buffers     = pnk_mem(CLI_NUM_BUFFERS);
+// Global variables - loaded once in init
+var g_client_id = 0;
+var g_virt_rx_id = 0;
 
-/* Inlined queue macros */
-#define NET_QUEUE_EMPTY(queue_ptr, capacity, result_out) \
-  var qe_tail = 0; \
-  var qe_head = 0; \
-  !ld16 qe_tail, queue_ptr; \
-  !ld16 qe_head, queue_ptr + 2; \
-  var qe_empty_check = qe_tail - qe_head; \
-  result_out = (qe_empty_check == 0)
+var g_cli_free_queue = 0;
+var g_cli_active_queue = 0;
+var g_cli_capacity = 0;
+var g_cli_num_buffers = 0;
 
-#define NET_DEQUEUE(queue_ptr, capacity, io_out, len_out) \
-  var dq_head = 0; \
-  !ld16 dq_head, queue_ptr + 2; \
-  var dq_mod_head = dq_head & (capacity - 1); \
-  var dq_entry_addr = queue_ptr + 8 + dq_mod_head * NET_BUFF_DESC_SIZE; \
-  !ldw io_out, dq_entry_addr; \
-  !ld32 len_out, dq_entry_addr + 8; \
-  dq_head = (dq_head + 1) & MAX_INT16; \
-  !st16 queue_ptr + 2, dq_head
+var g_virt_free_queue = 0;
+var g_virt_active_queue = 0;
+var g_virt_capacity = 0;
 
-#define NET_ENQUEUE(queue_ptr, io_addr, len, capacity) \
-  var eq_tail = 0; \
-  !ld16 eq_tail, queue_ptr; \
-  var eq_mod_tail = eq_tail & (capacity - 1); \
-  var eq_entry_addr = queue_ptr + 8 + eq_mod_tail * NET_BUFF_DESC_SIZE; \
-  !stw eq_entry_addr, io_addr; \
-  !st32 eq_entry_addr + 8, len; \
-  eq_tail = (eq_tail + 1) & MAX_INT16; \
-  !st16 queue_ptr, eq_tail
+var g_client_data_vaddr = 0;
+var g_device_data_vaddr = 0;
 
-#define NET_REQUEST_SIGNAL(queue_ptr) \
-  !st32 queue_ptr + 4, 0
+fun load_globals() {
+    g_client_id = pnk_mem(CONFIG_CLIENT_ID);
+    g_virt_rx_id = pnk_mem(CONFIG_VIRT_RX_ID);
 
-#define NET_CANCEL_SIGNAL(queue_ptr) \
-  !st32 queue_ptr + 4, 1
+    g_cli_free_queue = pnk_mem(CLI_QUEUE_BASE);
+    g_cli_active_queue = pnk_mem(CLI_QUEUE_BASE + 1);
+    g_cli_capacity = pnk_mem(CLI_QUEUE_BASE + 2);
+    g_cli_num_buffers = pnk_mem(CLI_NUM_BUFFERS);
 
-#define NET_REQUIRE_SIGNAL(queue_ptr, result_out) \
-  var rs_signalled = 0; \
-  !ld32 rs_signalled, queue_ptr + 4; \
-  result_out = !rs_signalled
+    g_virt_free_queue = pnk_mem(VIRT_QUEUE_BASE);
+    g_virt_active_queue = pnk_mem(VIRT_QUEUE_BASE + 1);
+    g_virt_capacity = pnk_mem(VIRT_QUEUE_BASE + 2);
+
+    g_client_data_vaddr = pnk_mem(CLIENT_DATA_VADDR);
+    g_device_data_vaddr = pnk_mem(DEVICE_DATA_VADDR);
+
+    return 0;
+}
 
 fun rx_return() {
     var client_enqueued = 0;
     var virt_enqueued = 0;
     var reprocess = 1;
 
-    /* Shadow globals with locals - allows compiler to keep in registers */
-    var virt_active_queue   = virt_active_queue;
-    var virt_capacity       = virt_capacity;
-    var virt_free_queue     = virt_free_queue;
-    var cli_free_queue      = cli_free_queue;
-    var cli_capacity        = cli_capacity;
-    var cli_active_queue    = cli_active_queue;
-    var client_data_vaddr   = client_data_vaddr;
-    var device_data_vaddr   = device_data_vaddr;
-    var cli_num_buffers     = cli_num_buffers;
-
-    var max_offset = cli_num_buffers * NET_BUFFER_SIZE;
-    var buffer_mask = NET_BUFFER_SIZE - 1;
+    // Cache hot globals into locals
+    var virt_active = g_virt_active_queue;
+    var virt_cap = g_virt_capacity;
+    var virt_free = g_virt_free_queue;
+    var cli_free = g_cli_free_queue;
+    var cli_active = g_cli_active_queue;
+    var cli_cap = g_cli_capacity;
+    var cli_data = g_client_data_vaddr;
+    var dev_data = g_device_data_vaddr;
+    var max_offset = g_cli_num_buffers << NET_BUFFER_SHIFT;
 
     while (reprocess) {
-        var virt_active_empty = 0;
-        NET_QUEUE_EMPTY(virt_active_queue, virt_capacity, virt_active_empty);
+        var 1 virt_active_empty = net_queue_empty(virt_active, virt_cap);
 
         while (virt_active_empty == 0) {
-            var cli_free_empty = 0;
-            NET_QUEUE_EMPTY(cli_free_queue, cli_capacity, cli_free_empty);
+            var 1 cli_free_empty = net_queue_empty(cli_free, cli_cap);
 
             if (cli_free_empty == 0) {
-                var cli_io_or_offset = 0;
-                var cli_len = 0;
-                NET_DEQUEUE(cli_free_queue, cli_capacity, cli_io_or_offset, cli_len);
+                var {1,1} cli_buffer = net_dequeue(cli_free, cli_cap);
+                var cli_io_or_offset = cli_buffer.0;
+                var cli_len = cli_buffer.1;
 
-                var cli_offset_check = cli_io_or_offset & buffer_mask;
+                var cli_offset_check = cli_io_or_offset & NET_BUFFER_MASK;
 
                 if (cli_offset_check == 0 && cli_io_or_offset < max_offset) {
-                    var virt_io_or_offset = 0;
-                    var virt_len = 0;
-                    NET_DEQUEUE(virt_active_queue, virt_capacity, virt_io_or_offset, virt_len);
+                    var {1,1} virt_buffer = net_dequeue(virt_active, virt_cap);
+                    var virt_io_or_offset = virt_buffer.0;
+                    var virt_len = virt_buffer.1;
 
-                    var cli_addr = client_data_vaddr + cli_io_or_offset;
-                    var virt_addr = device_data_vaddr + virt_io_or_offset;
+                    var cli_addr = cli_data + cli_io_or_offset;
+                    var virt_addr = dev_data + virt_io_or_offset;
 
-                    /* Optimized memcpy */
-                    var copy_idx = 0;
-                    var remaining = virt_len;
-
-                    while (remaining >= 8) {
-                        var val64 = 0;
-                        !ldw val64, virt_addr + copy_idx;
-                        !stw cli_addr + copy_idx, val64;
-                        copy_idx = copy_idx + 8;
-                        remaining = remaining - 8;
-                    }
-
-                    while (remaining >= 4) {
-                        var val32 = 0;
-                        !ld32 val32, virt_addr + copy_idx;
-                        !st32 cli_addr + copy_idx, val32;
-                        copy_idx = copy_idx + 4;
-                        remaining = remaining - 4;
-                    }
-
-                    while (remaining >= 2) {
-                        var val16 = 0;
-                        !ld16 val16, virt_addr + copy_idx;
-                        !st16 cli_addr + copy_idx, val16;
-                        copy_idx = copy_idx + 2;
-                        remaining = remaining - 2;
-                    }
-
-                    if (remaining > 0) {
-                        var byte_val = 0;
-                        !ld8 byte_val, virt_addr + copy_idx;
-                        !st8 cli_addr + copy_idx, byte_val;
-                    }
+                    @sddf_memcpy(cli_addr, virt_len, virt_addr, 0);
 
                     cli_len = virt_len;
                     virt_len = 0;
 
-                    NET_ENQUEUE(cli_active_queue, cli_io_or_offset, cli_len, cli_capacity);
-                    NET_ENQUEUE(virt_free_queue, virt_io_or_offset, virt_len, virt_capacity);
+                    net_enqueue(cli_active, cli_io_or_offset, cli_len, cli_cap);
+                    net_enqueue(virt_free, virt_io_or_offset, virt_len, virt_cap);
 
                     client_enqueued = 1;
                 } else {
-                    var virt_io_or_offset = 0;
-                    var virt_len = 0;
-                    NET_DEQUEUE(virt_active_queue, virt_capacity, virt_io_or_offset, virt_len);
-                    NET_ENQUEUE(virt_free_queue, virt_io_or_offset, 0, virt_capacity);
+                    var {1,1} virt_buffer = net_dequeue(virt_active, virt_cap);
+                    var virt_io_or_offset = virt_buffer.0;
+
+                    net_enqueue(virt_free, virt_io_or_offset, 0, virt_cap);
                 }
             } else {
-                var virt_io_or_offset = 0;
-                var virt_len = 0;
-                NET_DEQUEUE(virt_active_queue, virt_capacity, virt_io_or_offset, virt_len);
-                NET_ENQUEUE(virt_free_queue, virt_io_or_offset, 0, virt_capacity);
+                var {1,1} virt_buffer = net_dequeue(virt_active, virt_cap);
+                var virt_io_or_offset = virt_buffer.0;
+
+                net_enqueue(virt_free, virt_io_or_offset, 0, virt_cap);
             }
 
             virt_enqueued = 1;
-            NET_QUEUE_EMPTY(virt_active_queue, virt_capacity, virt_active_empty);
+
+            virt_active_empty = net_queue_empty(virt_active, virt_cap);
         }
 
-        NET_REQUEST_SIGNAL(virt_active_queue);
+        net_request_signal(virt_active, virt_cap);
         reprocess = 0;
 
-        NET_QUEUE_EMPTY(virt_active_queue, virt_capacity, virt_active_empty);
+        virt_active_empty = net_queue_empty(virt_active, virt_cap);
         if (virt_active_empty == 0) {
-            NET_CANCEL_SIGNAL(virt_active_queue);
+            net_cancel_signal(virt_active);
             reprocess = 1;
         }
     }
 
     if (client_enqueued) {
-        var client_signal_required = 0;
-        NET_REQUIRE_SIGNAL(cli_active_queue, client_signal_required);
+        var 1 client_signal_required = net_require_signal(cli_active, cli_cap);
 
         if (client_signal_required) {
-            NET_CANCEL_SIGNAL(cli_active_queue);
-            sddf_notify(config_client_id)
+            net_cancel_signal(cli_active);
+            sddf_notify(g_client_id)
         }
     }
 
     if (virt_enqueued) {
-        var virt_signal_required = 0;
-        NET_REQUIRE_SIGNAL(virt_free_queue, virt_signal_required);
+        var 1 virt_signal_required = net_require_signal(virt_free, virt_cap);
 
         if (virt_signal_required) {
-            NET_CANCEL_SIGNAL(virt_free_queue);
-            sddf_deferred_notify(config_virt_rx_id)
+            net_cancel_signal(virt_free);
+            sddf_deferred_notify(g_virt_rx_id)
         }
     }
 
@@ -212,3 +152,7 @@ export fun notified(1 ch) {
     return 0;
 }
 
+export fun init_pnk() {
+    load_globals();
+    return 0;
+}

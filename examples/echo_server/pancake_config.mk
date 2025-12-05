@@ -19,6 +19,12 @@ ifeq ($(shell test -f $(CONFIG_FILE) && echo exists), exists)
     ifneq ($(PANCAKE_NETWORK_DRIVER),)
         $(info   - Network Driver: enabled)
     endif
+    ifneq ($(CCOMP_NETWORK_DRIVER),)
+        $(info   - Network Driver (CompCert): enabled)
+        ifneq ($(SDDF_UPSTREAM),)
+            $(info     SDDF_UPSTREAM: $(SDDF_UPSTREAM))
+        endif
+    endif
     ifneq ($(PANCAKE_NETWORK_VIRT_TX),)
         $(info   - Network Virt TX: enabled)
     endif
@@ -50,6 +56,10 @@ export MICROKIT_CONFIG
 export CAKE_COMPILER
 export TOOLCHAIN
 export PANCAKE_NETWORK_DRIVER
+export CCOMP_NETWORK_DRIVER
+ifneq ($(SDDF_UPSTREAM),)
+export SDDF_UPSTREAM
+endif
 export PANCAKE_NETWORK_VIRT_TX
 export PANCAKE_NETWORK_VIRT_RX
 export PANCAKE_NETWORK_COPY

@@ -267,12 +267,12 @@ def check_iq_lock_conflicts():
         return False, []
 
 
-def run_single_benchmark(folder, throughputs, protocol, mode, benchmark_name):
+def run_single_benchmark(folder, throughputs, protocol, mode, benchmark_name, compiler="clang"):
     log_file_path = f"{folder}/autobench.log"
     setup_logging(log_file_path)
 
     logging.info("=" * 60)
-    logging.info(f"starting benchmark iteration ({mode}, {protocol})")
+    logging.info(f"starting benchmark iteration ({mode}, {protocol}, {compiler})")
     logging.info("=" * 60)
     logging.info(f"results will be saved to: {folder}")
 
@@ -695,6 +695,7 @@ def run_single_benchmark(folder, throughputs, protocol, mode, benchmark_name):
             logging.info(f"benchmark name: {benchmark_name}")
         logging.info(f"mode: {mode}")
         logging.info(f"protocol: {protocol}")
+        logging.info(f"compiler: {compiler}")
         logging.info(f"results directory: {folder}")
         logging.info(f"ip address obtained: {address}")
         logging.info(f"throughputs tested: {len(throughputs)}")
@@ -755,6 +756,11 @@ def main():
         default=1,
         help="Number of times to repeat the benchmark (default: 1)",
     )
+    parser.add_argument(
+        "--ccomp",
+        action="store_true",
+        help="Build network driver with CompCert (ccomp) instead of clang",
+    )
     args = parser.parse_args()
 
     if args.dryrun:
@@ -766,8 +772,10 @@ def main():
 
     protocol = "TCP" if args.tcp else "UDP"
 
+    compiler = "ccomp" if args.ccomp else "clang"
+
     print("=" * 60, flush=True)
-    print(f"starting automated benchmark ({mode}, {protocol})", flush=True)
+    print(f"starting automated benchmark ({mode}, {protocol}, {compiler})", flush=True)
     if args.iter > 1:
         print(f"total iterations: {args.iter}", flush=True)
     print("=" * 60, flush=True)
@@ -782,12 +790,14 @@ def main():
     except FileNotFoundError:
         pass
 
-    print(f"building with {CONFIG_FILE}...", flush=True)
+    build_cmd = ["make", f"CONFIG_FILE={CONFIG_FILE}", "-j8"]
+    if args.ccomp:
+        build_cmd.append("CCOMP_NETWORK_DRIVER=1")
+        print(f"building with {CONFIG_FILE} (CompCert network driver)...", flush=True)
+    else:
+        print(f"building with {CONFIG_FILE}...", flush=True)
     try:
-        subprocess.run(
-            ["make", f"CONFIG_FILE={CONFIG_FILE}", "-j8"],
-            check=True,
-        )
+        subprocess.run(build_cmd, check=True)
     except subprocess.CalledProcessError as e:
         print(f"build failed with exit code {e.returncode}", flush=True)
         return 1
@@ -835,7 +845,7 @@ def main():
 
         os.makedirs(folder)
 
-        result = run_single_benchmark(folder, throughputs, protocol, mode, args.name)
+        result = run_single_benchmark(folder, throughputs, protocol, mode, args.name, compiler)
 
         if result != 0:
             print(f"iteration {i} failed, stopping", flush=True)

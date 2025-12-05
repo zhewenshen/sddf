@@ -30,6 +30,7 @@ extern void *cml_stack;
 extern void *cml_stackend;
 
 extern void cml_main(void);
+extern void init_pnk(void);
 
 void cml_exit(int arg) {
     microkit_dbg_puts("ERROR! We should not be getting here\n");
@@ -52,6 +53,10 @@ void init_pancake_mem() {
     cml_heap = cml_memory;
     cml_stack = cml_heap + cml_heap_sz;
     cml_stackend = cml_stack + cml_stack_sz;
+}
+
+void ffisddf_memcpy(unsigned char* c, long clen, unsigned char* a, long alen) {
+    sddf_memcpy((void *)c, (void *)a, clen);
 }
 #endif
 
@@ -163,6 +168,7 @@ void init(void)
     pnk_mem[VIRT_NUM_BUFFERS] = config.virt_rx.num_buffers;
     
     cml_main();
+    init_pnk();
 #endif
 
     /* Set up the queues */
