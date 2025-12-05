@@ -1,0 +1,131 @@
+/*
+ * Copyright 2025, UNSW
+ * SPDX-License-Identifier: BSD-2-Clause
+ */
+
+#define CONFIG_CLIENT_ID         0
+#define CONFIG_VIRT_RX_ID        1
+#define CLI_QUEUE_BASE           10
+#define VIRT_QUEUE_BASE          30
+#define CLIENT_DATA_VADDR        200
+#define DEVICE_DATA_VADDR        201
+#define CLI_NUM_BUFFERS          202
+#define VIRT_NUM_BUFFERS         203
+
+#define NET_BUFFER_SIZE          2048
+#define NET_BUFFER_SHIFT         11
+#define NET_BUFFER_MASK          2047
+
+fun rx_return() {
+    var client_enqueued = 0;
+    var virt_enqueued = 0;
+    var reprocess = 1;
+
+    while (reprocess) {
+        var virt_active_queue = pnk_mem(VIRT_QUEUE_BASE + 1);
+        var virt_capacity = pnk_mem(VIRT_QUEUE_BASE + 2);
+
+        var 1 virt_active_empty = net_queue_empty(virt_active_queue, virt_capacity);
+
+        while (virt_active_empty == 0) {
+            var cli_free_queue = pnk_mem(CLI_QUEUE_BASE + 0);
+            var cli_capacity = pnk_mem(CLI_QUEUE_BASE + 2);
+
+            var 1 cli_free_empty = net_queue_empty(cli_free_queue, cli_capacity);
+
+            if (cli_free_empty == 0) {
+                var {1,1} cli_buffer = net_dequeue(cli_free_queue, cli_capacity);
+                var cli_io_or_offset = cli_buffer.0;
+                var cli_len = cli_buffer.1;
+
+                var cli_offset_check = cli_io_or_offset & NET_BUFFER_MASK;
+                var cli_num_buffers = pnk_mem(CLI_NUM_BUFFERS);
+                var max_offset = cli_num_buffers << NET_BUFFER_SHIFT;
+
+                if (cli_offset_check == 0 && cli_io_or_offset < max_offset) {
+                    var {1,1} virt_buffer = net_dequeue(virt_active_queue, virt_capacity);
+                    var virt_io_or_offset = virt_buffer.0;
+                    var virt_len = virt_buffer.1;
+
+                    var client_data_base = pnk_mem(CLIENT_DATA_VADDR);
+                    var device_data_base = pnk_mem(DEVICE_DATA_VADDR);
+                    var cli_addr = client_data_base + cli_io_or_offset;
+                    var virt_addr = device_data_base + virt_io_or_offset;
+
+                    @sddf_memcpy(cli_addr, virt_len, virt_addr, 0);
+
+                    cli_len = virt_len;
+                    virt_len = 0;
+
+                    var cli_active_queue = pnk_mem(CLI_QUEUE_BASE + 1);
+                    net_enqueue(cli_active_queue, cli_io_or_offset, cli_len, cli_capacity);
+
+                    var virt_free_queue = pnk_mem(VIRT_QUEUE_BASE + 0);
+                    net_enqueue(virt_free_queue, virt_io_or_offset, virt_len, virt_capacity);
+
+                    client_enqueued = 1;
+                } else {
+                    var {1,1} virt_buffer = net_dequeue(virt_active_queue, virt_capacity);
+                    var virt_io_or_offset = virt_buffer.0;
+
+                    var virt_free_queue = pnk_mem(VIRT_QUEUE_BASE + 0);
+                    net_enqueue(virt_free_queue, virt_io_or_offset, 0, virt_capacity);
+                }
+            } else {
+                var {1,1} virt_buffer = net_dequeue(virt_active_queue, virt_capacity);
+                var virt_io_or_offset = virt_buffer.0;
+
+                var virt_free_queue = pnk_mem(VIRT_QUEUE_BASE + 0);
+                net_enqueue(virt_free_queue, virt_io_or_offset, 0, virt_capacity);
+            }
+
+            virt_enqueued = 1;
+
+            virt_active_empty = net_queue_empty(virt_active_queue, virt_capacity);
+        }
+
+        net_request_signal(virt_active_queue, virt_capacity);
+        reprocess = 0;
+
+        virt_active_empty = net_queue_empty(virt_active_queue, virt_capacity);
+        if (virt_active_empty == 0) {
+            net_cancel_signal(virt_active_queue);
+            reprocess = 1;
+        }
+    }
+
+    if (client_enqueued) {
+        var cli_active_queue = pnk_mem(CLI_QUEUE_BASE + 1);
+        var cli_capacity = pnk_mem(CLI_QUEUE_BASE + 2);
+        var 1 client_signal_required = net_require_signal(cli_active_queue, cli_capacity);
+
+        if (client_signal_required) {
+            net_cancel_signal(cli_active_queue);
+            var client_id = pnk_mem(CONFIG_CLIENT_ID);
+            sddf_notify(client_id)
+        }
+    }
+
+    if (virt_enqueued) {
+        var virt_free_queue = pnk_mem(VIRT_QUEUE_BASE + 0);
+        var virt_capacity = pnk_mem(VIRT_QUEUE_BASE + 2);
+        var 1 virt_signal_required = net_require_signal(virt_free_queue, virt_capacity);
+
+        if (virt_signal_required) {
+            net_cancel_signal(virt_free_queue);
+            var virt_id = pnk_mem(CONFIG_VIRT_RX_ID);
+            sddf_deferred_notify(virt_id)
+        }
+    }
+
+    return 0;
+}
+
+export fun notified(1 ch) {
+    rx_return();
+    return 0;
+}
+
+export fun init_pnk() {
+    return 0;
+}

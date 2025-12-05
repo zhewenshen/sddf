@@ -1,0 +1,201 @@
+co
+^Eco
+[Enter `^Ec?' for help]
+[connecting...up]
+
+U-Boot SPL 2018.03 (Jan 14 2020 - 02:43:08 +0000)
+power_bd71837_init
+set buck8 to 1.2v for DDR4
+DDRINFO: start lpddr4 ddr init
+DRAM PHY training for 2400MTS
+check ddr4_pmu_train_imem code
+check ddr4_pmu_train_imem code pass
+check ddr4_pmu_train_dmem code
+check ddr4_pmu_train_dmem code pass
+Training PASS
+DRAM PHY training for 1600MTS
+check ddr4_pmu_train_imem code
+check ddr4_pmu_train_imem code pass
+check ddr4_pmu_train_dmem code
+check ddr4_pmu_train_dmem code pass
+Training PASS
+DRAM PHY training for 1064MTS
+check ddr4_pmu_train_imem code
+check ddr4_pmu_train_imem code pass
+check ddr4_pmu_train_dmem code
+check ddr4_pmu_train_dmem code pass
+Training PASS
+DRAM PHY training for 2400MTS
+check ddr4_pmu_train_imem code
+check ddr4_pmu_train_imem code pass
+check ddr4_pmu_train_dmem code
+check ddr4_pmu_train_dmem code pass
+Training PASS
+DDRINFO:ddrphy calibration done
+DDRINFO: ddrmix config done
+Normal Boot
+Trying to boot from MMC1
+
+
+U-Boot 2018.03 (Jan 14 2020 - 02:43:08 +0000)
+
+CPU:   Freescale i.MX8MQ rev2.1 1500 MHz (running at 1000 MHz)
+CPU:   Commercial temperature grade (0C to 95C) at 26C
+Reset cause: POR
+Model: Freescale i.MX8MQ EVK
+DRAM:  2 GiB
+MMC:   FSL_SDHC: 0
+Loading Environment from MMC... OK
+No panel detected: default to HDMI
+Display: HDMI (1280x720)
+In:    serial
+Out:   serial
+Err:   serial
+
+ BuildInfo:
+  - ATF d6451cc
+  - U-Boot 2018.03
+
+switch to partitions #0, OK
+mmc0 is current device
+flash target is MMC:0
+Net:   
+Warning: ethernet@30be0000 (eth0) using random MAC address - 1a:15:da:09:de:9b
+eth0: ethernet@30be0000
+Fastboot: Normal
+Normal Boot
+Hit any key to stop autoboot:  2  
+ 0 
+u-boot=> 
+u-boot=> setenv loadaddr 0x50000000
+dhcp
+setenv loadaddr 0x50000000
+u-boot=> dhcp
+ethernet@30be0000 Waiting for PHY auto negotiation to complete.... done
+BOOTP broadcast 1
+BOOTP broadcast 2
+BOOTP broadcast 3
+BOOTP broadcast 4
+BOOTP broadcast 5
+BOOTP broadcast 6
+DHCP client bound to address 172.16.1.7 (5769 ms)
+*** Warning: no boot file name; using 'AC100107.img'
+Using ethernet@30be0000 device
+TFTP from server 172.16.0.2; our IP address is 172.16.1.7
+Filename 'AC100107.img'.
+Load address: 0x50000000
+Loading: *
+TFTP error: 'File not found' (1)
+Not retrying...
+u-boot=> tftp ${loadaddr} /maaxboard2/sel4-image
+tftp ${loadaddr} /maaxboard2/sel4-image
+Using ethernet@30be0000 device
+TFTP from server 172.16.0.2; our IP address is 172.16.1.7
+Filename '/maaxboard2/sel4-image'.
+Load address: 0x50000000
+Loading: *#################################################################
+	 #################################################################
+	 #################################################################
+	 #################################################################
+	 #################################################################
+	 #################################################################
+	 #################################################################
+	 ################################
+	 10.6 MiB/s
+done
+Bytes transferred = 7143504 (6d0050 hex)
+u-boot=> go ${loadaddr}
+go ${loadaddr}
+## Starting application at 0x50000000 ...
+BENCH|LOG: MICROKIT_CONFIG_benchmark defined
+BENCH|LOG: CONFIG_BENCHMARK_TRACK_UTILISATION defined
+DHCP request finished, IP address for netif client1 is: 172.16.1.8
+DHCP request finished, IP address for netif client0 is: 172.16.1.9
+Utilization connection established!
+client0 measurement starting...
+client0 measurement finished 
+{
+L1 i-cache misses: 26284530
+L1 d-cache misses: 67272070
+L1 i-tlb misses: 1054362
+L1 d-tlb misses: 7854357
+Instructions: 2641584008
+Branch mispredictions: 22943020
+}
+Total utilisation details: 
+{
+KernelUtilisation: 1002456369
+KernelEntries: 1406878
+NumberSchedules: 909445
+TotalUtilisation: 22881458922
+}
+Utilisation details for PD: serial_driver (0)
+{
+KernelUtilisation: 4233
+KernelEntries: 3
+NumberSchedules: 3
+TotalUtilisation: 33565
+}
+Utilisation details for PD: serial_virt_tx (1)
+{
+KernelUtilisation: 4372
+KernelEntries: 3
+NumberSchedules: 2
+TotalUtilisation: 14297
+}
+Utilisation details for PD: ethernet_driver (2)
+{
+KernelUtilisation: 275634120
+KernelEntries: 439951
+NumberSchedules: 262228
+TotalUtilisation: 4770157159
+}
+Utilisation details for PD: net_virt_tx (3)
+{
+KernelUtilisation: 211462985
+KernelEntries: 230509
+NumberSchedules: 164179
+TotalUtilisation: 1603175953
+}
+Utilisation details for PD: net_virt_rx (4)
+{
+KernelUtilisation: 237512185
+KernelEntries: 348112
+NumberSchedules: 221715
+TotalUtilisation: 1511884163
+}
+Utilisation details for PD: client0 (5)
+{
+KernelUtilisation: 66610865
+KernelEntries: 126357
+NumberSchedules: 63864
+TotalUtilisation: 3978695575
+}
+Utilisation details for PD: client0_net_copier (6)
+{
+KernelUtilisation: 129976960
+KernelEntries: 188829
+NumberSchedules: 125134
+TotalUtilisation: 2861536873
+}
+Utilisation details for PD: client1 (7)
+{
+KernelUtilisation: 823538
+KernelEntries: 1101
+NumberSchedules: 1095
+TotalUtilisation: 4631999
+}
+Utilisation details for PD: client1_net_copier (8)
+{
+KernelUtilisation: 102746
+KernelEntries: 87
+NumberSchedules: 58
+TotalUtilisation: 325079
+}
+Utilisation details for PD: timer_driver (9)
+{
+KernelUtilisation: 3018065
+KernelEntries: 3299
+NumberSchedules: 2579
+TotalUtilisation: 10856359
+}

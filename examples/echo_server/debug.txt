@@ -1,0 +1,143 @@
+inline fun net_queue_empty(1 queue_ptr, 1 capacity)
+{
+  var tail = 0;
+  var head = 0;
+  !ld16 tail, queue_ptr;
+  !ld16 head, queue_ptr + 2;
+  return ((tail - head) == 0);
+}
+inline fun net_queue_full(1 queue_ptr, 1 capacity)
+{
+  var tail = 0;
+  var head = 0;
+  !ld16 tail, queue_ptr;
+  !ld16 head, queue_ptr + 2;
+  var full = (tail - head) == capacity;
+  return full;
+}
+inline fun net_enqueue(1 queue_ptr, 1 io_addr, 1 len, 1 capacity)
+{
+  var tail = 0;
+  !ld16 tail, queue_ptr;
+  var mod_tail = tail & (capacity - 1);
+  var buff_addr = queue_ptr + @biw + mod_tail * (2*@biw);
+  !stw buff_addr, io_addr;
+  !stw buff_addr + @biw, len;
+  tail = (tail + 1) & 65535;
+  !st16 queue_ptr, tail;
+  return 0;
+}
+inline fun {1,1} net_dequeue(1 queue_ptr, 1 capacity)
+{
+  var head = 0;
+  !ld16 head, queue_ptr + 2;
+  var mod_head = head & (capacity - 1);
+  var buff_addr = queue_ptr + @biw + mod_head * (2*@biw);
+  var io_addr = 0;
+  var len = 0;
+  !ldw io_addr, buff_addr;
+  !ldw len, buff_addr + @biw;
+  head = (head + 1) & 65535;
+  !st16 queue_ptr + 2, head;
+  return <io_addr, len>;
+}
+inline fun net_request_signal(1 queue_ptr, 1 capacity)
+{
+  !st32 queue_ptr + 4, 0;
+  return 0;
+}
+inline fun net_cancel_signal(1 queue_ptr)
+{
+  !st32 queue_ptr + 4, 1;
+  return 0;
+}
+inline fun net_require_signal(1 queue_ptr, 1 capacity)
+{
+  var signalled = 0;
+  !ld32 signalled, queue_ptr + 4;
+  return !signalled;
+}
+fun rx_return() {
+    var client_enqueued = 0;
+    var virt_enqueued = 0;
+    var reprocess = 1;
+    var client_data_base = (lds 1 (@base + (200) * @biw));
+    var device_data_base = (lds 1 (@base + (201) * @biw));
+    var cli_num_buffers = (lds 1 (@base + (202) * @biw));
+    var virt_active_queue = (lds 1 (@base + (30 + 1) * @biw));
+    var virt_capacity = (lds 1 (@base + (30 + 2) * @biw));
+    var cli_free_queue = (lds 1 (@base + (10 + 0) * @biw));
+    var cli_capacity = (lds 1 (@base + (10 + 2) * @biw));
+    var cli_active_queue = (lds 1 (@base + (10 + 1) * @biw));
+    var virt_free_queue = (lds 1 (@base + (30 + 0) * @biw));
+    var virt_free_queue = (lds 1 (@base + (30 + 0) * @biw));
+    var virt_free_queue = (lds 1 (@base + (30 + 0) * @biw));
+    while (reprocess) {
+        var 1 virt_active_empty = net_queue_empty(virt_active_queue, virt_capacity);
+        while (virt_active_empty == 0) {
+            var 1 cli_free_empty = net_queue_empty(cli_free_queue, cli_capacity);
+            if (cli_free_empty == 0) {
+                var {1,1} cli_buffer = net_dequeue(cli_free_queue, cli_capacity);
+                var cli_io_or_offset = cli_buffer.0;
+                var cli_len = cli_buffer.1;
+                var buffer_mask = 2048 - 1;
+                var cli_offset_check = cli_io_or_offset & buffer_mask;
+                var max_offset = cli_num_buffers * 2048;
+                if (cli_offset_check == 0 && cli_io_or_offset < max_offset) {
+                    var {1,1} virt_buffer = net_dequeue(virt_active_queue, virt_capacity);
+                    var virt_io_or_offset = virt_buffer.0;
+                    var virt_len = virt_buffer.1;
+s
+                    var cli_addr = client_data_base + cli_io_or_offset;
+                    var virt_addr = device_data_base + virt_io_or_offset;
+                    @sddf_memcpy(cli_addr, virt_len, virt_addr, 0);
+                    cli_len = virt_len;
+                    virt_len = 0;
+                    net_enqueue(cli_active_queue, cli_io_or_offset, cli_len, cli_capacity);
+                    net_enqueue(virt_free_queue, virt_io_or_offset, virt_len, virt_capacity);
+                    client_enqueued = 1;
+                } else {
+                    var {1,1} virt_buffer = net_dequeue(virt_active_queue, virt_capacity);
+                    var virt_io_or_offset = virt_buffer.0;
+                    var virt_len = virt_buffer.1;
+                    net_enqueue(virt_free_queue, virt_io_or_offset, 0, virt_capacity);
+                }
+            } else {
+                var {1,1} virt_buffer = net_dequeue(virt_active_queue, virt_capacity);
+                var virt_io_or_offset = virt_buffer.0;
+                var virt_len = virt_buffer.1;
+                net_enqueue(virt_free_queue, virt_io_or_offset, 0, virt_capacity);
+            }
+            virt_enqueued = 1;
+            virt_active_empty = net_queue_empty(virt_active_queue, virt_capacity);
+        }
+        net_request_signal(virt_active_queue, virt_capacity);
+        reprocess = 0;
+        virt_active_empty = net_queue_empty(virt_active_queue, virt_capacity);
+        if (virt_active_empty == 0) {
+            net_cancel_signal(virt_active_queue);
+            reprocess = 1;
+        }
+    }
+    if (client_enqueued) {
+        var 1 client_signal_required = net_require_signal(cli_active_queue, cli_capacity);
+        if (client_signal_required) {
+            net_cancel_signal(cli_active_queue);
+            var client_id = (lds 1 (@base + (0) * @biw));
+            @sddf_notify(0,client_id,0,0);
+        }
+    }
+    if (virt_enqueued) {
+        var 1 virt_signal_required = net_require_signal(virt_free_queue, virt_capacity);
+        if (virt_signal_required) {
+            net_cancel_signal(virt_free_queue);
+            var virt_id = (lds 1 (@base + (1) * @biw));
+            @sddf_deferred_notify(0,virt_id,0,0);
+        }
+    }
+    return 0;
+}
+export fun notified(1 ch) {
+    rx_return();
+    return 0;
+}

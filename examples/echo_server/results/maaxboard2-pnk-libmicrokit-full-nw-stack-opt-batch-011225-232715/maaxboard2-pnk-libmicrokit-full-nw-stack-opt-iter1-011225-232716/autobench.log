@@ -1,0 +1,83 @@
+2025-12-01 23:27:16,203 - INFO - ============================================================
+2025-12-01 23:27:16,203 - INFO - starting benchmark iteration (FULL RUN, UDP, clang)
+2025-12-01 23:27:16,203 - INFO - ============================================================
+2025-12-01 23:27:16,203 - INFO - results will be saved to: /home/zhewen/Documents/code/sddf/examples/echo_server/results/maaxboard2-pnk-libmicrokit-full-nw-stack-opt-batch-011225-232715/maaxboard2-pnk-libmicrokit-full-nw-stack-opt-iter1-011225-232716
+2025-12-01 23:27:16,203 - INFO - 
+2025-12-01 23:27:16,203 - INFO - ============================================================
+2025-12-01 23:27:16,203 - INFO - starting mq server...
+2025-12-01 23:27:16,203 - INFO - (will wait for device lock if held by another process)
+2025-12-01 23:27:16,203 - INFO - ============================================================
+2025-12-01 23:27:16,206 - INFO - 
+2025-12-01 23:27:16,206 - INFO - waiting for dhcp...
+2025-12-01 23:27:22,828 - ERROR - 
+2025-12-01 23:27:22,828 - ERROR - mq exited unexpectedly before dhcp
+2025-12-01 23:27:22,828 - WARNING - will retry mq (attempt 1/5)
+2025-12-01 23:27:22,828 - INFO - mq attempt 2/5...
+2025-12-01 23:27:32,829 - INFO - running cleanup routine...
+2025-12-01 23:27:35,332 - INFO - cleanup complete
+2025-12-01 23:27:35,334 - INFO - 
+2025-12-01 23:27:35,334 - INFO - waiting for dhcp...
+2025-12-01 23:27:35,821 - ERROR - 
+2025-12-01 23:27:35,821 - ERROR - mq exited unexpectedly before dhcp
+2025-12-01 23:27:35,821 - WARNING - will retry mq (attempt 2/5)
+2025-12-01 23:27:35,821 - INFO - mq attempt 3/5...
+2025-12-01 23:27:45,821 - INFO - running cleanup routine...
+2025-12-01 23:27:47,635 - INFO - cleanup complete
+2025-12-01 23:27:47,638 - INFO - 
+2025-12-01 23:27:47,638 - INFO - waiting for dhcp...
+2025-12-01 23:28:17,300 - INFO - 
+2025-12-01 23:28:17,301 - INFO - dhcp complete, ip address: 172.16.1.54
+2025-12-01 23:28:17,301 - INFO - 
+2025-12-01 23:28:17,301 - INFO - ============================================================
+2025-12-01 23:28:17,301 - INFO - starting iq benchmark client...
+2025-12-01 23:28:17,301 - INFO - (will wait for device locks if held by another process)
+2025-12-01 23:28:17,301 - INFO - ============================================================
+2025-12-01 23:28:17,301 - INFO - protocol: UDP
+2025-12-01 23:28:17,301 - INFO - testing throughputs: 0.0Gbps, 0.0Gbps, 0.1Gbps, 0.1Gbps, 0.2Gbps, 0.3Gbps, 0.4Gbps, 0.5Gbps, 0.6Gbps, 0.7Gbps, 0.8Gbps, 0.9Gbps, 1.0Gbps
+2025-12-01 23:28:17,301 - INFO - checking for stale iq locks before starting...
+2025-12-01 23:28:19,441 - INFO - monitoring iq client output...
+2025-12-01 23:28:23,677 - WARNING - iq exited with code 2 and no results found
+2025-12-01 23:28:23,677 - WARNING - will retry iq (attempt 1/5)
+2025-12-01 23:28:23,677 - INFO - iq attempt 2/5...
+2025-12-01 23:28:33,678 - INFO - checking for stale iq locks before starting...
+2025-12-01 23:28:35,354 - INFO - monitoring iq client output...
+2025-12-01 23:49:20,227 - INFO - detected result summary in iq output
+2025-12-01 23:49:35,465 - INFO - iq client completed successfully (result summary found)
+2025-12-01 23:49:35,465 - INFO - note: iq exited with code 1 but results were generated
+2025-12-01 23:49:35,465 - INFO - waiting 10s after iq finishes...
+2025-12-01 23:49:45,466 - INFO - 
+2025-12-01 23:49:45,466 - INFO - ============================================================
+2025-12-01 23:49:45,466 - INFO - shutting down mq server...
+2025-12-01 23:49:45,466 - INFO - ============================================================
+2025-12-01 23:49:47,425 - INFO - server shut down gracefully
+2025-12-01 23:49:47,425 - INFO - 
+2025-12-01 23:49:47,425 - INFO - ============================================================
+2025-12-01 23:49:47,425 - INFO - processing logs...
+2025-12-01 23:49:47,425 - INFO - ============================================================
+2025-12-01 23:49:47,425 - INFO - extracting csv results from iq.log...
+2025-12-01 23:49:47,426 - INFO - csv results saved to: /home/zhewen/Documents/code/sddf/examples/echo_server/results/maaxboard2-pnk-libmicrokit-full-nw-stack-opt-batch-011225-232715/maaxboard2-pnk-libmicrokit-full-nw-stack-opt-iter1-011225-232716/results.csv
+2025-12-01 23:49:47,426 - INFO - stripping ansi escape codes from mq log...
+2025-12-01 23:49:47,428 - INFO - clean mq log saved to: /home/zhewen/Documents/code/sddf/examples/echo_server/results/maaxboard2-pnk-libmicrokit-full-nw-stack-opt-batch-011225-232715/maaxboard2-pnk-libmicrokit-full-nw-stack-opt-iter1-011225-232716/mq.log
+2025-12-01 23:49:47,428 - INFO - processing mq.log to extract json metrics...
+2025-12-01 23:49:47,457 - INFO - mq metrics json saved to: /home/zhewen/Documents/code/sddf/examples/echo_server/results/maaxboard2-pnk-libmicrokit-full-nw-stack-opt-batch-011225-232715/maaxboard2-pnk-libmicrokit-full-nw-stack-opt-iter1-011225-232716/mq_metrics.json
+2025-12-01 23:49:47,457 - INFO - 
+2025-12-01 23:49:47,457 - INFO - ============================================================
+2025-12-01 23:49:47,457 - INFO - benchmark complete
+2025-12-01 23:49:47,457 - INFO - ============================================================
+2025-12-01 23:49:47,457 - INFO - benchmark name: maaxboard2-pnk-libmicrokit-full-nw-stack-opt
+2025-12-01 23:49:47,457 - INFO - mode: FULL RUN
+2025-12-01 23:49:47,457 - INFO - protocol: UDP
+2025-12-01 23:49:47,457 - INFO - compiler: clang
+2025-12-01 23:49:47,457 - INFO - results directory: /home/zhewen/Documents/code/sddf/examples/echo_server/results/maaxboard2-pnk-libmicrokit-full-nw-stack-opt-batch-011225-232715/maaxboard2-pnk-libmicrokit-full-nw-stack-opt-iter1-011225-232716
+2025-12-01 23:49:47,457 - INFO - ip address obtained: 172.16.1.54
+2025-12-01 23:49:47,457 - INFO - throughputs tested: 13
+2025-12-01 23:49:47,457 - INFO - logs and results saved:
+2025-12-01 23:49:47,457 - INFO -   - benchmark script log: /home/zhewen/Documents/code/sddf/examples/echo_server/results/maaxboard2-pnk-libmicrokit-full-nw-stack-opt-batch-011225-232715/maaxboard2-pnk-libmicrokit-full-nw-stack-opt-iter1-011225-232716/autobench.log
+2025-12-01 23:49:47,457 - INFO -   - mq/iq output: /home/zhewen/Documents/code/sddf/examples/echo_server/results/maaxboard2-pnk-libmicrokit-full-nw-stack-opt-batch-011225-232715/maaxboard2-pnk-libmicrokit-full-nw-stack-opt-iter1-011225-232716/pexpect_output.log
+2025-12-01 23:49:47,457 - INFO -   - mq clean log: /home/zhewen/Documents/code/sddf/examples/echo_server/results/maaxboard2-pnk-libmicrokit-full-nw-stack-opt-batch-011225-232715/maaxboard2-pnk-libmicrokit-full-nw-stack-opt-iter1-011225-232716/mq.log
+2025-12-01 23:49:47,457 - INFO -   - iq full log: /home/zhewen/Documents/code/sddf/examples/echo_server/results/maaxboard2-pnk-libmicrokit-full-nw-stack-opt-batch-011225-232715/maaxboard2-pnk-libmicrokit-full-nw-stack-opt-iter1-011225-232716/iq.log
+2025-12-01 23:49:47,457 - INFO -   - iq csv results: /home/zhewen/Documents/code/sddf/examples/echo_server/results/maaxboard2-pnk-libmicrokit-full-nw-stack-opt-batch-011225-232715/maaxboard2-pnk-libmicrokit-full-nw-stack-opt-iter1-011225-232716/results.csv
+2025-12-01 23:49:47,457 - INFO -   - mq metrics json: /home/zhewen/Documents/code/sddf/examples/echo_server/results/maaxboard2-pnk-libmicrokit-full-nw-stack-opt-batch-011225-232715/maaxboard2-pnk-libmicrokit-full-nw-stack-opt-iter1-011225-232716/mq_metrics.json
+2025-12-01 23:49:47,457 - INFO - 
+2025-12-01 23:49:47,457 - INFO - running cleanup routine...
+2025-12-01 23:49:50,567 - INFO - cleanup complete

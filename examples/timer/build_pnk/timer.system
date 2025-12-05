@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<system>
+    <memory_region name="watchdog@f0d0/drivers/timer/meson/regs" size="0x1000" phys_addr="0xffd0f000" />
+    <protection_domain name="timer_driver" priority="254" passive="true">
+        <program_image path="timer_driver.elf" />
+        <map mr="watchdog@f0d0/drivers/timer/meson/regs" vaddr="0x20000000" perms="rw" cached="false" />
+        <irq irq="42" id="0" trigger="edge" />
+    </protection_domain>
+    <protection_domain name="client" priority="1">
+        <program_image path="client.elf" />
+    </protection_domain>
+    <channel>
+        <end pd="timer_driver" id="1" />
+        <end pd="client" id="0" notify="false" pp="true" />
+    </channel>
+</system>

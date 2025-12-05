@@ -1,0 +1,62 @@
+2025-11-27 22:47:15,886 - INFO - ============================================================
+2025-11-27 22:47:15,886 - INFO - starting benchmark iteration (DRY RUN - 1Gbps only, UDP, clang)
+2025-11-27 22:47:15,886 - INFO - ============================================================
+2025-11-27 22:47:15,886 - INFO - results will be saved to: /home/zhewen/Documents/code/sddf/examples/echo_server/results/maaxboard2-pnk-full-nw-stack-271125-224715
+2025-11-27 22:47:15,886 - INFO - 
+2025-11-27 22:47:15,886 - INFO - ============================================================
+2025-11-27 22:47:15,886 - INFO - starting mq server...
+2025-11-27 22:47:15,886 - INFO - (will wait for device lock if held by another process)
+2025-11-27 22:47:15,886 - INFO - ============================================================
+2025-11-27 22:47:15,888 - INFO - 
+2025-11-27 22:47:15,888 - INFO - waiting for dhcp...
+2025-11-27 22:47:46,328 - INFO - 
+2025-11-27 22:47:46,328 - INFO - dhcp complete, ip address: 172.16.1.122
+2025-11-27 22:47:46,328 - INFO - 
+2025-11-27 22:47:46,328 - INFO - ============================================================
+2025-11-27 22:47:46,328 - INFO - starting iq benchmark client...
+2025-11-27 22:47:46,328 - INFO - (will wait for device locks if held by another process)
+2025-11-27 22:47:46,328 - INFO - ============================================================
+2025-11-27 22:47:46,328 - INFO - protocol: UDP
+2025-11-27 22:47:46,329 - INFO - testing throughputs: 1.0Gbps
+2025-11-27 22:47:46,329 - INFO - checking for stale iq locks before starting...
+2025-11-27 22:47:48,209 - INFO - monitoring iq client output...
+2025-11-27 22:49:01,737 - INFO - detected result summary in iq output
+2025-11-27 22:49:17,131 - INFO - iq client completed successfully (result summary found)
+2025-11-27 22:49:17,132 - INFO - note: iq exited with code 1 but results were generated
+2025-11-27 22:49:17,132 - INFO - waiting 10s after iq finishes...
+2025-11-27 22:49:27,132 - INFO - 
+2025-11-27 22:49:27,132 - INFO - ============================================================
+2025-11-27 22:49:27,132 - INFO - shutting down mq server...
+2025-11-27 22:49:27,132 - INFO - ============================================================
+2025-11-27 22:49:30,379 - INFO - server shut down gracefully
+2025-11-27 22:49:30,379 - INFO - 
+2025-11-27 22:49:30,379 - INFO - ============================================================
+2025-11-27 22:49:30,379 - INFO - processing logs...
+2025-11-27 22:49:30,379 - INFO - ============================================================
+2025-11-27 22:49:30,379 - INFO - extracting csv results from iq.log...
+2025-11-27 22:49:30,380 - INFO - csv results saved to: /home/zhewen/Documents/code/sddf/examples/echo_server/results/maaxboard2-pnk-full-nw-stack-271125-224715/results.csv
+2025-11-27 22:49:30,380 - INFO - stripping ansi escape codes from mq log...
+2025-11-27 22:49:30,380 - INFO - clean mq log saved to: /home/zhewen/Documents/code/sddf/examples/echo_server/results/maaxboard2-pnk-full-nw-stack-271125-224715/mq.log
+2025-11-27 22:49:30,380 - INFO - processing mq.log to extract json metrics...
+2025-11-27 22:49:30,412 - INFO - mq metrics json saved to: /home/zhewen/Documents/code/sddf/examples/echo_server/results/maaxboard2-pnk-full-nw-stack-271125-224715/mq_metrics.json
+2025-11-27 22:49:30,412 - INFO - 
+2025-11-27 22:49:30,412 - INFO - ============================================================
+2025-11-27 22:49:30,412 - INFO - benchmark complete
+2025-11-27 22:49:30,412 - INFO - ============================================================
+2025-11-27 22:49:30,412 - INFO - benchmark name: maaxboard2-pnk-full-nw-stack
+2025-11-27 22:49:30,412 - INFO - mode: DRY RUN - 1Gbps only
+2025-11-27 22:49:30,412 - INFO - protocol: UDP
+2025-11-27 22:49:30,412 - INFO - compiler: clang
+2025-11-27 22:49:30,412 - INFO - results directory: /home/zhewen/Documents/code/sddf/examples/echo_server/results/maaxboard2-pnk-full-nw-stack-271125-224715
+2025-11-27 22:49:30,412 - INFO - ip address obtained: 172.16.1.122
+2025-11-27 22:49:30,412 - INFO - throughputs tested: 1
+2025-11-27 22:49:30,412 - INFO - logs and results saved:
+2025-11-27 22:49:30,412 - INFO -   - benchmark script log: /home/zhewen/Documents/code/sddf/examples/echo_server/results/maaxboard2-pnk-full-nw-stack-271125-224715/autobench.log
+2025-11-27 22:49:30,412 - INFO -   - mq/iq output: /home/zhewen/Documents/code/sddf/examples/echo_server/results/maaxboard2-pnk-full-nw-stack-271125-224715/pexpect_output.log
+2025-11-27 22:49:30,412 - INFO -   - mq clean log: /home/zhewen/Documents/code/sddf/examples/echo_server/results/maaxboard2-pnk-full-nw-stack-271125-224715/mq.log
+2025-11-27 22:49:30,412 - INFO -   - iq full log: /home/zhewen/Documents/code/sddf/examples/echo_server/results/maaxboard2-pnk-full-nw-stack-271125-224715/iq.log
+2025-11-27 22:49:30,412 - INFO -   - iq csv results: /home/zhewen/Documents/code/sddf/examples/echo_server/results/maaxboard2-pnk-full-nw-stack-271125-224715/results.csv
+2025-11-27 22:49:30,412 - INFO -   - mq metrics json: /home/zhewen/Documents/code/sddf/examples/echo_server/results/maaxboard2-pnk-full-nw-stack-271125-224715/mq_metrics.json
+2025-11-27 22:49:30,412 - INFO - 
+2025-11-27 22:49:30,412 - INFO - running cleanup routine...
+2025-11-27 22:49:32,051 - INFO - cleanup complete

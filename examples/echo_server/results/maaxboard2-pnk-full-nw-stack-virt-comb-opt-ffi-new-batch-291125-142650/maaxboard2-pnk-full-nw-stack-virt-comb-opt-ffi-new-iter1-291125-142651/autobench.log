@@ -1,0 +1,76 @@
+2025-11-29 14:26:51,343 - INFO - ============================================================
+2025-11-29 14:26:51,344 - INFO - starting benchmark iteration (FULL RUN, UDP, clang)
+2025-11-29 14:26:51,344 - INFO - ============================================================
+2025-11-29 14:26:51,344 - INFO - results will be saved to: /home/zhewen/Documents/code/sddf/examples/echo_server/results/maaxboard2-pnk-full-nw-stack-virt-comb-opt-ffi-new-batch-291125-142650/maaxboard2-pnk-full-nw-stack-virt-comb-opt-ffi-new-iter1-291125-142651
+2025-11-29 14:26:51,344 - INFO - 
+2025-11-29 14:26:51,344 - INFO - ============================================================
+2025-11-29 14:26:51,344 - INFO - starting mq server...
+2025-11-29 14:26:51,344 - INFO - (will wait for device lock if held by another process)
+2025-11-29 14:26:51,344 - INFO - ============================================================
+2025-11-29 14:26:51,346 - INFO - 
+2025-11-29 14:26:51,346 - INFO - waiting for dhcp...
+2025-11-29 14:26:58,084 - ERROR - 
+2025-11-29 14:26:58,084 - ERROR - mq exited unexpectedly before dhcp
+2025-11-29 14:26:58,084 - WARNING - will retry mq (attempt 1/5)
+2025-11-29 14:26:58,084 - INFO - mq attempt 2/5...
+2025-11-29 14:27:08,084 - INFO - running cleanup routine...
+2025-11-29 14:27:09,928 - INFO - cleanup complete
+2025-11-29 14:27:09,930 - INFO - 
+2025-11-29 14:27:09,930 - INFO - waiting for dhcp...
+2025-11-29 14:27:39,511 - INFO - 
+2025-11-29 14:27:39,512 - INFO - dhcp complete, ip address: 172.16.1.105
+2025-11-29 14:27:39,512 - INFO - 
+2025-11-29 14:27:39,512 - INFO - ============================================================
+2025-11-29 14:27:39,512 - INFO - starting iq benchmark client...
+2025-11-29 14:27:39,512 - INFO - (will wait for device locks if held by another process)
+2025-11-29 14:27:39,512 - INFO - ============================================================
+2025-11-29 14:27:39,512 - INFO - protocol: UDP
+2025-11-29 14:27:39,512 - INFO - testing throughputs: 0.0Gbps, 0.0Gbps, 0.1Gbps, 0.1Gbps, 0.2Gbps, 0.3Gbps, 0.4Gbps, 0.5Gbps, 0.6Gbps, 0.7Gbps, 0.8Gbps, 0.9Gbps, 1.0Gbps
+2025-11-29 14:27:39,512 - INFO - checking for stale iq locks before starting...
+2025-11-29 14:27:39,536 - INFO - monitoring iq client output...
+2025-11-29 14:27:54,801 - WARNING - iq exited with code 2 and no results found
+2025-11-29 14:27:54,801 - WARNING - will retry iq (attempt 1/5)
+2025-11-29 14:27:54,801 - INFO - iq attempt 2/5...
+2025-11-29 14:28:04,802 - INFO - checking for stale iq locks before starting...
+2025-11-29 14:28:07,319 - WARNING - releasing our stale iq locks: vb02
+2025-11-29 14:28:10,103 - INFO - monitoring iq client output...
+2025-11-29 14:48:53,381 - INFO - detected result summary in iq output
+2025-11-29 14:49:07,996 - INFO - iq client completed successfully (result summary found)
+2025-11-29 14:49:07,996 - INFO - note: iq exited with code 1 but results were generated
+2025-11-29 14:49:07,996 - INFO - waiting 10s after iq finishes...
+2025-11-29 14:49:17,997 - INFO - 
+2025-11-29 14:49:17,997 - INFO - ============================================================
+2025-11-29 14:49:17,997 - INFO - shutting down mq server...
+2025-11-29 14:49:17,997 - INFO - ============================================================
+2025-11-29 14:49:21,259 - INFO - server shut down gracefully
+2025-11-29 14:49:21,259 - INFO - 
+2025-11-29 14:49:21,260 - INFO - ============================================================
+2025-11-29 14:49:21,260 - INFO - processing logs...
+2025-11-29 14:49:21,260 - INFO - ============================================================
+2025-11-29 14:49:21,260 - INFO - extracting csv results from iq.log...
+2025-11-29 14:49:21,260 - INFO - csv results saved to: /home/zhewen/Documents/code/sddf/examples/echo_server/results/maaxboard2-pnk-full-nw-stack-virt-comb-opt-ffi-new-batch-291125-142650/maaxboard2-pnk-full-nw-stack-virt-comb-opt-ffi-new-iter1-291125-142651/results.csv
+2025-11-29 14:49:21,260 - INFO - stripping ansi escape codes from mq log...
+2025-11-29 14:49:21,262 - INFO - clean mq log saved to: /home/zhewen/Documents/code/sddf/examples/echo_server/results/maaxboard2-pnk-full-nw-stack-virt-comb-opt-ffi-new-batch-291125-142650/maaxboard2-pnk-full-nw-stack-virt-comb-opt-ffi-new-iter1-291125-142651/mq.log
+2025-11-29 14:49:21,262 - INFO - processing mq.log to extract json metrics...
+2025-11-29 14:49:21,292 - INFO - mq metrics json saved to: /home/zhewen/Documents/code/sddf/examples/echo_server/results/maaxboard2-pnk-full-nw-stack-virt-comb-opt-ffi-new-batch-291125-142650/maaxboard2-pnk-full-nw-stack-virt-comb-opt-ffi-new-iter1-291125-142651/mq_metrics.json
+2025-11-29 14:49:21,292 - INFO - 
+2025-11-29 14:49:21,292 - INFO - ============================================================
+2025-11-29 14:49:21,292 - INFO - benchmark complete
+2025-11-29 14:49:21,292 - INFO - ============================================================
+2025-11-29 14:49:21,292 - INFO - benchmark name: maaxboard2-pnk-full-nw-stack-virt-comb-opt-ffi-new
+2025-11-29 14:49:21,292 - INFO - mode: FULL RUN
+2025-11-29 14:49:21,292 - INFO - protocol: UDP
+2025-11-29 14:49:21,292 - INFO - compiler: clang
+2025-11-29 14:49:21,292 - INFO - results directory: /home/zhewen/Documents/code/sddf/examples/echo_server/results/maaxboard2-pnk-full-nw-stack-virt-comb-opt-ffi-new-batch-291125-142650/maaxboard2-pnk-full-nw-stack-virt-comb-opt-ffi-new-iter1-291125-142651
+2025-11-29 14:49:21,292 - INFO - ip address obtained: 172.16.1.105
+2025-11-29 14:49:21,292 - INFO - throughputs tested: 13
+2025-11-29 14:49:21,293 - INFO - logs and results saved:
+2025-11-29 14:49:21,293 - INFO -   - benchmark script log: /home/zhewen/Documents/code/sddf/examples/echo_server/results/maaxboard2-pnk-full-nw-stack-virt-comb-opt-ffi-new-batch-291125-142650/maaxboard2-pnk-full-nw-stack-virt-comb-opt-ffi-new-iter1-291125-142651/autobench.log
+2025-11-29 14:49:21,293 - INFO -   - mq/iq output: /home/zhewen/Documents/code/sddf/examples/echo_server/results/maaxboard2-pnk-full-nw-stack-virt-comb-opt-ffi-new-batch-291125-142650/maaxboard2-pnk-full-nw-stack-virt-comb-opt-ffi-new-iter1-291125-142651/pexpect_output.log
+2025-11-29 14:49:21,293 - INFO -   - mq clean log: /home/zhewen/Documents/code/sddf/examples/echo_server/results/maaxboard2-pnk-full-nw-stack-virt-comb-opt-ffi-new-batch-291125-142650/maaxboard2-pnk-full-nw-stack-virt-comb-opt-ffi-new-iter1-291125-142651/mq.log
+2025-11-29 14:49:21,293 - INFO -   - iq full log: /home/zhewen/Documents/code/sddf/examples/echo_server/results/maaxboard2-pnk-full-nw-stack-virt-comb-opt-ffi-new-batch-291125-142650/maaxboard2-pnk-full-nw-stack-virt-comb-opt-ffi-new-iter1-291125-142651/iq.log
+2025-11-29 14:49:21,293 - INFO -   - iq csv results: /home/zhewen/Documents/code/sddf/examples/echo_server/results/maaxboard2-pnk-full-nw-stack-virt-comb-opt-ffi-new-batch-291125-142650/maaxboard2-pnk-full-nw-stack-virt-comb-opt-ffi-new-iter1-291125-142651/results.csv
+2025-11-29 14:49:21,293 - INFO -   - mq metrics json: /home/zhewen/Documents/code/sddf/examples/echo_server/results/maaxboard2-pnk-full-nw-stack-virt-comb-opt-ffi-new-batch-291125-142650/maaxboard2-pnk-full-nw-stack-virt-comb-opt-ffi-new-iter1-291125-142651/mq_metrics.json
+2025-11-29 14:49:21,293 - INFO - 
+2025-11-29 14:49:21,293 - INFO - running cleanup routine...
+2025-11-29 14:49:23,349 - INFO - cleanup complete

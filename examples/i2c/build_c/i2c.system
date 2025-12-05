@@ -1,0 +1,112 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<system>
+    <memory_region name="clk" size="0x1000" phys_addr="0xff63c000" />
+    <memory_region name="gpio" size="0x1000" phys_addr="0xff634000" />
+    <memory_region name="i2c@1d000/drivers/i2c/meson/regs" size="0x1000" phys_addr="0xffd1d000" />
+    <memory_region name="i2c_driver_request" size="0x1000" />
+    <memory_region name="i2c_driver_response" size="0x1000" />
+    <memory_region name="i2c_client_request_client_ds3231" size="0x1000" />
+    <memory_region name="i2c_client_response_client_ds3231" size="0x1000" />
+    <memory_region name="i2c_client_data_client_ds3231" size="0x1000" />
+    <memory_region name="i2c_client_request_client_pn532" size="0x1000" />
+    <memory_region name="i2c_client_response_client_pn532" size="0x1000" />
+    <memory_region name="i2c_client_data_client_pn532" size="0x1000" />
+    <memory_region name="serial@3000/drivers/serial/meson/regs" size="0x1000" phys_addr="0xff803000" />
+    <memory_region name="serial@3000/serial/queue/serial_driver/serial_virt_tx" size="0x1000" />
+    <memory_region name="serial@3000/serial/data/serial_driver/serial_virt_tx" size="0x10000" />
+    <memory_region name="serial@3000/serial/queue/serial_virt_tx/client_pn532" size="0x1000" />
+    <memory_region name="serial@3000/serial/data/serial_virt_tx/client_pn532" size="0x10000" />
+    <memory_region name="serial@3000/serial/queue/serial_virt_tx/client_ds3231" size="0x1000" />
+    <memory_region name="serial@3000/serial/data/serial_virt_tx/client_ds3231" size="0x10000" />
+    <memory_region name="watchdog@f0d0/drivers/timer/meson/regs" size="0x1000" phys_addr="0xffd0f000" />
+    <protection_domain name="serial_driver" priority="200">
+        <program_image path="serial_driver.elf" />
+        <map mr="serial@3000/drivers/serial/meson/regs" vaddr="0x20000000" perms="rw" cached="false" />
+        <map mr="serial@3000/serial/queue/serial_driver/serial_virt_tx" vaddr="0x20001000" perms="rw" />
+        <map mr="serial@3000/serial/data/serial_driver/serial_virt_tx" vaddr="0x20002000" perms="rw" />
+        <irq irq="225" id="0" trigger="edge" />
+    </protection_domain>
+    <protection_domain name="serial_virt_tx" priority="199" stack_size="0x2000">
+        <program_image path="serial_virt_tx.elf" />
+        <map mr="serial@3000/serial/queue/serial_driver/serial_virt_tx" vaddr="0x20000000" perms="rw" />
+        <map mr="serial@3000/serial/data/serial_driver/serial_virt_tx" vaddr="0x20001000" perms="rw" />
+        <map mr="serial@3000/serial/queue/serial_virt_tx/client_pn532" vaddr="0x20011000" perms="rw" />
+        <map mr="serial@3000/serial/data/serial_virt_tx/client_pn532" vaddr="0x20012000" perms="rw" />
+        <map mr="serial@3000/serial/queue/serial_virt_tx/client_ds3231" vaddr="0x20022000" perms="rw" />
+        <map mr="serial@3000/serial/data/serial_virt_tx/client_ds3231" vaddr="0x20023000" perms="rw" />
+    </protection_domain>
+    <protection_domain name="timer_driver" priority="4" passive="true">
+        <program_image path="timer_driver.elf" />
+        <map mr="watchdog@f0d0/drivers/timer/meson/regs" vaddr="0x20000000" perms="rw" cached="false" />
+        <irq irq="42" id="0" trigger="edge" />
+    </protection_domain>
+    <protection_domain name="i2c_driver" priority="3">
+        <program_image path="i2c_driver.elf" />
+        <map mr="clk" vaddr="0x30000000" perms="rw" cached="false" />
+        <map mr="gpio" vaddr="0x30100000" perms="rw" cached="false" />
+        <map mr="i2c@1d000/drivers/i2c/meson/regs" vaddr="0x30101000" perms="rw" cached="false" />
+        <map mr="i2c_driver_request" vaddr="0x30102000" perms="rw" />
+        <map mr="i2c_driver_response" vaddr="0x30103000" perms="rw" />
+        <map mr="i2c_client_data_client_ds3231" vaddr="0x30104000" perms="rw" />
+        <map mr="i2c_client_data_client_pn532" vaddr="0x30105000" perms="rw" />
+        <irq irq="247" id="0" trigger="edge" />
+        <irq irq="126" id="1" trigger="edge" />
+    </protection_domain>
+    <protection_domain name="i2c_virt" priority="2" passive="true">
+        <program_image path="i2c_virt.elf" />
+        <map mr="i2c_driver_request" vaddr="0x20000000" perms="rw" />
+        <map mr="i2c_driver_response" vaddr="0x20001000" perms="rw" />
+        <map mr="i2c_client_request_client_ds3231" vaddr="0x20002000" perms="rw" />
+        <map mr="i2c_client_response_client_ds3231" vaddr="0x20003000" perms="rw" />
+        <map mr="i2c_client_request_client_pn532" vaddr="0x20004000" perms="rw" />
+        <map mr="i2c_client_response_client_pn532" vaddr="0x20005000" perms="rw" />
+    </protection_domain>
+    <protection_domain name="client_pn532" priority="1">
+        <program_image path="client_pn532.elf" />
+        <map mr="i2c_client_request_client_pn532" vaddr="0x20000000" perms="rw" />
+        <map mr="i2c_client_response_client_pn532" vaddr="0x20001000" perms="rw" />
+        <map mr="i2c_client_data_client_pn532" vaddr="0x20002000" perms="rw" />
+        <map mr="serial@3000/serial/queue/serial_virt_tx/client_pn532" vaddr="0x20003000" perms="rw" />
+        <map mr="serial@3000/serial/data/serial_virt_tx/client_pn532" vaddr="0x20004000" perms="rw" />
+    </protection_domain>
+    <protection_domain name="client_ds3231" priority="1">
+        <program_image path="client_ds3231.elf" />
+        <map mr="i2c_client_request_client_ds3231" vaddr="0x20000000" perms="rw" />
+        <map mr="i2c_client_response_client_ds3231" vaddr="0x20001000" perms="rw" />
+        <map mr="i2c_client_data_client_ds3231" vaddr="0x20002000" perms="rw" />
+        <map mr="serial@3000/serial/queue/serial_virt_tx/client_ds3231" vaddr="0x20003000" perms="rw" />
+        <map mr="serial@3000/serial/data/serial_virt_tx/client_ds3231" vaddr="0x20004000" perms="rw" />
+    </protection_domain>
+    <channel>
+        <end pd="i2c_driver" id="2" />
+        <end pd="i2c_virt" id="0" />
+    </channel>
+    <channel>
+        <end pd="i2c_virt" id="1" />
+        <end pd="client_ds3231" id="0" pp="true" />
+    </channel>
+    <channel>
+        <end pd="i2c_virt" id="2" />
+        <end pd="client_pn532" id="0" pp="true" />
+    </channel>
+    <channel>
+        <end pd="serial_driver" id="1" />
+        <end pd="serial_virt_tx" id="0" />
+    </channel>
+    <channel>
+        <end pd="serial_virt_tx" id="1" />
+        <end pd="client_pn532" id="1" />
+    </channel>
+    <channel>
+        <end pd="serial_virt_tx" id="2" />
+        <end pd="client_ds3231" id="1" />
+    </channel>
+    <channel>
+        <end pd="timer_driver" id="1" />
+        <end pd="client_pn532" id="2" notify="false" pp="true" />
+    </channel>
+    <channel>
+        <end pd="timer_driver" id="2" />
+        <end pd="client_ds3231" id="2" notify="false" pp="true" />
+    </channel>
+</system>

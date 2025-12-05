@@ -1,0 +1,41 @@
+2025-12-01 16:21:04,808 - INFO - ============================================================
+2025-12-01 16:21:04,808 - INFO - starting benchmark iteration (FULL RUN, UDP, clang)
+2025-12-01 16:21:04,808 - INFO - ============================================================
+2025-12-01 16:21:04,808 - INFO - results will be saved to: /home/zhewen/Documents/code/sddf/examples/echo_server/results/maaxboard2-ccomp-libmicrokit-batch-011225-162103/maaxboard2-ccomp-libmicrokit-iter1-011225-162104
+2025-12-01 16:21:04,808 - INFO - 
+2025-12-01 16:21:04,808 - INFO - ============================================================
+2025-12-01 16:21:04,808 - INFO - starting mq server...
+2025-12-01 16:21:04,808 - INFO - (will wait for device lock if held by another process)
+2025-12-01 16:21:04,808 - INFO - ============================================================
+2025-12-01 16:21:04,810 - INFO - 
+2025-12-01 16:21:04,811 - INFO - waiting for dhcp...
+2025-12-01 16:21:07,549 - ERROR - 
+2025-12-01 16:21:07,549 - ERROR - mq exited unexpectedly before dhcp
+2025-12-01 16:21:07,549 - WARNING - will retry mq (attempt 1/5)
+2025-12-01 16:21:07,549 - INFO - mq attempt 2/5...
+2025-12-01 16:21:17,550 - INFO - running cleanup routine...
+2025-12-01 16:21:18,450 - WARNING - cleanup returned non-zero exit code: 1
+2025-12-01 16:21:18,452 - INFO - 
+2025-12-01 16:21:18,452 - INFO - waiting for dhcp...
+2025-12-01 16:21:47,604 - INFO - 
+2025-12-01 16:21:47,604 - INFO - dhcp complete, ip address: 172.16.1.8
+2025-12-01 16:21:47,604 - INFO - 
+2025-12-01 16:21:47,604 - INFO - ============================================================
+2025-12-01 16:21:47,604 - INFO - starting iq benchmark client...
+2025-12-01 16:21:47,604 - INFO - (will wait for device locks if held by another process)
+2025-12-01 16:21:47,604 - INFO - ============================================================
+2025-12-01 16:21:47,604 - INFO - protocol: UDP
+2025-12-01 16:21:47,604 - INFO - testing throughputs: 0.0Gbps, 0.0Gbps, 0.1Gbps, 0.1Gbps, 0.2Gbps, 0.3Gbps, 0.4Gbps, 0.5Gbps, 0.6Gbps, 0.7Gbps, 0.8Gbps, 0.9Gbps, 1.0Gbps
+2025-12-01 16:21:47,604 - INFO - checking for stale iq locks before starting...
+2025-12-01 16:21:52,445 - WARNING - releasing our stale iq locks: vb08, vb01
+2025-12-01 16:21:58,987 - WARNING - some iq locks are held by other users - will wait for them
+2025-12-01 16:21:58,989 - INFO - monitoring iq client output...
+2025-12-01 16:22:10,065 - WARNING - lock conflict detected in iq
+2025-12-01 16:22:20,847 - INFO - checking iq lock status...
+2025-12-01 16:22:25,962 - WARNING - iq locks still held by us: vb01, vb03, vb08
+2025-12-01 16:22:25,962 - INFO - releasing our stale iq locks...
+2025-12-01 16:22:32,844 - INFO - stale iq locks released
+2025-12-01 16:22:32,844 - ERROR - iq locks are held by another user
+2025-12-01 16:22:32,844 - ERROR - benchmark cannot continue - another user is using iq devices
+2025-12-01 16:22:36,360 - INFO - running cleanup routine...
+2025-12-01 16:22:38,134 - INFO - cleanup complete

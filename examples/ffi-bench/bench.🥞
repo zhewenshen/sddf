@@ -1,0 +1,18 @@
+/*
+* Copyright 2025, UNSW
+* SPDX-License-Identifier: BSD-2-Clause
+*/
+
+fun main() {
+    return 0;
+}
+
+export fun bench() {
+    var i = 0;
+    while (i < 100000000) {
+        @nop(0,0,0,0);
+        i = i + 1;
+    }
+
+    return 0;
+}

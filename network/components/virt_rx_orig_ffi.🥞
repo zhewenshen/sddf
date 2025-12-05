@@ -1,0 +1,223 @@
+/*
+ * Copyright 2025, UNSW
+ * SPDX-License-Identifier: BSD-2-Clause
+ */
+
+#define CONFIG_DRIVER_ID          pnk_mem(0)
+#define DRV_QUEUE_BASE           10
+#define CLI_QUEUE_BASE           30
+#define CLI_MAC_ADDR_BASE        100
+#define DATA_IO_ADDR             200
+#define DATA_REGION_VADDR        201
+#define NUM_CLIENTS              202
+#define BUFFER_REFS_BASE         210
+#define CLI_CONN_ID_BASE         1210
+#define NOTIFY_DRV_FLAG          1250
+#define NOTIFY_CLIENTS_BASE      1260
+#define RET_SLOT                 1949
+
+#define BROADCAST_ID             -2
+
+// Buffer constants
+#define NET_BUFFER_SIZE          2048
+#define NET_BUFFER_SHIFT         11
+#define NET_BUFFER_MASK          2047
+
+// FFI version - calls C function and reads result from RET_SLOT
+fun get_mac_addr_match(1 buffer_vaddr) {
+    @get_mac_addr_match(buffer_vaddr, 0, 0, 0);
+    return pnk_mem(RET_SLOT);
+}
+
+fun rx_return() {
+    var num_clients = pnk_mem(NUM_CLIENTS);
+    var reprocess = 1;
+    var client = 0;
+    var i = 0;
+
+    i = 0;
+    while (i < num_clients) {
+        var notify_addr = pnk_mem_ptr(NOTIFY_CLIENTS_BASE + i);
+        !st32 notify_addr, 0;
+        i = i + 1;
+    }
+
+    // Cache frequently used values
+    var data_io_addr = pnk_mem(DATA_IO_ADDR);
+    var data_region_vaddr = pnk_mem(DATA_REGION_VADDR);
+    var drv_active_queue = pnk_mem(DRV_QUEUE_BASE + 1);
+    var drv_capacity = pnk_mem(DRV_QUEUE_BASE + 2);
+    var drv_free_queue = pnk_mem(DRV_QUEUE_BASE);
+
+    while (reprocess) {
+        var 1 drv_empty = net_queue_empty(drv_active_queue, drv_capacity);
+
+        while (drv_empty == 0) {
+            var {1,1} buffer = net_dequeue(drv_active_queue, drv_capacity);
+            var io_offset = buffer.0;
+            var len = buffer.1;
+
+            io_offset = io_offset - data_io_addr;
+            var buffer_vaddr = io_offset + data_region_vaddr;
+
+            cache_clean_and_invalidate(buffer_vaddr, buffer_vaddr + len)
+
+            var 1 client = get_mac_addr_match(buffer_vaddr);
+
+            if (client == BROADCAST_ID) {
+                var ref_index = io_offset >> NET_BUFFER_SHIFT;
+                var ref_addr = pnk_mem_ptr(BUFFER_REFS_BASE + ref_index);
+                !st32 ref_addr, num_clients;
+
+                i = 0;
+                while (i < num_clients) {
+                    var cli_queue_base = CLI_QUEUE_BASE + i * 4;
+                    var cli_active_queue = pnk_mem(cli_queue_base + 1);
+                    var cli_capacity = pnk_mem(cli_queue_base + 2);
+                    net_enqueue(cli_active_queue, io_offset, len, cli_capacity);
+
+                    var notify_addr = pnk_mem_ptr(NOTIFY_CLIENTS_BASE + i);
+                    !st32 notify_addr, 1;
+                    i = i + 1;
+                }
+            } else {
+                if (client >= 0) {
+                    var ref_index = io_offset >> NET_BUFFER_SHIFT;
+                    var ref_addr = pnk_mem_ptr(BUFFER_REFS_BASE + ref_index);
+                    !st32 ref_addr, 1;
+
+                    var cli_queue_base = CLI_QUEUE_BASE + client * 4;
+                    var cli_active_queue = pnk_mem(cli_queue_base + 1);
+                    var cli_capacity = pnk_mem(cli_queue_base + 2);
+                    net_enqueue(cli_active_queue, io_offset, len, cli_capacity);
+
+                    var notify_addr = pnk_mem_ptr(NOTIFY_CLIENTS_BASE + client);
+                    !st32 notify_addr, 1;
+                } else {
+                    io_offset = io_offset + data_io_addr;
+                    net_enqueue(drv_free_queue, io_offset, len, drv_capacity);
+
+                    var notify_addr = pnk_mem_ptr(NOTIFY_DRV_FLAG);
+                    !st32 notify_addr, 1;
+                }
+            }
+
+            drv_empty = net_queue_empty(drv_active_queue, drv_capacity);
+        }
+
+        net_request_signal(drv_active_queue, drv_capacity);
+        reprocess = 0;
+
+        drv_empty = net_queue_empty(drv_active_queue, drv_capacity);
+        if (drv_empty == 0) {
+            net_cancel_signal(drv_active_queue);
+            reprocess = 1;
+        }
+    }
+
+    client = 0;
+    while (client < num_clients) {
+        var notify_flag = pnk_mem(NOTIFY_CLIENTS_BASE + client);
+
+        if (notify_flag) {
+            var cli_queue_base = CLI_QUEUE_BASE + client * 4;
+            var cli_active_queue = pnk_mem(cli_queue_base + 1);
+            var cli_capacity = pnk_mem(cli_queue_base + 2);
+            var 1 signal_required = net_require_signal(cli_active_queue, cli_capacity);
+
+            if (signal_required) {
+                net_cancel_signal(cli_active_queue);
+                var cli_conn_id = pnk_mem(CLI_CONN_ID_BASE + client);
+                sddf_notify(cli_conn_id)
+            }
+        }
+        client = client + 1;
+    }
+
+    return 0;
+}
+
+fun rx_provide() {
+    var num_clients = pnk_mem(NUM_CLIENTS);
+    var client = 0;
+
+    // Cache driver queue info
+    var data_io_addr = pnk_mem(DATA_IO_ADDR);
+    var drv_free_queue = pnk_mem(DRV_QUEUE_BASE);
+    var drv_capacity = pnk_mem(DRV_QUEUE_BASE + 2);
+
+    while (client < num_clients) {
+        var reprocess = 1;
+
+        var cli_queue_base = CLI_QUEUE_BASE + client * 4;
+        var cli_free_queue = pnk_mem(cli_queue_base);
+        var cli_capacity = pnk_mem(cli_queue_base + 2);
+
+        while (reprocess) {
+            var 1 cli_empty = net_queue_empty(cli_free_queue, cli_capacity);
+
+            while (cli_empty == 0) {
+                var {1,1} buffer = net_dequeue(cli_free_queue, cli_capacity);
+                var io_offset = buffer.0;
+                var len = buffer.1;
+
+                // Validate buffer
+                var aligned = (io_offset & NET_BUFFER_MASK) == 0;
+                var in_bounds = io_offset < (cli_capacity << NET_BUFFER_SHIFT);
+
+                if (aligned && in_bounds) {
+                    var ref_index = io_offset >> NET_BUFFER_SHIFT;
+                    var ref_count = pnk_mem(BUFFER_REFS_BASE + ref_index);
+
+                    if (ref_count > 0) {
+                        ref_count = ref_count - 1;
+                        var ref_addr = pnk_mem_ptr(BUFFER_REFS_BASE + ref_index);
+                        !st32 ref_addr, ref_count;
+
+                        if (ref_count == 0) {
+                            io_offset = io_offset + data_io_addr;
+                            net_enqueue(drv_free_queue, io_offset, len, drv_capacity);
+
+                            var notify_addr = pnk_mem_ptr(NOTIFY_DRV_FLAG);
+                            !st32 notify_addr, 1;
+                        }
+                    }
+                }
+
+                cli_empty = net_queue_empty(cli_free_queue, cli_capacity);
+            }
+
+            net_request_signal(cli_free_queue, cli_capacity);
+            reprocess = 0;
+
+            cli_empty = net_queue_empty(cli_free_queue, cli_capacity);
+            if (cli_empty == 0) {
+                net_cancel_signal(cli_free_queue);
+                reprocess = 1;
+            }
+        }
+        client = client + 1;
+    }
+
+    var notify_drv = pnk_mem(NOTIFY_DRV_FLAG);
+    if (notify_drv) {
+        var 1 signal_required = net_require_signal(drv_free_queue, drv_capacity);
+
+        if (signal_required) {
+            net_cancel_signal(drv_free_queue);
+            sddf_deferred_notify(CONFIG_DRIVER_ID)
+
+            var notify_addr = pnk_mem_ptr(NOTIFY_DRV_FLAG);
+            !st32 notify_addr, 0;
+        }
+    }
+
+    return 0;
+}
+
+export fun notified(1 ch) {
+    rx_return();
+    rx_provide();
+
+    return 0;
+}

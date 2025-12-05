@@ -1,0 +1,61 @@
+2025-11-05 13:11:01,489 - INFO - ============================================================
+2025-11-05 13:11:01,489 - INFO - starting benchmark iteration (DRY RUN - 1Gbps only, UDP)
+2025-11-05 13:11:01,489 - INFO - ============================================================
+2025-11-05 13:11:01,489 - INFO - results will be saved to: /home/zhewen/Documents/code/sddf/examples/echo_server/results/maaxboard2-pnk-microkit-xtra-ffi-051125-131101
+2025-11-05 13:11:01,489 - INFO - 
+2025-11-05 13:11:01,489 - INFO - ============================================================
+2025-11-05 13:11:01,489 - INFO - starting mq server...
+2025-11-05 13:11:01,489 - INFO - (will wait for device lock if held by another process)
+2025-11-05 13:11:01,489 - INFO - ============================================================
+2025-11-05 13:11:01,491 - INFO - 
+2025-11-05 13:11:01,491 - INFO - waiting for dhcp...
+2025-11-05 13:11:32,903 - INFO - 
+2025-11-05 13:11:32,903 - INFO - dhcp complete, ip address: 172.16.1.9
+2025-11-05 13:11:32,903 - INFO - 
+2025-11-05 13:11:32,903 - INFO - ============================================================
+2025-11-05 13:11:32,903 - INFO - starting iq benchmark client...
+2025-11-05 13:11:32,903 - INFO - (will wait for device locks if held by another process)
+2025-11-05 13:11:32,903 - INFO - ============================================================
+2025-11-05 13:11:32,903 - INFO - protocol: UDP
+2025-11-05 13:11:32,903 - INFO - testing throughputs: 1.0Gbps
+2025-11-05 13:11:32,903 - INFO - checking for stale iq locks before starting...
+2025-11-05 13:11:34,931 - INFO - monitoring iq client output...
+2025-11-05 13:12:49,696 - INFO - detected result summary in iq output
+2025-11-05 13:13:07,480 - INFO - iq client completed successfully (result summary found)
+2025-11-05 13:13:07,480 - INFO - note: iq exited with code 1 but results were generated
+2025-11-05 13:13:07,480 - INFO - waiting 10s after iq finishes...
+2025-11-05 13:13:17,480 - INFO - 
+2025-11-05 13:13:17,480 - INFO - ============================================================
+2025-11-05 13:13:17,480 - INFO - shutting down mq server...
+2025-11-05 13:13:17,480 - INFO - ============================================================
+2025-11-05 13:13:21,001 - INFO - server shut down gracefully
+2025-11-05 13:13:21,002 - INFO - 
+2025-11-05 13:13:21,002 - INFO - ============================================================
+2025-11-05 13:13:21,002 - INFO - processing logs...
+2025-11-05 13:13:21,002 - INFO - ============================================================
+2025-11-05 13:13:21,002 - INFO - extracting csv results from iq.log...
+2025-11-05 13:13:21,002 - INFO - csv results saved to: /home/zhewen/Documents/code/sddf/examples/echo_server/results/maaxboard2-pnk-microkit-xtra-ffi-051125-131101/results.csv
+2025-11-05 13:13:21,002 - INFO - stripping ansi escape codes from mq log...
+2025-11-05 13:13:21,003 - INFO - clean mq log saved to: /home/zhewen/Documents/code/sddf/examples/echo_server/results/maaxboard2-pnk-microkit-xtra-ffi-051125-131101/mq.log
+2025-11-05 13:13:21,003 - INFO - processing mq.log to extract json metrics...
+2025-11-05 13:13:21,030 - INFO - mq metrics json saved to: /home/zhewen/Documents/code/sddf/examples/echo_server/results/maaxboard2-pnk-microkit-xtra-ffi-051125-131101/mq_metrics.json
+2025-11-05 13:13:21,031 - INFO - 
+2025-11-05 13:13:21,031 - INFO - ============================================================
+2025-11-05 13:13:21,031 - INFO - benchmark complete
+2025-11-05 13:13:21,031 - INFO - ============================================================
+2025-11-05 13:13:21,031 - INFO - benchmark name: maaxboard2-pnk-microkit-xtra-ffi
+2025-11-05 13:13:21,031 - INFO - mode: DRY RUN - 1Gbps only
+2025-11-05 13:13:21,031 - INFO - protocol: UDP
+2025-11-05 13:13:21,031 - INFO - results directory: /home/zhewen/Documents/code/sddf/examples/echo_server/results/maaxboard2-pnk-microkit-xtra-ffi-051125-131101
+2025-11-05 13:13:21,031 - INFO - ip address obtained: 172.16.1.9
+2025-11-05 13:13:21,031 - INFO - throughputs tested: 1
+2025-11-05 13:13:21,031 - INFO - logs and results saved:
+2025-11-05 13:13:21,031 - INFO -   - benchmark script log: /home/zhewen/Documents/code/sddf/examples/echo_server/results/maaxboard2-pnk-microkit-xtra-ffi-051125-131101/autobench.log
+2025-11-05 13:13:21,031 - INFO -   - mq/iq output: /home/zhewen/Documents/code/sddf/examples/echo_server/results/maaxboard2-pnk-microkit-xtra-ffi-051125-131101/pexpect_output.log
+2025-11-05 13:13:21,031 - INFO -   - mq clean log: /home/zhewen/Documents/code/sddf/examples/echo_server/results/maaxboard2-pnk-microkit-xtra-ffi-051125-131101/mq.log
+2025-11-05 13:13:21,031 - INFO -   - iq full log: /home/zhewen/Documents/code/sddf/examples/echo_server/results/maaxboard2-pnk-microkit-xtra-ffi-051125-131101/iq.log
+2025-11-05 13:13:21,031 - INFO -   - iq csv results: /home/zhewen/Documents/code/sddf/examples/echo_server/results/maaxboard2-pnk-microkit-xtra-ffi-051125-131101/results.csv
+2025-11-05 13:13:21,031 - INFO -   - mq metrics json: /home/zhewen/Documents/code/sddf/examples/echo_server/results/maaxboard2-pnk-microkit-xtra-ffi-051125-131101/mq_metrics.json
+2025-11-05 13:13:21,031 - INFO - 
+2025-11-05 13:13:21,031 - INFO - running cleanup routine...
+2025-11-05 13:13:22,988 - INFO - cleanup complete
